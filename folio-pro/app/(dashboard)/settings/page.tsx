@@ -75,7 +75,7 @@ export default function Page() {
           <p className="mt-3 text-xs leading-5 text-zinc-600">After the first upload, holdings, transactions, cash, Realized P/L, active portfolio, and Holdings column widths sync automatically while you are signed in.</p>
         </> : <>
           <p className="mt-3 text-sm text-zinc-400">Sign in to use the same portfolio data on localhost, Vercel, and other devices.</p>
-          <Button className="mt-4" onClick={() => location.href = "/login"}><LogIn className="mr-2 size-4"/>Sign in with email</Button>
+          <Button className="mt-4" onClick={() => location.href = "/login"}><LogIn className="mr-2 size-4"/>Sign in</Button>
         </>}
       </Card>
 
