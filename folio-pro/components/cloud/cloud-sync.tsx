@@ -46,8 +46,12 @@ export function CloudSync() {
 
     start();
     const supabase = createClient();
-    const { data: listener } = supabase.auth.onAuthStateChange(() => {
-      sessionStorage.removeItem(RESTORE_MARKER);
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      // Supabase emits INITIAL_SESSION and TOKEN_REFRESHED during normal page loads.
+      // Clearing the marker for those events causes an infinite refresh loop.
+      if (event === "SIGNED_OUT") {
+        sessionStorage.removeItem(RESTORE_MARKER);
+      }
     });
 
     return () => {
