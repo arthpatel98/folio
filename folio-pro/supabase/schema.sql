@@ -20,3 +20,15 @@ create policy "own goals" on goals for all using (auth.uid()=user_id) with check
 create policy "own alerts" on alerts for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
 create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path=public as $$ begin insert into profiles(id,full_name) values(new.id,new.raw_user_meta_data->>'full_name'); insert into portfolios(user_id,name) values(new.id,'My Portfolio'); return new; end; $$;
 create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
+
+-- Folio Pro browser-state sync. One JSON snapshot per authenticated user.
+create table if not exists public.user_app_state (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.user_app_state enable row level security;
+drop policy if exists "own app state" on public.user_app_state;
+create policy "own app state" on public.user_app_state
+  for all using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
