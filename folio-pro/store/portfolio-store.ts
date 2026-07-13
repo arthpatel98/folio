@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { AssetType, Holding, Transaction } from "@/types/portfolio";
 import { holdings as robinhoodHoldings, transactions as robinhoodTransactions } from "@/lib/data/mock";
+import { buildOptionSymbol } from "@/lib/options";
 
 export type DataPortfolioId = "robinhood" | "fidelity-401k" | "fidelity-roth";
 export type ActivePortfolioId = DataPortfolioId | "all";
@@ -99,6 +100,7 @@ type State = {
   addTransaction: (transaction: Transaction) => void;
   executeTrade: (trade: { action: "buy" | "sell"; holding: Holding; quantity: number; price: number }) => { ok: boolean; message?: string };
   updateStockQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>) => void;
+  updateOptionQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>) => void;
 };
 
 export const usePortfolioStore = create<State>()(
@@ -213,6 +215,26 @@ export const usePortfolioStore = create<State>()(
             ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, state.cashByPortfolio),
           };
         }),
+      updateOptionQuotes: (quotes) =>
+        set((state) => {
+          const portfolioIds: DataPortfolioId[] = ["robinhood", "fidelity-401k", "fidelity-roth"];
+          const holdingsByPortfolio = portfolioIds.reduce<Record<DataPortfolioId, Holding[]>>((result, portfolioId) => {
+            result[portfolioId] = state.holdingsByPortfolio[portfolioId].map((holding) => {
+              if (holding.assetType !== "option") return holding;
+              const contract = buildOptionSymbol(holding);
+              const quote = contract ? quotes[contract] : undefined;
+              if (!quote || !Number.isFinite(quote.currentPrice) || quote.currentPrice <= 0) return holding;
+              return {
+                ...holding,
+                currentPrice: quote.currentPrice,
+                previousClose: Number.isFinite(quote.previousClose) && quote.previousClose > 0 ? quote.previousClose : holding.previousClose,
+                updatedAt: new Date().toISOString(),
+              };
+            });
+            return result;
+          }, {} as Record<DataPortfolioId, Holding[]>);
+          return { holdingsByPortfolio, ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, state.cashByPortfolio) };
+        }),
       executeTrade: ({ action, holding, quantity, price }) => {
         const state = get();
         const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
@@ -290,6 +312,8 @@ export const usePortfolioStore = create<State>()(
             assetType,
             optionType: holding.optionType,
             optionExpiry: holding.optionExpiry,
+            optionStrike: holding.optionStrike,
+            optionSymbol: holding.optionSymbol,
             notes: `${action === "buy" ? "Bought" : "Sold"} from Holdings`,
           };
           const transactionsByPortfolio = { ...latest.transactionsByPortfolio, [target]: [transaction, ...latest.transactionsByPortfolio[target]] };

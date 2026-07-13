@@ -33,6 +33,8 @@ export interface Holding {
   assetType?: AssetType;
   optionType?: OptionType;
   optionExpiry?: string;
+  optionStrike?: number;
+  optionSymbol?: string;
   updatedAt: string;
 }
 
@@ -49,6 +51,8 @@ export interface Transaction {
   assetType?: AssetType;
   optionType?: OptionType;
   optionExpiry?: string;
+  optionStrike?: number;
+  optionSymbol?: string;
 }
 
 export interface PerformancePoint {

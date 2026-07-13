@@ -104,6 +104,11 @@ export function EditHoldingDialog({ holding }: { holding: Holding }) {
       return;
     }
 
+    if (isOption && (!form.optionExpiry || averageCost <= 0)) {
+      setError("Expiry Date and Contract Cost are required for live option prices.");
+      return;
+    }
+
     updateHolding(holding.symbol, holding.assetType ?? "stock", {
       assetType: form.assetType,
       symbol,

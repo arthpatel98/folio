@@ -97,6 +97,7 @@ export function AddHoldingDialog() {
     if (isOption && (form.optionType === "sell-call" || form.optionType === "sell-put") && quantity > 0) return setError("Sell Call and Sell Put positions must use a negative contract quantity, such as -1.");
     if (isOption && (form.optionType === "buy-call" || form.optionType === "buy-put") && quantity < 0) return setError("Buy Call and Buy Put positions must use a positive contract quantity.");
     if (form.assetType === "option" && !form.optionExpiry) return setError("Option Expiry date is required.");
+    if (isOption && tradePrice <= 0) return setError("Contract Cost is required to generate the live option contract.");
 
     const result = executeTrade({
       action: form.action,
