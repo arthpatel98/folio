@@ -326,7 +326,7 @@ export const usePortfolioStore = create<State>()(
           };
         });
         if (assetType === "stock") {
-          recordStockTrade(holding.symbol, action, quantity, price, new Date().toISOString().slice(0, 10));
+          recordStockTrade(target, holding.symbol, action, quantity, price, new Date().toISOString().slice(0, 10));
         }
         return { ok: true };
       },
