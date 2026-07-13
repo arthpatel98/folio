@@ -5,6 +5,7 @@ import { persist } from "zustand/middleware";
 import { AssetType, Holding, Transaction } from "@/types/portfolio";
 import { holdings as robinhoodHoldings, transactions as robinhoodTransactions } from "@/lib/data/mock";
 import { buildOptionSymbol } from "@/lib/options";
+import { recordStockTrade } from "@/lib/dca-storage";
 
 export type DataPortfolioId = "robinhood" | "fidelity-401k" | "fidelity-roth";
 export type ActivePortfolioId = DataPortfolioId | "all";
@@ -324,6 +325,9 @@ export const usePortfolioStore = create<State>()(
             ...visibleState(latest.activePortfolioId, holdingsByPortfolio, transactionsByPortfolio, cashByPortfolio),
           };
         });
+        if (assetType === "stock") {
+          recordStockTrade(holding.symbol, action, quantity, price, new Date().toISOString().slice(0, 10));
+        }
         return { ok: true };
       },
     }),
