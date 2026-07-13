@@ -114,7 +114,7 @@ export default function Page() {
       }
       setOptionPricesUpdatedAt(body.refreshedAt ? new Date(body.refreshedAt) : new Date());
       const messages: string[] = [];
-      if (missingOptionDetails.length) messages.push(`Add a valid Contract Cost to: ${Array.from(new Set(missingOptionDetails)).join(", ")}`);
+      if (missingOptionDetails.length) messages.push(`Use Option Details format like UNHG $25 Call for: ${Array.from(new Set(missingOptionDetails)).join(", ")}`);
       if (body.unavailable?.length) messages.push(`No option quote found for: ${body.unavailable.join(", ")}`);
       if (messages.length) setOptionPricesError(messages.join(" · "));
     } catch (error) {
@@ -133,7 +133,7 @@ export default function Page() {
 
   useEffect(() => {
     if (!optionSymbolsKey) {
-      if (missingOptionDetails.length) setOptionPricesError(`Add a valid Contract Cost to: ${Array.from(new Set(missingOptionDetails)).join(", ")}`);
+      if (missingOptionDetails.length) setOptionPricesError(`Use Option Details format like UNHG $25 Call for: ${Array.from(new Set(missingOptionDetails)).join(", ")}`);
       return;
     }
     refreshOptionPrices(true);

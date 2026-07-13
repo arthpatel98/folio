@@ -1,7 +1,8 @@
 import { Holding } from "@/types/portfolio";
 
-export function buildOptionSymbol(holding: Pick<Holding, "symbol" | "optionType" | "optionExpiry" | "averageCost">) {
-  const strikePrice = Number(holding.averageCost);
+export function buildOptionSymbol(holding: Pick<Holding, "symbol" | "company" | "optionType" | "optionExpiry">) {
+  const strikeMatch = holding.company.match(/\$(\d+(?:\.\d+)?)\s+(?:Call|Put)\b/i);
+  const strikePrice = strikeMatch ? Number(strikeMatch[1]) : NaN;
   if (!holding.optionExpiry || !holding.optionType || !Number.isFinite(strikePrice) || strikePrice <= 0) return null;
   const [year, month, day] = holding.optionExpiry.split("-");
   if (!year || !month || !day) return null;
