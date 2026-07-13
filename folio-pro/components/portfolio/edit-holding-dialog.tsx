@@ -140,10 +140,10 @@ export function EditHoldingDialog({ holding }: { holding: Holding }) {
           <div className="flex items-start justify-between gap-4">
             <div>
               <Dialog.Title className="text-xl font-semibold text-zinc-950 dark:text-white">
-                Edit position
+                Edit Position
               </Dialog.Title>
               <Dialog.Description className="mt-1 text-sm text-zinc-400">
-                Update the details for {holding.symbol}
+                Update the Details for {holding.symbol}
               </Dialog.Description>
             </div>
             <Dialog.Close className="rounded-lg p-2 text-zinc-400 transition hover:bg-white/5 hover:text-white" aria-label="Close">
@@ -209,7 +209,7 @@ export function EditHoldingDialog({ holding }: { holding: Holding }) {
               <Dialog.Close asChild>
                 <Button type="button" variant="outline">Cancel</Button>
               </Dialog.Close>
-              <Button type="submit">Save changes</Button>
+              <Button type="submit">Save Changes</Button>
             </div>
           </form>
         </Dialog.Content>

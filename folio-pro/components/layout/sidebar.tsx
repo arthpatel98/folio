@@ -13,21 +13,22 @@ export function Sidebar(){
   const path=usePathname();
   const [open,setOpen]=useState(false);
   const {active,activeId,setActiveId}=useActivePortfolio();
-  return <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-zinc-200 bg-white/95 p-4 text-zinc-900 dark:border-white/10 dark:bg-zinc-950/90 dark:text-zinc-100 backdrop-blur-xl lg:block">
-    <div className="mb-4 flex items-center gap-3 px-2 py-3"><div className="grid size-10 place-items-center rounded-2xl bg-emerald-400 text-zinc-950 shadow-glow"><TrendingUp size={20}/></div><div className="font-semibold uppercase">Arth’s Portfolios</div></div>
+  return <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-zinc-200 bg-white/95 p-4 text-zinc-900 dark:border-white/10 dark:bg-zinc-950/90 dark:text-zinc-100 backdrop-blur-xl lg:block">
+    <div className="mb-4 flex items-center gap-3 px-2 py-3"><div className="grid size-10 place-items-center rounded-2xl bg-emerald-400 text-zinc-950 shadow-glow"><TrendingUp size={20}/></div><div className="font-semibold">Arth’s Portfolios</div></div>
     <div className="relative mb-5">
       <button onClick={()=>setOpen(!open)} className="flex w-full items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-white/[.045] p-3 text-left transition hover:bg-white/[.07]">
-        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-400/15 text-xs font-bold uppercase text-emerald-400">{active.badge}</div>
-        <div className="min-w-0 flex-1"><div className="truncate text-sm font-medium uppercase">{active.name}</div><div className="truncate text-xs uppercase text-zinc-500">{active.subtitle}</div></div><ChevronDown size={16} className={cn("shrink-0 text-zinc-500 transition",open&&"rotate-180")}/>
+        <div className="grid size-9 place-items-center rounded-xl bg-emerald-400/15 text-xs font-bold text-emerald-400">{active.badge}</div>
+        <div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{active.name}</div><div className="truncate text-xs text-zinc-500">{active.subtitle}</div></div><ChevronDown size={16} className={cn("text-zinc-500 transition",open&&"rotate-180")}/>
       </button>
       {open&&<div className="absolute left-0 right-0 top-[calc(100%+8px)] z-50 rounded-2xl border border-white/10 bg-white p-2 dark:bg-zinc-950 shadow-2xl">
-        <div className="px-2 pb-2 pt-1 text-[11px] font-medium uppercase tracking-wider text-zinc-600">Switch Portfolio</div>
+        <div className="px-2 pb-2 pt-1 text-[11px] font-medium uppercase tracking-wider text-zinc-600">Switch portfolio</div>
         {portfolios.map((portfolio)=><button key={portfolio.id} onClick={()=>{setActiveId(portfolio.id);setOpen(false)}} className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left hover:bg-zinc-100 dark:hover:bg-white/[.05]">
-          <div className={cn("grid size-8 shrink-0 place-items-center rounded-lg bg-white/[.06] text-[10px] font-bold uppercase text-zinc-300",portfolio.id==='robinhood'&&"bg-emerald-400/15 text-emerald-400")}>{portfolio.id==='all'?<Layers3 size={15}/>:portfolio.badge}</div>
-          <div className="min-w-0 flex-1"><div className="flex items-center gap-2 text-sm"><span className="truncate uppercase">{portfolio.name}</span></div><div className="truncate text-xs uppercase text-zinc-600">{portfolio.subtitle}</div></div>{activeId===portfolio.id&&<Check size={15} className="shrink-0 text-emerald-400"/>}
+          <div className={cn("grid size-8 place-items-center rounded-lg bg-white/[.06] text-[10px] font-bold text-zinc-300",portfolio.id==='robinhood'&&"bg-emerald-400/15 text-emerald-400")}>{portfolio.id==='all'?<Layers3 size={15}/>:portfolio.badge}</div>
+          <div className="min-w-0 flex-1"><div className="flex items-center gap-2 text-sm"><span className="truncate">{portfolio.name}</span></div><div className="text-xs text-zinc-600">{portfolio.subtitle}</div></div>{activeId===portfolio.id&&<Check size={15} className="text-emerald-400"/>}
         </button>)}
       </div>}
     </div>
-    <nav className="space-y-1">{items.map(([href,label,Icon])=><Link key={href} href={href} className={cn("flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm uppercase text-zinc-400 transition hover:bg-zinc-100 dark:hover:bg-white/[.05] hover:text-white",path===href&&"bg-white/[.07] text-white")}><Icon size={17}/>{label}</Link>)}</nav>
+    <nav className="space-y-1">{items.map(([href,label,Icon])=><Link key={href} href={href} className={cn("flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-400 transition hover:bg-zinc-100 dark:hover:bg-white/[.05] hover:text-white",path===href&&"bg-white/[.07] text-white")}><Icon size={17}/>{label}</Link>)}</nav>
+
   </aside>
 }

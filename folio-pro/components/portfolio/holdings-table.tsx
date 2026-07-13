@@ -192,6 +192,23 @@ export function HoldingsTable({
     },
   ], [allocationBase, assetType, removeHolding]);
 
+  const subtotal = useMemo(() => {
+    const totals = data.reduce((acc, holding) => {
+      const metrics = holdingMetrics(holding);
+      acc.marketValue += metrics.marketValue;
+      acc.costBasis += metrics.costBasis;
+      acc.todayGain += metrics.todayGain;
+      return acc;
+    }, { marketValue: 0, costBasis: 0, todayGain: 0 });
+
+    return {
+      ...totals,
+      todayPct: totals.marketValue - totals.todayGain ? (totals.todayGain / (totals.marketValue - totals.todayGain)) * 100 : 0,
+      totalGain: totals.marketValue - totals.costBasis,
+      totalGainPct: totals.costBasis ? ((totals.marketValue - totals.costBasis) / totals.costBasis) * 100 : 0,
+    };
+  }, [data]);
+
   const table = useReactTable({ data, columns, defaultColumn: { size: 160, minSize: 80, maxSize: 600 }, state: { sorting, columnSizing }, onSortingChange: setSorting, onColumnSizingChange: setColumnSizing, columnResizeMode: "onChange", getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel() });
 
   return (
@@ -214,6 +231,20 @@ export function HoldingsTable({
           <tbody>{table.getRowModel().rows.map((row) => <tr key={row.id} className="group h-[112px] border-b border-zinc-200/80 bg-white text-zinc-900 transition last:border-0 hover:bg-zinc-50 dark:border-white/[.06] dark:bg-zinc-950/20 dark:text-zinc-100 dark:hover:bg-white/[.025]">
             {row.getVisibleCells().map((cell, index) => <td key={cell.id} style={{ width: cell.column.getSize() }} className={cn("whitespace-nowrap px-6 py-5 text-base", index > 0 && cell.column.id !== "sector" && "text-right", cell.column.id === "sector" && "text-left", index === 0 && "sticky left-0 z-20 bg-white shadow-[8px_0_12px_-12px_rgba(0,0,0,.35)] group-hover:bg-zinc-50 dark:bg-zinc-950 dark:group-hover:bg-zinc-900") }>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}
           </tr>)}</tbody>
+          {!!table.getRowModel().rows.length && <tfoot>
+            <tr className="h-[96px] border-t-2 border-zinc-300 bg-zinc-100/95 font-semibold text-zinc-900 dark:border-white/15 dark:bg-white/[.055] dark:text-zinc-100">
+              {table.getVisibleLeafColumns().map((column, index) => {
+                const rightAligned = index > 0 && column.id !== "sector";
+                let content: React.ReactNode = null;
+                if (index === 0) content = <div><div className="text-base">{title} Subtotal</div><div className="mt-1 text-xs font-normal text-zinc-500">{data.length} Open {data.length === 1 ? "Position" : "Positions"}</div></div>;
+                if (column.id === "dayReturn") content = <div className="space-y-1"><div className="text-base"><SignedMoney value={subtotal.todayGain} /></div><SignedPercent value={subtotal.todayPct} /></div>;
+                if (column.id === "totalReturn") content = <div className="space-y-1"><div className="text-base"><SignedMoney value={subtotal.totalGain} /></div><SignedPercent value={subtotal.totalGainPct} /></div>;
+                if (column.id === "totalCost") content = money(subtotal.costBasis);
+                if (column.id === "marketValue") content = <div className="space-y-1"><div className="text-base">{money(subtotal.marketValue)}</div><div className="text-sm font-normal text-zinc-500">{allocationBase ? (Math.abs(subtotal.marketValue / allocationBase) * 100).toFixed(2) : "0.00"}%</div></div>;
+                return <td key={column.id} style={{ width: column.getSize() }} className={cn("whitespace-nowrap px-6 py-5 text-base", rightAligned && "text-right", column.id === "sector" && "text-left", index === 0 && "sticky left-0 z-20 bg-zinc-100/95 shadow-[8px_0_12px_-12px_rgba(0,0,0,.35)] dark:bg-zinc-900")}>{content}</td>;
+              })}
+            </tr>
+          </tfoot>}
         </table>
         {!table.getRowModel().rows.length && <div className="px-6 py-14 text-center text-sm text-zinc-500">No {title.toLowerCase()} match your search.</div>}
       </div>
