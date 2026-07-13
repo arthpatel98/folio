@@ -79,7 +79,7 @@ export default function Page() {
         </>}
       </Card>
 
-      <Card className="p-5"><h2 className="font-medium">Market data providers</h2><div className="mt-4 space-y-3">{["Polygon.io","Finnhub","Alpha Vantage","Twelve Data"].map(x=><div key={x} className="flex items-center justify-between rounded-xl border p-3"><span className="text-sm">{x}</span><Button variant="outline" size="sm">Connect</Button></div>)}</div></Card>
+      <Card className="p-5"><h2 className="font-medium">Market data providers</h2><div className="mt-4 space-y-3">{["Alpaca"].map(x=><div key={x} className="flex items-center justify-between rounded-xl border p-3"><span className="text-sm">{x}</span><Button variant="outline" size="sm">Connect</Button></div>)}</div></Card>
       <Card className="p-5"><h2 className="font-medium">Broker connections</h2><p className="mt-1 text-sm text-zinc-500">Use aggregator or broker-supported OAuth APIs in production. Never collect brokerage passwords directly.</p><div className="mt-4 flex flex-wrap gap-2">{["Robinhood","Charles Schwab","Fidelity","Interactive Brokers","CSV import"].map(x=><Button key={x} variant="outline">{x}</Button>)}</div></Card>
     </div>
   </div>;

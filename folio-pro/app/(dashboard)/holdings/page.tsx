@@ -27,9 +27,6 @@ export default function Page() {
   const [pricesLoading, setPricesLoading] = useState(false);
   const [pricesError, setPricesError] = useState<string | null>(null);
   const [pricesUpdatedAt, setPricesUpdatedAt] = useState<Date | null>(null);
-  const [optionPricesLoading, setOptionPricesLoading] = useState(false);
-  const [optionPricesError, setOptionPricesError] = useState<string | null>(null);
-  const [optionPricesUpdatedAt, setOptionPricesUpdatedAt] = useState<Date | null>(null);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = useMemo(() => {
@@ -61,85 +58,66 @@ export default function Page() {
   [holdings]);
   const stockSymbolsKey = stockSymbols.join(",");
 
-  const refreshStockPrices = useCallback(async (silent = false) => {
-    if (!stockSymbolsKey || pricesLoading) return;
-    if (!silent) setPricesLoading(true);
-    setPricesError(null);
-
-    try {
-      const response = await fetch(`/api/market-prices?symbols=${encodeURIComponent(stockSymbolsKey)}`, { cache: "no-store" });
-      const body = await response.json() as {
-        prices?: Record<string, { currentPrice: number; previousClose: number }>;
-        unavailable?: string[];
-        refreshedAt?: string;
-        error?: string;
-      };
-
-      if (!response.ok) throw new Error(body.error || "Could not refresh stock prices.");
-      if (body.prices && Object.keys(body.prices).length) updateStockQuotes(body.prices);
-      setPricesUpdatedAt(body.refreshedAt ? new Date(body.refreshedAt) : new Date());
-      if (body.unavailable?.length) {
-        setPricesError(`No quote found for: ${body.unavailable.join(", ")}`);
-      }
-    } catch (error) {
-      setPricesError(error instanceof Error ? error.message : "Could not refresh stock prices.");
-    } finally {
-      setPricesLoading(false);
-    }
-  }, [pricesLoading, stockSymbolsKey, updateStockQuotes]);
-
-
   const optionContracts = useMemo(() => holdings
     .filter((holding) => holding.assetType === "option")
     .map((holding) => ({ holding, contract: buildOptionSymbol(holding) }))
   , [holdings]);
   const missingOptionDetails = optionContracts.filter((item) => !item.contract).map((item) => item.holding.symbol);
   const optionSymbolsKey = Array.from(new Set(optionContracts.map((item) => item.contract).filter((value): value is string => Boolean(value)))).sort().join(",");
+  const hasRefreshableSymbols = Boolean(stockSymbolsKey || optionSymbolsKey);
 
-  const refreshOptionPrices = useCallback(async (silent = false) => {
-    if (!optionSymbolsKey || optionPricesLoading) return;
-    if (!silent) setOptionPricesLoading(true);
-    setOptionPricesError(null);
+  const refreshPrices = useCallback(async (silent = false) => {
+    if (!hasRefreshableSymbols || pricesLoading) return;
+    if (!silent) setPricesLoading(true);
+    setPricesError(null);
+
     try {
-      const response = await fetch(`/api/option-prices?symbols=${encodeURIComponent(optionSymbolsKey)}`, { cache: "no-store" });
-      const body = await response.json() as { prices?: Record<string, { currentPrice: number; previousClose: number }>; unavailable?: string[]; refreshedAt?: string; error?: string };
-      if (!response.ok) throw new Error(body.error || "Could not refresh option prices.");
-      if (body.prices && Object.keys(body.prices).length) {
-        const mapped: Record<string, { currentPrice: number; previousClose: number }> = {};
-        optionContracts.forEach(({ holding, contract }) => {
-          if (!contract || !body.prices?.[contract]) return;
-          mapped[contract] = body.prices[contract];
-        });
-        updateOptionQuotes(mapped);
-      }
-      setOptionPricesUpdatedAt(body.refreshedAt ? new Date(body.refreshedAt) : new Date());
+      const requests: Promise<void>[] = [];
       const messages: string[] = [];
+      let refreshedAt: Date | null = null;
+
+      if (stockSymbolsKey) {
+        requests.push((async () => {
+          const response = await fetch(`/api/market-prices?symbols=${encodeURIComponent(stockSymbolsKey)}`, { cache: "no-store" });
+          const body = await response.json() as { prices?: Record<string, { currentPrice: number; previousClose: number }>; unavailable?: string[]; refreshedAt?: string; error?: string };
+          if (!response.ok) throw new Error(body.error || "Could not refresh stock prices.");
+          if (body.prices && Object.keys(body.prices).length) updateStockQuotes(body.prices);
+          if (body.unavailable?.length) messages.push(`No stock quote found for: ${body.unavailable.join(", ")}`);
+          refreshedAt = body.refreshedAt ? new Date(body.refreshedAt) : new Date();
+        })());
+      }
+
+      if (optionSymbolsKey) {
+        requests.push((async () => {
+          const response = await fetch(`/api/option-prices?symbols=${encodeURIComponent(optionSymbolsKey)}`, { cache: "no-store" });
+          const body = await response.json() as { prices?: Record<string, { currentPrice: number; previousClose: number }>; unavailable?: string[]; refreshedAt?: string; error?: string };
+          if (!response.ok) throw new Error(body.error || "Could not refresh option prices.");
+          if (body.prices && Object.keys(body.prices).length) updateOptionQuotes(body.prices);
+          if (body.unavailable?.length) messages.push(`No option quote found for: ${body.unavailable.join(", ")}`);
+          refreshedAt = body.refreshedAt ? new Date(body.refreshedAt) : new Date();
+        })());
+      }
+
+      await Promise.all(requests);
       if (missingOptionDetails.length) messages.push(`Use Option Details format like UNHG $25 Call for: ${Array.from(new Set(missingOptionDetails)).join(", ")}`);
-      if (body.unavailable?.length) messages.push(`No option quote found for: ${body.unavailable.join(", ")}`);
-      if (messages.length) setOptionPricesError(messages.join(" · "));
+      setPricesUpdatedAt(refreshedAt ?? new Date());
+      if (messages.length) setPricesError(messages.join(" · "));
     } catch (error) {
-      setOptionPricesError(error instanceof Error ? error.message : "Could not refresh option prices.");
+      setPricesError(error instanceof Error ? error.message : "Could not refresh prices.");
     } finally {
-      setOptionPricesLoading(false);
+      setPricesLoading(false);
     }
-  }, [missingOptionDetails.join(","), optionContracts, optionPricesLoading, optionSymbolsKey, updateOptionQuotes]);
+  }, [hasRefreshableSymbols, missingOptionDetails.join(","), optionSymbolsKey, pricesLoading, stockSymbolsKey, updateOptionQuotes, updateStockQuotes]);
 
   useEffect(() => {
-    if (!stockSymbolsKey) return;
-    refreshStockPrices(true);
-    const timer = window.setInterval(() => refreshStockPrices(true), 5 * 60 * 1000);
-    return () => window.clearInterval(timer);
-  }, [stockSymbolsKey]); // Refresh when the ticker list changes, then every five minutes.
-
-  useEffect(() => {
-    if (!optionSymbolsKey) {
-      if (missingOptionDetails.length) setOptionPricesError(`Use Option Details format like UNHG $25 Call for: ${Array.from(new Set(missingOptionDetails)).join(", ")}`);
+    if (!hasRefreshableSymbols) {
+      if (missingOptionDetails.length) setPricesError(`Use Option Details format like UNHG $25 Call for: ${Array.from(new Set(missingOptionDetails)).join(", ")}`);
       return;
     }
-    refreshOptionPrices(true);
-    const timer = window.setInterval(() => refreshOptionPrices(true), 5 * 60 * 1000);
+    refreshPrices(true);
+    const timer = window.setInterval(() => refreshPrices(true), 5 * 60 * 1000);
     return () => window.clearInterval(timer);
-  }, [optionSymbolsKey]);
+  }, [stockSymbolsKey, optionSymbolsKey]); // Refresh when holdings change, then every five minutes.
 
   function portfolioRows() {
     return holdings.map((holding) => {
@@ -175,7 +153,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-3xl font-semibold tracking-tight">Portfolio Overview</h1><p className="mt-1 text-sm text-zinc-500">Portfolio Performance and Open Positions at a Glance.</p>{pricesUpdatedAt && <p className="mt-1 text-xs text-zinc-500">Stock Prices Updated {pricesUpdatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}{optionPricesUpdatedAt && <p className="mt-1 text-xs text-zinc-500">Option Prices Updated {optionPricesUpdatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}{pricesError && <p className="mt-1 text-xs text-amber-500">{pricesError}</p>}{optionPricesError && <p className="mt-1 text-xs text-amber-500">{optionPricesError}</p>}</div><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => refreshStockPrices()} disabled={pricesLoading || !stockSymbolsKey} className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><RefreshCw size={16} className={pricesLoading ? "animate-spin" : ""}/>{pricesLoading ? "Refreshing..." : "Refresh Stock Prices"}</button><button type="button" onClick={() => refreshOptionPrices()} disabled={optionPricesLoading || !optionSymbolsKey} className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><RefreshCw size={16} className={optionPricesLoading ? "animate-spin" : ""}/>{optionPricesLoading ? "Refreshing..." : "Refresh Option Prices"}</button><button onClick={downloadExcel} className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><Download size={16}/>Download Portfolio</button><AddHoldingDialog /></div></div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-3xl font-semibold tracking-tight">Portfolio Overview</h1><p className="mt-1 text-sm text-zinc-500">Portfolio Performance and Open Positions at a Glance.</p>{pricesUpdatedAt && <p className="mt-1 text-xs text-zinc-500">Prices Updated {pricesUpdatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}{pricesError && <p className="mt-1 text-xs text-amber-500">{pricesError}</p>}</div><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => refreshPrices()} disabled={pricesLoading || !hasRefreshableSymbols} aria-label="Refresh Prices" title="Refresh Prices" className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><RefreshCw size={17} className={pricesLoading ? "animate-spin" : ""}/></button><button onClick={downloadExcel} className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><Download size={16}/>Download Portfolio</button><AddHoldingDialog /></div></div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <MetricBlock label="Portfolio Value" value={money(summary.value)} subvalue={`Day Return: ${summary.today >= 0 ? "↑ +" : "↓ -"}${money(Math.abs(summary.today))} (${summary.todayPct >= 0 ? "+" : ""}${summary.todayPct.toFixed(2)}%)`} positive={summary.today >= 0} icon={WalletCards}/>
