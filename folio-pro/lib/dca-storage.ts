@@ -56,6 +56,15 @@ export function upsertDcaPosition(position: DcaPosition) {
   saveDcaPositions(next);
 }
 
+export function removeDcaPosition(portfolioId: DataPortfolioId, symbolInput: string) {
+  if (typeof window === "undefined") return;
+  const symbol = symbolInput.trim().toUpperCase();
+  const positions = loadDcaPositions().filter((position) =>
+    !(position.portfolioId === portfolioId && position.symbol.trim().toUpperCase() === symbol),
+  );
+  saveDcaPositions(positions);
+}
+
 function dateValue(value: string) {
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;

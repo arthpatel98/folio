@@ -5,7 +5,7 @@ import { persist } from "zustand/middleware";
 import { AssetType, Holding, Transaction } from "@/types/portfolio";
 import { holdings as robinhoodHoldings, transactions as robinhoodTransactions } from "@/lib/data/mock";
 import { buildOptionSymbol } from "@/lib/options";
-import { recordStockTrade } from "@/lib/dca-storage";
+import { recordStockTrade, removeDcaPosition } from "@/lib/dca-storage";
 
 export type DataPortfolioId = "robinhood" | "fidelity-401k" | "fidelity-roth";
 export type ActivePortfolioId = DataPortfolioId | "all";
@@ -174,6 +174,7 @@ export const usePortfolioStore = create<State>()(
       removeHolding: (symbol, assetType) =>
         set((state) => {
           const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
+          if (assetType === "stock") removeDcaPosition(target, symbol);
           const updated = state.holdingsByPortfolio[target].filter(
             (item) => holdingKey(item.symbol, item.assetType ?? "stock") !== holdingKey(symbol, assetType),
           );
