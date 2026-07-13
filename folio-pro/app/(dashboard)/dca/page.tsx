@@ -1,13 +1,28 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowDownRight, ArrowUpRight, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { cn, money } from "@/lib/utils";
 
-type Lot = { amount: number; shares: number; price: number; date: string; note?: string; future?: boolean };
-type Preset = { id: string; symbol: string; label?: string; sellPrice: number; lots: Lot[] };
+type NumericValue = number | "";
+type Lot = {
+  amount: number;
+  shares: NumericValue;
+  price: NumericValue;
+  date: string;
+  note?: string;
+  future?: boolean;
+};
+type Position = {
+  id: string;
+  symbol: string;
+  label?: string;
+  sellPrice: NumericValue;
+  lots: Lot[];
+  custom?: boolean;
+};
 
-const presets: Preset[] = [
+const builtInPositions: Position[] = [
   { id:"AMZN", symbol:"AMZN", sellPrice:257.20, lots:[
     {amount:1800,shares:7,price:257.14,date:"May 19, 2026"},
     {amount:1919,shares:8,price:239.93,date:"Jun 10, 2026"},
@@ -35,58 +50,154 @@ const presets: Preset[] = [
   { id:"ONDS-B", symbol:"ONDS", label:"ONDS · Jul 24 CC", sellPrice:9.16, lots:[
     {amount:1770,shares:200,price:8.85,date:"Jun 23, 2026",note:"Jul 24 CC"},{amount:1540,shares:200,price:7.70,date:"Jul 2, 2026"},
   ]},
-  { id:"DRAM", symbol:"DRAM", sellPrice:69.30, lots:[
-    {amount:1668,shares:25,price:66.70,date:"Jun 29, 2026"},{amount:1232,shares:20,price:61.60,date:"Jul 2, 2026"},
-  ]},
-  { id:"NBIS", symbol:"NBIS", sellPrice:225, lots:[
-    {amount:1643,shares:7,price:234.69,date:"Jul 1, 2026"},{amount:1050,shares:5,price:209.98,date:"Jul 2, 2026"},{amount:1171,shares:6,price:195.20,date:"Jul 7, 2026"},
-  ]},
+  { id:"DRAM", symbol:"DRAM", sellPrice:69.30, lots:[{amount:1668,shares:25,price:66.70,date:"Jun 29, 2026"},{amount:1232,shares:20,price:61.60,date:"Jul 2, 2026"}]},
+  { id:"NBIS", symbol:"NBIS", sellPrice:225, lots:[{amount:1643,shares:7,price:234.69,date:"Jul 1, 2026"},{amount:1050,shares:5,price:209.98,date:"Jul 2, 2026"},{amount:1171,shares:6,price:195.20,date:"Jul 7, 2026"}]},
   { id:"SITM", symbol:"SITM", sellPrice:670, lots:[{amount:1214,shares:2,price:606.77,date:"Jul 2, 2026"}]},
 ];
 
-const n = (v:string) => Number.isFinite(Number(v)) ? Number(v) : 0;
-const pct = (v:number) => `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+const toNumber = (value: NumericValue) => value === "" || !Number.isFinite(Number(value)) ? 0 : Number(value);
+const parseNumericInput = (value: string): NumericValue => value === "" ? "" : Number(value);
+const pct = (value:number) => `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
+const clonePosition = (position: Position): Position => ({...position, lots: position.lots.map((lot) => ({...lot}))});
+const STORAGE_KEY = "folio-dca-custom-positions";
 
 export default function DcaPage(){
-  const [presetId,setPresetId]=useState(presets[0].id);
-  const preset=presets.find(p=>p.id===presetId)!;
-  const [lots,setLots]=useState<Lot[]>(preset.lots);
-  const [sellPrice,setSellPrice]=useState(preset.sellPrice);
+  const [customPositions,setCustomPositions]=useState<Position[]>([]);
+  const [positionId,setPositionId]=useState(builtInPositions[0].id);
+  const [lots,setLots]=useState<Lot[]>(builtInPositions[0].lots.map((lot)=>({...lot})));
+  const [sellPrice,setSellPrice]=useState<NumericValue>(builtInPositions[0].sellPrice);
+  const [showAddPosition,setShowAddPosition]=useState(false);
+  const [newSymbol,setNewSymbol]=useState("");
+  const [newSellPrice,setNewSellPrice]=useState<NumericValue>("");
+  const [newShares,setNewShares]=useState<NumericValue>("");
+  const [newBuyPrice,setNewBuyPrice]=useState<NumericValue>("");
+  const [newBuyDate,setNewBuyDate]=useState("");
 
-  const load=(id:string)=>{const p=presets.find(x=>x.id===id)!;setPresetId(id);setLots(p.lots.map(x=>({...x})));setSellPrice(p.sellPrice)};
+  useEffect(()=>{
+    try {
+      const saved=window.localStorage.getItem(STORAGE_KEY);
+      if(saved) setCustomPositions(JSON.parse(saved));
+    } catch {}
+  },[]);
+
+  const positions=useMemo(()=>[...builtInPositions,...customPositions], [customPositions]);
+  const selectedPosition=positions.find((position)=>position.id===positionId) ?? positions[0];
+
+  const saveCustomPositions=(next:Position[])=>{
+    setCustomPositions(next);
+    try { window.localStorage.setItem(STORAGE_KEY,JSON.stringify(next)); } catch {}
+  };
+
+  const load=(id:string)=>{
+    const position=positions.find((item)=>item.id===id);
+    if(!position) return;
+    const copy=clonePosition(position);
+    setPositionId(id);
+    setLots(copy.lots);
+    setSellPrice(copy.sellPrice);
+  };
+
   const totals=useMemo(()=>{
-    const amount=lots.reduce((s,l)=>s+l.amount,0), shares=lots.reduce((s,l)=>s+l.shares,0);
-    const avg=shares?amount/shares:0, value=shares*sellPrice, profit=value-amount, roi=amount?profit/amount*100:0;
-    const existing=lots.filter(l=>!l.future), future=lots.filter(l=>l.future);
-    const oldAmount=existing.reduce((s,l)=>s+l.amount,0), oldShares=existing.reduce((s,l)=>s+l.shares,0), oldAvg=oldShares?oldAmount/oldShares:0;
-    return {amount,shares,avg,value,profit,roi,oldAvg,futureAmount:future.reduce((s,l)=>s+l.amount,0)};
+    const amount=lots.reduce((sum,lot)=>sum+lot.amount,0);
+    const shares=lots.reduce((sum,lot)=>sum+toNumber(lot.shares),0);
+    const target=toNumber(sellPrice);
+    const avg=shares?amount/shares:0;
+    const value=shares*target;
+    const profit=value-amount;
+    const roi=amount?profit/amount*100:0;
+    const existing=lots.filter((lot)=>!lot.future);
+    const future=lots.filter((lot)=>lot.future);
+    const oldAmount=existing.reduce((sum,lot)=>sum+lot.amount,0);
+    const oldShares=existing.reduce((sum,lot)=>sum+toNumber(lot.shares),0);
+    const oldAvg=oldShares?oldAmount/oldShares:0;
+    return {amount,shares,avg,value,profit,roi,oldAvg,futureAmount:future.reduce((sum,lot)=>sum+lot.amount,0)};
   },[lots,sellPrice]);
-  const update=(i:number,key:keyof Lot,value:string)=>setLots(prev=>prev.map((l,idx)=>idx===i?{...l,[key]:key==="date"||key==="note"?value:n(value),...(key==="shares"?{amount:n(value)*l.price}:{}),...(key==="price"?{amount:l.shares*n(value)}:{})}:l));
-  const addFuture=()=>setLots(prev=>[...prev,{amount:0,shares:0,price:totals.avg,date:"Future",future:true}]);
+
+  const update=(index:number,key:keyof Lot,value:string)=>setLots((previous)=>previous.map((lot,lotIndex)=>{
+    if(lotIndex!==index) return lot;
+    if(key==="date"||key==="note") return {...lot,[key]:value};
+    const numeric=parseNumericInput(value);
+    const next={...lot,[key]:numeric};
+    const shares=key==="shares"?toNumber(numeric):toNumber(next.shares);
+    const price=key==="price"?toNumber(numeric):toNumber(next.price);
+    return {...next,amount:shares*price};
+  }));
+
+  const addExisting=()=>setLots((previous)=>[...previous,{amount:0,shares:"",price:"",date:"",future:false}]);
+  const addFuture=()=>setLots((previous)=>[...previous,{amount:0,shares:"",price:"",date:"",future:true}]);
+
+  const resetNewPosition=()=>{
+    setNewSymbol("");setNewSellPrice("");setNewShares("");setNewBuyPrice("");setNewBuyDate("");
+  };
+
+  const addPosition=()=>{
+    const symbol=newSymbol.trim().toUpperCase();
+    const shares=toNumber(newShares);
+    const buyPrice=toNumber(newBuyPrice);
+    if(!symbol||toNumber(newSellPrice)<=0||shares<=0||buyPrice<=0||!newBuyDate) return;
+    const id=`CUSTOM-${symbol}-${Date.now()}`;
+    const position:Position={
+      id,
+      symbol,
+      label:symbol,
+      sellPrice:newSellPrice,
+      custom:true,
+      lots:[{amount:shares*buyPrice,shares:newShares,price:newBuyPrice,date:newBuyDate,future:false}],
+    };
+    saveCustomPositions([...customPositions,position]);
+    setPositionId(id);
+    setLots(position.lots.map((lot)=>({...lot})));
+    setSellPrice(position.sellPrice);
+    resetNewPosition();
+    setShowAddPosition(false);
+  };
+
+  const saveCurrentPosition=()=>{
+    if(!selectedPosition?.custom) return;
+    const next=customPositions.map((position)=>position.id===positionId?{...position,sellPrice,lots:lots.map((lot)=>({...lot}))}:position);
+    saveCustomPositions(next);
+  };
+
+  const resetPosition=()=>load(positionId);
 
   return <div className="space-y-5">
-    <div><h1 className="text-3xl font-semibold tracking-tight">DCA Calculator</h1><p className="mt-1 text-sm text-zinc-500">Test an additional purchase and see how it changes your average cost and potential return.</p></div>
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div><h1 className="text-3xl font-semibold tracking-tight">DCA Calculator</h1><p className="mt-1 text-sm text-zinc-500">Test An Additional Purchase And See How It Changes Your Average Cost And Potential Return.</p></div>
+      <button onClick={()=>setShowAddPosition(true)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950 hover:bg-emerald-300"><Plus size={16}/>Add Position</button>
+    </div>
+
+    {showAddPosition&&<section className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[.04] p-5 shadow-sm lg:p-6">
+      <div className="flex items-center justify-between"><div><h2 className="text-lg font-semibold">Add Position</h2><p className="mt-1 text-sm text-zinc-500">Create A Ticker And Add Its First Existing Purchase Lot.</p></div><button onClick={()=>{setShowAddPosition(false);resetNewPosition();}} aria-label="Close Add Position" className="rounded-lg p-2 text-zinc-400 hover:bg-white/[.06] hover:text-white"><X size={18}/></button></div>
+      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <label className="space-y-2 text-sm font-medium text-zinc-300">Ticker Symbol<input value={newSymbol} onChange={(event)=>setNewSymbol(event.target.value.toUpperCase())} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 uppercase outline-none focus:border-emerald-400/60"/></label>
+        <label className="space-y-2 text-sm font-medium text-zinc-300">Potential Sell Price<div className="flex h-11 items-center rounded-xl border border-white/10 bg-black/20 px-3"><span className="text-zinc-500">$</span><input type="number" step="any" value={newSellPrice} onChange={(event)=>setNewSellPrice(parseNumericInput(event.target.value))} className="w-full bg-transparent px-1 outline-none"/></div></label>
+        <label className="space-y-2 text-sm font-medium text-zinc-300">Shares<input type="number" step="any" value={newShares} onChange={(event)=>setNewShares(parseNumericInput(event.target.value))} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 outline-none focus:border-emerald-400/60"/></label>
+        <label className="space-y-2 text-sm font-medium text-zinc-300">Buy Price<div className="flex h-11 items-center rounded-xl border border-white/10 bg-black/20 px-3"><span className="text-zinc-500">$</span><input type="number" step="any" value={newBuyPrice} onChange={(event)=>setNewBuyPrice(parseNumericInput(event.target.value))} className="w-full bg-transparent px-1 outline-none"/></div></label>
+        <label className="space-y-2 text-sm font-medium text-zinc-300">Buy Date<input type="date" value={newBuyDate} onChange={(event)=>setNewBuyDate(event.target.value)} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 outline-none focus:border-emerald-400/60"/></label>
+      </div>
+      <div className="mt-5 flex justify-end"><button onClick={addPosition} disabled={!newSymbol.trim()||toNumber(newSellPrice)<=0||toNumber(newShares)<=0||toNumber(newBuyPrice)<=0||!newBuyDate} className="inline-flex h-10 items-center justify-center rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-40">Add Position</button></div>
+    </section>}
 
     <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5 shadow-sm lg:p-6">
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
-        <div><label className="mb-2 block text-sm font-medium text-zinc-300">Position preset</label><select value={presetId} onChange={e=>load(e.target.value)} className="h-12 w-full rounded-xl border border-white/10 bg-zinc-950/70 px-4 text-sm outline-none focus:border-emerald-400/60">{presets.map(p=><option key={p.id} value={p.id}>{p.label??p.symbol}</option>)}</select></div>
-        <div><label className="mb-2 block text-sm font-medium text-zinc-300">Potential sell price</label><div className="flex h-12 items-center rounded-xl border border-white/10 bg-black/15 px-4"><span className="mr-2 text-zinc-500">$</span><input type="number" step="any" value={sellPrice} onChange={e=>setSellPrice(n(e.target.value))} className="w-full bg-transparent text-lg font-semibold outline-none"/></div></div>
-        <button onClick={()=>load(presetId)} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/10 px-4 text-sm hover:bg-white/[.05]"><RotateCcw size={16}/>Reset preset</button>
+        <div><label className="mb-2 block text-sm font-medium text-zinc-300">Position</label><select value={positionId} onChange={(event)=>load(event.target.value)} className="h-12 w-full rounded-xl border border-white/10 bg-zinc-950/70 px-4 text-sm outline-none focus:border-emerald-400/60">{positions.map((position)=><option key={position.id} value={position.id}>{position.label??position.symbol}</option>)}</select></div>
+        <div><label className="mb-2 block text-sm font-medium text-zinc-300">Potential Sell Price</label><div className="flex h-12 items-center rounded-xl border border-white/10 bg-black/15 px-4"><span className="mr-2 text-zinc-500">$</span><input type="number" step="any" value={sellPrice} onChange={(event)=>setSellPrice(parseNumericInput(event.target.value))} className="w-full bg-transparent text-lg font-semibold outline-none"/></div></div>
+        <div className="flex gap-2"><button onClick={resetPosition} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-white/10 px-4 text-sm hover:bg-white/[.05]"><RotateCcw size={16}/>Reset Position</button>{selectedPosition?.custom&&<button onClick={saveCurrentPosition} className="inline-flex h-12 items-center justify-center rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950 hover:bg-emerald-300">Save Position</button>}</div>
       </div>
     </section>
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      {[["Total investment",money(totals.amount)],["Total shares",totals.shares.toLocaleString(undefined,{maximumFractionDigits:5})],["New average",money(totals.avg)],[totals.profit>=0?"Potential profit":"Potential loss",`${totals.profit<0?"-":""}${money(Math.abs(totals.profit))}`],["Potential return",pct(totals.roi)]].map(([a,b],i)=><div key={a} className={cn("rounded-2xl border border-white/10 bg-zinc-950/35 p-5",i>=3&&(totals.profit>=0?"border-emerald-500/35 bg-emerald-500/[.06]":"border-rose-500/35 bg-rose-500/[.06]"))}><p className="text-sm text-zinc-500">{a}</p><p className={cn("mt-3 text-2xl font-semibold",i>=3&&(totals.profit>=0?"text-emerald-400":"text-rose-400"))}>{b}</p></div>)}
+      {[["Total Investment",money(totals.amount)],["Total Shares",totals.shares?totals.shares.toLocaleString(undefined,{maximumFractionDigits:5}):"—"],["New Average",totals.avg?money(totals.avg):"—"],[totals.profit>=0?"Potential Profit":"Potential Loss",totals.amount?`${totals.profit<0?"-":""}${money(Math.abs(totals.profit))}`:"—"],["Potential Return",totals.amount?pct(totals.roi):"—"]].map(([label,value],index)=><div key={label} className={cn("rounded-2xl border border-white/10 bg-zinc-950/35 p-5",index>=3&&(totals.profit>=0?"border-emerald-500/35 bg-emerald-500/[.06]":"border-rose-500/35 bg-rose-500/[.06]"))}><p className="text-sm text-zinc-500">{label}</p><p className={cn("mt-3 text-2xl font-semibold",index>=3&&(totals.profit>=0?"text-emerald-400":"text-rose-400"))}>{value}</p></div>)}
     </div>
 
     <section className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/35">
-      <div className="flex flex-col gap-3 border-b border-white/10 p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Purchase lots</h2><p className="mt-1 text-sm text-zinc-500">Edit any lot or add a future DCA purchase. Calculated profit columns are intentionally omitted because the summary updates automatically.</p></div><button onClick={addFuture} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950 hover:bg-emerald-300"><Plus size={16}/>Add future purchase</button></div>
-      <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-white/[.025] text-left text-xs uppercase tracking-wide text-zinc-500"><tr><th className="px-5 py-3">Type</th><th className="px-4 py-3">Shares</th><th className="px-4 py-3">Buy price</th><th className="px-4 py-3">Cost</th><th className="px-4 py-3">Buy date</th><th className="px-4 py-3">P/L at target</th><th className="px-4 py-3">Return</th><th className="px-4 py-3"></th></tr></thead><tbody>{lots.map((l,i)=>{const profit=l.shares*(sellPrice-l.price), r=l.amount?profit/l.amount*100:0;return <tr key={i} className={cn("border-t border-white/10",l.future&&"bg-emerald-500/[.04]")}><td className="px-5 py-3"><span className={cn("rounded-full px-2.5 py-1 text-xs",l.future?"bg-emerald-400/15 text-emerald-400":"bg-white/[.06] text-zinc-300")}>{l.future?"Future DCA":"Existing"}</span>{l.note&&<p className="mt-2 text-xs text-amber-300">{l.note}</p>}</td><td className="px-4 py-3"><input type="number" step="any" value={l.shares} onChange={e=>update(i,"shares",e.target.value)} className="w-28 rounded-lg border border-white/10 bg-black/20 px-3 py-2 outline-none focus:border-emerald-400/50"/></td><td className="px-4 py-3"><div className="flex w-32 items-center rounded-lg border border-white/10 bg-black/20 px-3"><span className="text-zinc-500">$</span><input type="number" step="any" value={l.price} onChange={e=>update(i,"price",e.target.value)} className="w-full bg-transparent px-1 py-2 outline-none"/></div></td><td className="px-4 py-3 font-medium">{money(l.amount)}</td><td className="px-4 py-3"><input value={l.date} onChange={e=>update(i,"date",e.target.value)} className="w-36 rounded-lg border border-white/10 bg-black/20 px-3 py-2 outline-none"/></td><td className={cn("px-4 py-3 font-medium",profit>=0?"text-emerald-400":"text-rose-400")}>{profit<0?"-":""}{money(Math.abs(profit))}</td><td className={cn("px-4 py-3",r>=0?"text-emerald-400":"text-rose-400")}>{pct(r)}</td><td className="px-4 py-3"><button aria-label="Remove row" onClick={()=>setLots(prev=>prev.filter((_,x)=>x!==i))} className="rounded-lg p-2 text-zinc-500 hover:bg-rose-500/10 hover:text-rose-400"><Trash2 size={16}/></button></td></tr>})}</tbody></table></div>
+      <div className="flex flex-col gap-3 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="font-semibold">Purchase Lots</h2><p className="mt-1 text-sm text-zinc-500">Add Completed Purchases As Existing Lots Or Test A Planned Purchase As Future DCA.</p></div><div className="flex flex-col gap-2 sm:flex-row"><button onClick={addExisting} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-white/10 px-4 text-sm font-semibold hover:bg-white/[.05]"><Plus size={16}/>Add Existing Purchase</button><button onClick={addFuture} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950 hover:bg-emerald-300"><Plus size={16}/>Add Future Purchase</button></div></div>
+      <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-white/[.025] text-left text-xs uppercase tracking-wide text-zinc-500"><tr><th className="px-5 py-3">Type</th><th className="px-4 py-3">Shares</th><th className="px-4 py-3">Buy Price</th><th className="px-4 py-3">Cost</th><th className="px-4 py-3">Buy Date</th><th className="px-4 py-3">P/L At Target</th><th className="px-4 py-3">Return</th><th className="px-4 py-3"></th></tr></thead><tbody>{lots.map((lot,index)=>{const shares=toNumber(lot.shares),price=toNumber(lot.price),profit=shares*(toNumber(sellPrice)-price),returnPct=lot.amount?profit/lot.amount*100:0;return <tr key={index} className={cn("border-t border-white/10",lot.future&&"bg-emerald-500/[.04]")}><td className="px-5 py-3"><span className={cn("rounded-full px-2.5 py-1 text-xs",lot.future?"bg-emerald-400/15 text-emerald-400":"bg-white/[.06] text-zinc-300")}>{lot.future?"Future DCA":"Existing"}</span>{lot.note&&<p className="mt-2 text-xs text-amber-300">{lot.note}</p>}</td><td className="px-4 py-3"><input type="number" step="any" value={lot.shares} onChange={(event)=>update(index,"shares",event.target.value)} className="w-28 rounded-lg border border-white/10 bg-black/20 px-3 py-2 outline-none focus:border-emerald-400/50"/></td><td className="px-4 py-3"><div className="flex w-32 items-center rounded-lg border border-white/10 bg-black/20 px-3"><span className="text-zinc-500">$</span><input type="number" step="any" value={lot.price} onChange={(event)=>update(index,"price",event.target.value)} className="w-full bg-transparent px-1 py-2 outline-none"/></div></td><td className="px-4 py-3 font-medium">{lot.amount?money(lot.amount):"—"}</td><td className="px-4 py-3"><input value={lot.date} onChange={(event)=>update(index,"date",event.target.value)} className="w-40 rounded-lg border border-white/10 bg-black/20 px-3 py-2 outline-none"/></td><td className={cn("px-4 py-3 font-medium",lot.amount&&(profit>=0?"text-emerald-400":"text-rose-400"))}>{lot.amount?`${profit<0?"-":""}${money(Math.abs(profit))}`:"—"}</td><td className={cn("px-4 py-3",lot.amount&&(returnPct>=0?"text-emerald-400":"text-rose-400"))}>{lot.amount?pct(returnPct):"—"}</td><td className="px-4 py-3"><button aria-label="Remove Purchase Lot" onClick={()=>setLots((previous)=>previous.filter((_,lotIndex)=>lotIndex!==index))} className="rounded-lg p-2 text-zinc-500 hover:bg-rose-500/10 hover:text-rose-400"><Trash2 size={16}/></button></td></tr>})}</tbody></table></div>
     </section>
 
     <div className="grid gap-4 lg:grid-cols-2">
-      <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><h2 className="font-semibold">Before vs. after DCA</h2><div className="mt-5 space-y-4"><div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/15 p-4"><div><p className="text-sm text-zinc-500">Existing average</p><p className="mt-1 text-xl font-semibold">{money(totals.oldAvg)}</p></div><ArrowDownRight className={totals.avg<=totals.oldAvg?"text-emerald-400":"text-rose-400"}/><div className="text-right"><p className="text-sm text-zinc-500">New average</p><p className="mt-1 text-xl font-semibold">{money(totals.avg)}</p></div></div><div className="flex justify-between text-sm"><span className="text-zinc-500">Added DCA capital</span><span>{money(totals.futureAmount)}</span></div><div className="flex justify-between text-sm"><span className="text-zinc-500">Average-price change</span><span className={totals.avg<=totals.oldAvg?"text-emerald-400":"text-rose-400"}>{totals.oldAvg?pct((totals.avg-totals.oldAvg)/totals.oldAvg*100):"0.00%"}</span></div></div></section>
-      <section className={cn("rounded-2xl border p-5",totals.profit>=0?"border-emerald-500/30 bg-emerald-500/[.06]":"border-rose-500/30 bg-rose-500/[.06]")}><h2 className="flex items-center gap-2 font-semibold">{totals.profit>=0?<ArrowUpRight size={18}/>:<ArrowDownRight size={18}/>}Scenario insight</h2><p className="mt-4 text-sm leading-6 text-zinc-300">At a sell price of <strong>{money(sellPrice)}</strong>, this combined position would be worth <strong>{money(totals.value)}</strong> and produce a <strong>{totals.profit>=0?"profit":"loss"} of {money(Math.abs(totals.profit))}</strong>. {totals.futureAmount>0?`The planned DCA adds ${money(totals.futureAmount)} and moves the average from ${money(totals.oldAvg)} to ${money(totals.avg)}.`:"Add a future purchase row to compare a new DCA entry."}</p></section>
+      <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><h2 className="font-semibold">Before Vs. After DCA</h2><div className="mt-5 space-y-4"><div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/15 p-4"><div><p className="text-sm text-zinc-500">Existing Average</p><p className="mt-1 text-xl font-semibold">{totals.oldAvg?money(totals.oldAvg):"—"}</p></div><ArrowDownRight className={totals.oldAvg&&totals.avg<=totals.oldAvg?"text-emerald-400":"text-zinc-500"}/><div className="text-right"><p className="text-sm text-zinc-500">New Average</p><p className="mt-1 text-xl font-semibold">{totals.avg?money(totals.avg):"—"}</p></div></div><div className="flex justify-between text-sm"><span className="text-zinc-500">Added DCA Capital</span><span>{totals.futureAmount?money(totals.futureAmount):"—"}</span></div><div className="flex justify-between text-sm"><span className="text-zinc-500">Average Price Change</span><span className={totals.oldAvg?(totals.avg<=totals.oldAvg?"text-emerald-400":"text-rose-400"):"text-zinc-500"}>{totals.oldAvg?pct((totals.avg-totals.oldAvg)/totals.oldAvg*100):"—"}</span></div></div></section>
+      <section className={cn("rounded-2xl border p-5",totals.amount?(totals.profit>=0?"border-emerald-500/30 bg-emerald-500/[.06]":"border-rose-500/30 bg-rose-500/[.06]"):"border-white/10 bg-zinc-950/35")}><h2 className="flex items-center gap-2 font-semibold">{totals.amount&&(totals.profit>=0?<ArrowUpRight size={18}/>:<ArrowDownRight size={18}/>)}Scenario Insight</h2><p className="mt-4 text-sm leading-6 text-zinc-300">{totals.amount&&toNumber(sellPrice)>0?<>At A Sell Price Of <strong>{money(toNumber(sellPrice))}</strong>, This Combined Position Would Be Worth <strong>{money(totals.value)}</strong> And Produce A <strong>{totals.profit>=0?"Profit":"Loss"} Of {money(Math.abs(totals.profit))}</strong>. {totals.futureAmount>0?`The Planned DCA Adds ${money(totals.futureAmount)} And Moves The Average From ${money(totals.oldAvg)} To ${money(totals.avg)}.`:"Add A Future Purchase To Compare A New DCA Entry."}</>:"Enter Position And Purchase-Lot Data To Calculate The Scenario."}</p></section>
     </div>
-  </div>
+  </div>;
 }
