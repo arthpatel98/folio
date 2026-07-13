@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Banknote, BriefcaseBusiness, Download, Layers3, Search, WalletCards } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Banknote, BriefcaseBusiness, Download, Layers3, RefreshCw, Search, WalletCards } from "lucide-react";
 import { HoldingsTable } from "@/components/portfolio/holdings-table";
 import { AddHoldingDialog } from "@/components/portfolio/add-holding-dialog";
 import { EditCashDialog } from "@/components/portfolio/edit-cash-dialog";
@@ -20,7 +20,11 @@ export default function Page() {
   const holdings = usePortfolioStore((state) => state.holdings);
   const cash = usePortfolioStore((state) => state.cash);
   const activePortfolioId = usePortfolioStore((state) => state.activePortfolioId);
+  const updateStockQuotes = usePortfolioStore((state) => state.updateStockQuotes);
   const [query, setQuery] = useState("");
+  const [pricesLoading, setPricesLoading] = useState(false);
+  const [pricesError, setPricesError] = useState<string | null>(null);
+  const [pricesUpdatedAt, setPricesUpdatedAt] = useState<Date | null>(null);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = useMemo(() => {
@@ -42,6 +46,49 @@ export default function Page() {
   const optionHoldings = holdings.filter((holding) => holding.assetType === "option");
   const profitableStocks = stockHoldings.filter((holding) => holdingMetrics(holding).totalGain > 0).length;
   const profitableOptions = optionHoldings.filter((holding) => holdingMetrics(holding).totalGain > 0).length;
+
+  const stockSymbols = useMemo(() =>
+    Array.from(new Set(holdings
+      .filter((holding) => (holding.assetType ?? "stock") === "stock")
+      .map((holding) => holding.symbol.trim().toUpperCase())
+      .filter(Boolean)))
+      .sort(),
+  [holdings]);
+  const stockSymbolsKey = stockSymbols.join(",");
+
+  const refreshStockPrices = useCallback(async (silent = false) => {
+    if (!stockSymbolsKey || pricesLoading) return;
+    if (!silent) setPricesLoading(true);
+    setPricesError(null);
+
+    try {
+      const response = await fetch(`/api/market-prices?symbols=${encodeURIComponent(stockSymbolsKey)}`, { cache: "no-store" });
+      const body = await response.json() as {
+        prices?: Record<string, { currentPrice: number; previousClose: number }>;
+        unavailable?: string[];
+        refreshedAt?: string;
+        error?: string;
+      };
+
+      if (!response.ok) throw new Error(body.error || "Could not refresh stock prices.");
+      if (body.prices && Object.keys(body.prices).length) updateStockQuotes(body.prices);
+      setPricesUpdatedAt(body.refreshedAt ? new Date(body.refreshedAt) : new Date());
+      if (body.unavailable?.length) {
+        setPricesError(`No quote found for: ${body.unavailable.join(", ")}`);
+      }
+    } catch (error) {
+      setPricesError(error instanceof Error ? error.message : "Could not refresh stock prices.");
+    } finally {
+      setPricesLoading(false);
+    }
+  }, [pricesLoading, stockSymbolsKey, updateStockQuotes]);
+
+  useEffect(() => {
+    if (!stockSymbolsKey) return;
+    refreshStockPrices(true);
+    const timer = window.setInterval(() => refreshStockPrices(true), 5 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [stockSymbolsKey]); // Refresh when the ticker list changes, then every five minutes.
 
   function portfolioRows() {
     return holdings.map((holding) => {
@@ -77,7 +124,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-3xl font-semibold tracking-tight">Portfolio Overview</h1><p className="mt-1 text-sm text-zinc-500">Portfolio Performance and Open Positions at a Glance.</p></div><div className="flex flex-wrap items-center gap-2"><button onClick={downloadExcel} className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><Download size={16}/>Download Portfolio</button><AddHoldingDialog /></div></div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-3xl font-semibold tracking-tight">Portfolio Overview</h1><p className="mt-1 text-sm text-zinc-500">Portfolio Performance and Open Positions at a Glance.</p>{pricesUpdatedAt && <p className="mt-1 text-xs text-zinc-500">Stock prices updated {pricesUpdatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}{pricesError && <p className="mt-1 text-xs text-amber-500">{pricesError}</p>}</div><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => refreshStockPrices()} disabled={pricesLoading || !stockSymbolsKey} className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><RefreshCw size={16} className={pricesLoading ? "animate-spin" : ""}/>{pricesLoading ? "Refreshing..." : "Refresh Stock Prices"}</button><button onClick={downloadExcel} className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><Download size={16}/>Download Portfolio</button><AddHoldingDialog /></div></div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <MetricBlock label="Portfolio Value" value={money(summary.value)} subvalue={`Day Return: ${summary.today >= 0 ? "↑ +" : "↓ -"}${money(Math.abs(summary.today))} (${summary.todayPct >= 0 ? "+" : ""}${summary.todayPct.toFixed(2)}%)`} positive={summary.today >= 0} icon={WalletCards}/>

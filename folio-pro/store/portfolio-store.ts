@@ -98,6 +98,7 @@ type State = {
   removeHolding: (symbol: string, assetType: AssetType) => void;
   addTransaction: (transaction: Transaction) => void;
   executeTrade: (trade: { action: "buy" | "sell"; holding: Holding; quantity: number; price: number }) => { ok: boolean; message?: string };
+  updateStockQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>) => void;
 };
 
 export const usePortfolioStore = create<State>()(
@@ -187,6 +188,29 @@ export const usePortfolioStore = create<State>()(
           return {
             transactionsByPortfolio,
             ...visibleState(state.activePortfolioId, state.holdingsByPortfolio, transactionsByPortfolio, state.cashByPortfolio),
+          };
+        }),
+      updateStockQuotes: (quotes) =>
+        set((state) => {
+          const portfolioIds: DataPortfolioId[] = ["robinhood", "fidelity-401k", "fidelity-roth"];
+          const holdingsByPortfolio = portfolioIds.reduce<Record<DataPortfolioId, Holding[]>>((result, portfolioId) => {
+            result[portfolioId] = state.holdingsByPortfolio[portfolioId].map((holding) => {
+              if ((holding.assetType ?? "stock") !== "stock") return holding;
+              const quote = quotes[holding.symbol.trim().toUpperCase()];
+              if (!quote || !Number.isFinite(quote.currentPrice) || quote.currentPrice <= 0) return holding;
+              return {
+                ...holding,
+                currentPrice: quote.currentPrice,
+                previousClose: Number.isFinite(quote.previousClose) && quote.previousClose > 0 ? quote.previousClose : holding.previousClose,
+                updatedAt: new Date().toISOString(),
+              };
+            });
+            return result;
+          }, {} as Record<DataPortfolioId, Holding[]>);
+
+          return {
+            holdingsByPortfolio,
+            ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, state.cashByPortfolio),
           };
         }),
       executeTrade: ({ action, holding, quantity, price }) => {
