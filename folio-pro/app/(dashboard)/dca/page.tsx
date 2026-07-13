@@ -8,7 +8,7 @@ import { DCA_SELECTED_POSITION_KEY, DCA_UPDATED_EVENT, loadDcaPositions, saveDca
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore } from "@/store/portfolio-store";
 
-const toNumber = (value: NumericValue) => value === "" || !Number.isFinite(Number(value)) ? 0 : Number(value);
+const toNumber = (value: NumericValue | string) => value === "" || !Number.isFinite(Number(value)) ? 0 : Number(value);
 const parseNumericInput = (value: string): NumericValue => value === "" ? "" : Number(value);
 const pct = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 const fixedMoney = (value: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
@@ -43,14 +43,14 @@ export default function DcaPage() {
   const [allPositions, setAllPositions] = useState<DcaPosition[]>([]);
   const [positionId, setPositionId] = useState("");
   const [lots, setLots] = useState<DcaLot[]>([]);
-  const [sellPrice, setSellPrice] = useState<NumericValue>("");
+  const [sellPrice, setSellPrice] = useState("");
   const [sellPriceFocused, setSellPriceFocused] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
   const [showAddPosition, setShowAddPosition] = useState(false);
   const [showLotForm, setShowLotForm] = useState<"existing" | "future" | null>(null);
   const [lotDraft, setLotDraft] = useState<LotDraft>(emptyDraft());
   const [newSymbol, setNewSymbol] = useState("");
-  const [newSellPrice, setNewSellPrice] = useState<NumericValue>("");
+  const [newSellPrice, setNewSellPrice] = useState("");
   const [newShares, setNewShares] = useState<NumericValue>("");
   const [newBuyPrice, setNewBuyPrice] = useState<NumericValue>("");
   const [newBuyDate, setNewBuyDate] = useState("");
@@ -93,7 +93,7 @@ export default function DcaPage() {
     const copy = clonePosition(position);
     setPositionId(copy.id);
     setLots(sortLots(copy.lots));
-    setSellPrice(copy.sellPrice);
+    setSellPrice(copy.sellPrice === "" ? "" : String(copy.sellPrice));
     saveSelection(copy.id);
   };
 
@@ -135,7 +135,7 @@ export default function DcaPage() {
 
   const savePosition = () => {
     if (!selectedPosition) return;
-    const updated = { ...selectedPosition, sellPrice, lots: sortLots(lots).map((lot) => ({ ...lot, amount: toNumber(lot.shares) * toNumber(lot.price) })) };
+    const updated = { ...selectedPosition, sellPrice: parseNumericInput(sellPrice), lots: sortLots(lots).map((lot) => ({ ...lot, amount: toNumber(lot.shares) * toNumber(lot.price) })) };
     upsertDcaPosition(updated);
     setSavedMessage("Position Saved");
     window.setTimeout(() => setSavedMessage(""), 1800);
@@ -147,7 +147,7 @@ export default function DcaPage() {
     const lot: DcaLot = { amount: shares * price, shares, price, date: lotDraft.date, future: lotDraft.future };
     const nextLots = sortLots([...lots, lot]);
     setLots(nextLots);
-    if (selectedPosition) upsertDcaPosition({ ...selectedPosition, sellPrice, lots: nextLots });
+    if (selectedPosition) upsertDcaPosition({ ...selectedPosition, sellPrice: parseNumericInput(sellPrice), lots: nextLots });
     setLotDraft(emptyDraft()); setShowLotForm(null); setSavedMessage("Purchase Saved");
     window.setTimeout(() => setSavedMessage(""), 1800);
   };
@@ -155,7 +155,7 @@ export default function DcaPage() {
   const deleteLot = (index: number) => {
     const nextLots = lots.filter((_, lotIndex) => lotIndex !== index);
     setLots(nextLots);
-    if (selectedPosition) upsertDcaPosition({ ...selectedPosition, sellPrice, lots: nextLots });
+    if (selectedPosition) upsertDcaPosition({ ...selectedPosition, sellPrice: parseNumericInput(sellPrice), lots: nextLots });
     setSavedMessage("Purchase Deleted");
     window.setTimeout(() => setSavedMessage(""), 1800);
   };
@@ -172,7 +172,7 @@ export default function DcaPage() {
     const symbol = newSymbol.trim().toUpperCase(), shares = toNumber(newShares), buyPrice = toNumber(newBuyPrice);
     if (!symbol || shares <= 0 || buyPrice <= 0 || !newBuyDate || activeId === "all") return;
     const position: DcaPosition = {
-      id: `CUSTOM-${activeId}-${symbol}-${Date.now()}`, symbol, label: symbol, sellPrice: newSellPrice, custom: true, portfolioId: activeId,
+      id: `CUSTOM-${activeId}-${symbol}-${Date.now()}`, symbol, label: symbol, sellPrice: parseNumericInput(newSellPrice), custom: true, portfolioId: activeId,
       lots: [{ amount: shares * buyPrice, shares, price: buyPrice, date: newBuyDate, future: false }],
     };
     const next = [...loadDcaPositions(), position];
@@ -190,7 +190,7 @@ export default function DcaPage() {
       <div className="flex items-center justify-between"><h2 className="font-semibold">Add Position</h2><button aria-label="Close Add Position" onClick={() => setShowAddPosition(false)} className="rounded-lg p-2 text-zinc-500 hover:bg-white/[.05] hover:text-white"><X size={17}/></button></div>
       <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <label className="space-y-2 text-sm font-medium text-zinc-300">Ticker Symbol<input value={newSymbol} onChange={(event) => setNewSymbol(event.target.value.toUpperCase())} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 uppercase outline-none"/></label>
-        <label className="space-y-2 text-sm font-medium text-zinc-300">Potential Sell Price<input type="number" step="any" value={newSellPrice} onChange={(event) => setNewSellPrice(parseNumericInput(event.target.value))} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 outline-none"/></label>
+        <label className="space-y-2 text-sm font-medium text-zinc-300">Potential Sell Price<input type="text" inputMode="decimal" value={newSellPrice} onChange={(event) => { const value = event.target.value; if (/^\d*(?:\.\d{0,2})?$/.test(value)) setNewSellPrice(value); }} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 outline-none"/></label>
         <label className="space-y-2 text-sm font-medium text-zinc-300">Shares<input type="number" step="any" value={newShares} onChange={(event) => setNewShares(parseNumericInput(event.target.value))} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 outline-none"/></label>
         <label className="space-y-2 text-sm font-medium text-zinc-300">Buy Price<input type="number" step="any" value={newBuyPrice} onChange={(event) => setNewBuyPrice(parseNumericInput(event.target.value))} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 outline-none"/></label>
         <label className="space-y-2 text-sm font-medium text-zinc-300">Buy Date<input type="date" value={newBuyDate} onChange={(event) => setNewBuyDate(event.target.value)} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 outline-none"/></label>
@@ -201,7 +201,7 @@ export default function DcaPage() {
     <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5 lg:p-6">
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
         <div><label className="mb-2 block text-sm font-medium text-zinc-300">Position</label><select value={positionId} onChange={(event) => load(event.target.value)} className="h-12 w-full rounded-xl border border-white/10 bg-zinc-950/70 px-4 text-sm outline-none">{positions.map((position) => <option key={position.id} value={position.id}>{position.label ?? position.symbol}</option>)}</select></div>
-        <div><label className="mb-2 block text-sm font-medium text-zinc-300">Potential Sell Price</label><div className="relative"><span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-zinc-500">$</span><input type="text" inputMode="decimal" value={sellPriceFocused ? (sellPrice === "" ? "" : String(sellPrice)) : (sellPrice === "" ? "" : Number(sellPrice).toFixed(2))} onFocus={() => setSellPriceFocused(true)} onChange={(event) => { const cleaned = event.target.value.replace(/[^0-9.]/g, ""); setSellPrice(cleaned === "" ? "" : Number(cleaned)); }} onBlur={() => { const normalized = sellPrice === "" ? "" : Number(Number(sellPrice).toFixed(2)); setSellPriceFocused(false); setSellPrice(normalized); if (selectedPosition) upsertDcaPosition({ ...selectedPosition, sellPrice: normalized, lots: sortLots(lots) }); }} className="h-12 w-full rounded-xl border border-white/10 bg-black/15 pl-8 pr-4 text-lg font-semibold outline-none"/></div></div>
+        <div><label className="mb-2 block text-sm font-medium text-zinc-300">Potential Sell Price</label><div className="relative"><span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-zinc-500">$</span><input type="text" inputMode="decimal" value={sellPriceFocused ? String(sellPrice) : (sellPrice === "" ? "" : Number(sellPrice).toFixed(2))} onFocus={() => setSellPriceFocused(true)} onChange={(event) => { const value = event.target.value; if (/^\d*(?:\.\d{0,2})?$/.test(value)) setSellPrice(value); }} onBlur={() => { const normalized = sellPrice === "" ? "" : Number(Number(sellPrice).toFixed(2)); setSellPriceFocused(false); setSellPrice(normalized === "" ? "" : normalized.toFixed(2)); if (selectedPosition) upsertDcaPosition({ ...selectedPosition, sellPrice: normalized, lots: sortLots(lots) }); }} className="h-12 w-full rounded-xl border border-white/10 bg-black/15 pl-8 pr-4 text-lg font-semibold outline-none"/></div></div>
         <div className="flex gap-2"><button onClick={savePosition} className="inline-flex h-12 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950"><Save size={16}/>Save Position</button></div>
       </div>
       {savedMessage && <p className="mt-3 text-sm text-emerald-400">{savedMessage}</p>}

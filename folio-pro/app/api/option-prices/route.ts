@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
         const dailyClose = Number(snapshot?.dailyBar?.c);
         const previousClose = Number(snapshot?.prevDailyBar?.c);
         const midpoint = bid > 0 && ask > 0 ? (bid + ask) / 2 : 0;
-        const currentPrice = trade > 0 ? trade : midpoint > 0 ? midpoint : dailyClose;
+        const currentPrice = midpoint > 0 ? midpoint : trade > 0 ? trade : dailyClose;
         if (!Number.isFinite(currentPrice) || currentPrice <= 0) { unavailable.push(symbol); continue; }
         const quote = { currentPrice, previousClose: Number.isFinite(previousClose) && previousClose > 0 ? previousClose : currentPrice };
         prices[symbol] = quote;
