@@ -42,7 +42,7 @@ export const builtInDcaPositions: DcaPosition[] = [
   { id:"FPS", symbol:"FPS", sellPrice:61.10, portfolioId:"robinhood", lots:[
     {amount:1571,shares:25,price:62.82,date:"2026-06-22"},{amount:1284,shares:22,price:58.35,date:"2026-06-25"},{amount:940,shares:17,price:55.30,date:"2026-06-26"},{amount:1103,shares:21,price:52.50,date:"2026-07-01"},{amount:694,shares:15,price:46.28,date:"2026-07-02"},
   ]},
-  { id:"ONDS-B", symbol:"ONDS", label:"ONDS · Jul 24 CC", sellPrice:9.16, portfolioId:"fidelity-401k", lots:[
+  { id:"ONDS-B", symbol:"ONDS", label:"ONDS · Jul 24 CC", sellPrice:9.16, portfolioId:"fidelity-roth", lots:[
     {amount:1770,shares:200,price:8.85,date:"2026-06-23",note:"Jul 24 CC"},{amount:1540,shares:200,price:7.70,date:"2026-07-02"},
   ]},
   { id:"DRAM", symbol:"DRAM", sellPrice:69.30, portfolioId:"robinhood", lots:[{amount:1668,shares:25,price:66.70,date:"2026-06-29"},{amount:1232,shares:20,price:61.60,date:"2026-07-02"}]},

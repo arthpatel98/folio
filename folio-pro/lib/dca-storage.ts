@@ -19,7 +19,7 @@ function normalizeDate(value: string) {
 function migrate(positions: DcaPosition[]) {
   return positions.map((position) => ({
     ...position,
-    portfolioId: position.id === "ONDS-B" ? "fidelity-401k" : (position.portfolioId ?? "robinhood"),
+    portfolioId: position.id === "ONDS-B" ? "fidelity-roth" : (position.portfolioId ?? "robinhood"),
     lots: position.lots.map((lot) => ({ ...lot, date: normalizeDate(lot.date) })),
   }));
 }

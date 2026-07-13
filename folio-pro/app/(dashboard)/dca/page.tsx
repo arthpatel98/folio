@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, Plus, RotateCcw, Save, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Plus, RotateCcw, Save, Trash2, X } from "lucide-react";
 import { cn, money } from "@/lib/utils";
 import { DcaLot, DcaPosition, NumericValue } from "@/lib/dca-data";
 import { DCA_SELECTED_POSITION_KEY, DCA_UPDATED_EVENT, loadDcaPositions, saveDcaPositions, upsertDcaPosition } from "@/lib/dca-storage";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
+import { usePortfolioStore } from "@/store/portfolio-store";
 
 const toNumber = (value: NumericValue) => value === "" || !Number.isFinite(Number(value)) ? 0 : Number(value);
 const parseNumericInput = (value: string): NumericValue => value === "" ? "" : Number(value);
@@ -17,6 +18,12 @@ const formatDate = (value: string) => {
   const parsed = new Date(`${value}T00:00:00`);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 };
+const lotDateValue = (value: string) => {
+  if (!value || value === "Future") return Number.MAX_SAFE_INTEGER;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+};
+const sortLots = (lots: DcaLot[]) => lots.slice().sort((a, b) => lotDateValue(a.date) - lotDateValue(b.date));
 const clonePosition = (position: DcaPosition): DcaPosition => ({ ...position, lots: position.lots.map((lot) => ({ ...lot })) });
 
 type LotDraft = { shares: NumericValue; price: NumericValue; date: string; future: boolean };
@@ -24,10 +31,12 @@ const emptyDraft = (future = false): LotDraft => ({ shares: "", price: "", date:
 
 export default function DcaPage() {
   const { activeId } = useActivePortfolio();
+  const holdingsByPortfolio = usePortfolioStore((state) => state.holdingsByPortfolio);
   const [allPositions, setAllPositions] = useState<DcaPosition[]>([]);
   const [positionId, setPositionId] = useState("");
   const [lots, setLots] = useState<DcaLot[]>([]);
   const [sellPrice, setSellPrice] = useState<NumericValue>("");
+  const [sellPriceFocused, setSellPriceFocused] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
   const [showAddPosition, setShowAddPosition] = useState(false);
   const [showLotForm, setShowLotForm] = useState<"existing" | "future" | null>(null);
@@ -38,7 +47,24 @@ export default function DcaPage() {
   const [newBuyPrice, setNewBuyPrice] = useState<NumericValue>("");
   const [newBuyDate, setNewBuyDate] = useState("");
 
-  const positions = useMemo(() => allPositions.filter((position) => activeId === "all" || position.portfolioId === activeId), [allPositions, activeId]);
+  const mergeWithHeldStocks = (savedPositions: DcaPosition[]) => {
+    const saved = savedPositions.filter((position) => activeId === "all" || position.portfolioId === activeId);
+    const savedKeys = new Set(saved.map((position) => `${position.portfolioId}:${position.symbol.trim().toUpperCase()}`));
+    const portfolioIds = activeId === "all" ? (["robinhood", "fidelity-401k", "fidelity-roth"] as const) : [activeId];
+    const placeholders: DcaPosition[] = [];
+    portfolioIds.forEach((portfolioId) => {
+      holdingsByPortfolio[portfolioId]
+        .filter((holding) => (holding.assetType ?? "stock") === "stock" && holding.shares > 0)
+        .forEach((holding) => {
+          const symbol = holding.symbol.trim().toUpperCase();
+          const key = `${portfolioId}:${symbol}`;
+          if (!savedKeys.has(key)) placeholders.push({ id: `PORTFOLIO-${portfolioId}-${symbol}`, symbol, label: symbol, sellPrice: "", lots: [], custom: true, portfolioId });
+        });
+    });
+    return [...saved, ...placeholders].sort((a, b) => (a.label ?? a.symbol).localeCompare(b.label ?? b.symbol));
+  };
+
+  const positions = useMemo(() => mergeWithHeldStocks(allPositions), [allPositions, activeId, holdingsByPortfolio]);
 
   const readSavedSelection = () => {
     try {
@@ -58,7 +84,7 @@ export default function DcaPage() {
     if (!position) { setPositionId(""); setLots([]); setSellPrice(""); return; }
     const copy = clonePosition(position);
     setPositionId(copy.id);
-    setLots(copy.lots);
+    setLots(sortLots(copy.lots));
     setSellPrice(copy.sellPrice);
     saveSelection(copy.id);
   };
@@ -66,7 +92,7 @@ export default function DcaPage() {
   const loadAll = (preferredId?: string) => {
     const next = loadDcaPositions();
     setAllPositions(next);
-    const visible = next.filter((position) => activeId === "all" || position.portfolioId === activeId);
+    const visible = mergeWithHeldStocks(next);
     const wanted = preferredId || readSavedSelection();
     const selected = visible.find((position) => position.id === wanted) ?? visible[0];
     applyPosition(selected);
@@ -81,8 +107,8 @@ export default function DcaPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
 
-  const selectedPosition = allPositions.find((position) => position.id === positionId);
-  const load = (id: string) => { applyPosition(allPositions.find((position) => position.id === id)); setSavedMessage(""); };
+  const selectedPosition = positions.find((position) => position.id === positionId);
+  const load = (id: string) => { applyPosition(positions.find((position) => position.id === id)); setSavedMessage(""); };
 
   const totals = useMemo(() => {
     const amount = lots.reduce((sum, lot) => sum + lot.amount, 0);
@@ -101,7 +127,7 @@ export default function DcaPage() {
 
   const savePosition = () => {
     if (!selectedPosition) return;
-    const updated = { ...selectedPosition, sellPrice, lots: lots.map((lot) => ({ ...lot })) };
+    const updated = { ...selectedPosition, sellPrice, lots: sortLots(lots).map((lot) => ({ ...lot, amount: toNumber(lot.shares) * toNumber(lot.price) })) };
     upsertDcaPosition(updated);
     setSavedMessage("Position Saved");
     window.setTimeout(() => setSavedMessage(""), 1800);
@@ -111,11 +137,27 @@ export default function DcaPage() {
     const shares = toNumber(lotDraft.shares), price = toNumber(lotDraft.price);
     if (shares <= 0 || price <= 0 || !lotDraft.date) return;
     const lot: DcaLot = { amount: shares * price, shares, price, date: lotDraft.date, future: lotDraft.future };
-    const nextLots = [...lots, lot];
+    const nextLots = sortLots([...lots, lot]);
     setLots(nextLots);
     if (selectedPosition) upsertDcaPosition({ ...selectedPosition, sellPrice, lots: nextLots });
     setLotDraft(emptyDraft()); setShowLotForm(null); setSavedMessage("Purchase Saved");
     window.setTimeout(() => setSavedMessage(""), 1800);
+  };
+
+  const deleteLot = (index: number) => {
+    const nextLots = lots.filter((_, lotIndex) => lotIndex !== index);
+    setLots(nextLots);
+    if (selectedPosition) upsertDcaPosition({ ...selectedPosition, sellPrice, lots: nextLots });
+    setSavedMessage("Purchase Deleted");
+    window.setTimeout(() => setSavedMessage(""), 1800);
+  };
+
+  const updateFutureLot = (index: number, field: "shares" | "price", value: NumericValue) => {
+    setLots((current) => current.map((lot, lotIndex) => {
+      if (lotIndex !== index || !lot.future) return lot;
+      const next = { ...lot, [field]: value };
+      return { ...next, amount: toNumber(next.shares) * toNumber(next.price) };
+    }));
   };
 
   const addPosition = () => {
@@ -151,29 +193,29 @@ export default function DcaPage() {
     <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5 lg:p-6">
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
         <div><label className="mb-2 block text-sm font-medium text-zinc-300">Position</label><select value={positionId} onChange={(event) => load(event.target.value)} className="h-12 w-full rounded-xl border border-white/10 bg-zinc-950/70 px-4 text-sm outline-none">{positions.map((position) => <option key={position.id} value={position.id}>{position.label ?? position.symbol}</option>)}</select></div>
-        <div><label className="mb-2 block text-sm font-medium text-zinc-300">Potential Sell Price</label><input type="number" step="any" value={sellPrice} onChange={(event) => setSellPrice(parseNumericInput(event.target.value))} className="h-12 w-full rounded-xl border border-white/10 bg-black/15 px-4 text-lg font-semibold outline-none"/></div>
+        <div><label className="mb-2 block text-sm font-medium text-zinc-300">Potential Sell Price</label><div className="relative"><span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-zinc-500">$</span><input type="text" inputMode="decimal" value={sellPriceFocused ? (sellPrice === "" ? "" : String(sellPrice)) : (sellPrice === "" ? "" : Number(sellPrice).toFixed(2))} onFocus={() => setSellPriceFocused(true)} onChange={(event) => { const cleaned = event.target.value.replace(/[^0-9.]/g, ""); setSellPrice(cleaned === "" ? "" : Number(cleaned)); }} onBlur={() => { setSellPriceFocused(false); setSellPrice(sellPrice === "" ? "" : Number(Number(sellPrice).toFixed(2))); }} className="h-12 w-full rounded-xl border border-white/10 bg-black/15 pl-8 pr-4 text-lg font-semibold outline-none"/></div></div>
         <div className="flex gap-2"><button onClick={() => load(positionId)} className="inline-flex h-12 items-center gap-2 rounded-xl border border-white/10 px-4 text-sm"><RotateCcw size={16}/>Reset Position</button><button onClick={savePosition} className="inline-flex h-12 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950"><Save size={16}/>Save Position</button></div>
       </div>
       {savedMessage && <p className="mt-3 text-sm text-emerald-400">{savedMessage}</p>}
     </section>
 
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      {[ ["Total Investment", totals.amount ? money(totals.amount) : "—"], ["Total Shares", totals.shares ? formatShares(totals.shares) : "—"], ["New Average", totals.avg ? money(totals.avg) : "—"], ["Potential Return", totals.amount ? signedMoney(totals.profit) : "—"], ["Potential Return %", totals.amount ? pct(totals.roi) : "—"] ].map(([label, value], index) => <div key={label} className={cn("rounded-2xl border border-white/10 bg-zinc-950/35 p-5", index >= 3 && (totals.profit >= 0 ? "border-emerald-500/35 bg-emerald-500/[.06]" : "border-rose-500/35 bg-rose-500/[.06]"))}><p className="text-sm text-zinc-500">{label}</p><p className="mt-3 text-2xl font-semibold">{value}</p></div>)}
+      {[ ["Total Investment", totals.amount ? money(totals.amount) : "—"], ["Total Shares", totals.shares ? formatShares(totals.shares) : "—"], ["Average Price", totals.avg ? money(totals.avg) : "—"], ["Potential Return", totals.amount ? signedMoney(totals.profit) : "—"], ["Potential Return %", totals.amount ? pct(totals.roi) : "—"] ].map(([label, value], index) => <div key={label} className={cn("rounded-2xl border border-white/10 bg-zinc-950/35 p-5", index >= 3 && (totals.profit >= 0 ? "border-emerald-500/35 bg-emerald-500/[.06]" : "border-rose-500/35 bg-rose-500/[.06]"))}><p className="text-sm text-zinc-500">{label}</p><p className="mt-3 text-2xl font-semibold">{value}</p></div>)}
     </div>
 
     <section className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/35">
-      <div className="flex flex-col gap-3 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="font-semibold">Purchase Lots</h2><p className="mt-1 text-sm text-zinc-500">Saved Purchase Lots Are Read-Only. Holdings Purchases Are Added Automatically And Sales Use FIFO.</p></div><div className="flex gap-2"><button onClick={() => { setShowLotForm("existing"); setLotDraft(emptyDraft(false)); }} className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 px-4 text-sm font-semibold"><Plus size={16}/>Add Existing Purchase</button><button onClick={() => { setShowLotForm("future"); setLotDraft(emptyDraft(true)); }} className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950"><Plus size={16}/>Add Future Purchase</button></div></div>
+      <div className="flex flex-col gap-3 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="font-semibold">Purchase Lots</h2><p className="mt-1 text-sm text-zinc-500">Saved Purchase Lots Are Read-Only. Holdings Purchases Are Added Automatically.</p></div><div className="flex gap-2"><button onClick={() => { setShowLotForm("existing"); setLotDraft(emptyDraft(false)); }} className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 px-4 text-sm font-semibold"><Plus size={16}/>Add Existing Purchase</button><button onClick={() => { setShowLotForm("future"); setLotDraft(emptyDraft(true)); }} className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950"><Plus size={16}/>Add Future Purchase</button></div></div>
       {showLotForm && <div className="grid gap-4 border-b border-white/10 p-5 sm:grid-cols-3 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
         <label className="space-y-2 text-sm font-medium text-zinc-300">Shares<input type="number" step="any" value={lotDraft.shares} onChange={(e) => setLotDraft((d) => ({ ...d, shares: parseNumericInput(e.target.value) }))} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3"/></label>
         <label className="space-y-2 text-sm font-medium text-zinc-300">Buy Price<input type="number" step="any" value={lotDraft.price} onChange={(e) => setLotDraft((d) => ({ ...d, price: parseNumericInput(e.target.value) }))} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3"/></label>
         <label className="space-y-2 text-sm font-medium text-zinc-300">Buy Date<input type="date" value={lotDraft.date} onChange={(e) => setLotDraft((d) => ({ ...d, date: e.target.value }))} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3"/></label>
         <div className="flex gap-2"><button onClick={addLot} disabled={toNumber(lotDraft.shares) <= 0 || toNumber(lotDraft.price) <= 0 || !lotDraft.date} className="h-11 rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950 disabled:opacity-40">Save Purchase</button><button onClick={() => setShowLotForm(null)} className="h-11 rounded-xl border border-white/10 px-4 text-sm">Cancel</button></div>
       </div>}
-      <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-sm"><thead className="bg-white/[.025] text-left text-xs uppercase tracking-wide text-zinc-500"><tr><th className="px-5 py-3">Type</th><th className="px-4 py-3">Shares</th><th className="px-4 py-3">Buy Price</th><th className="px-4 py-3">Cost</th><th className="px-4 py-3">Buy Date</th><th className="px-4 py-3">Potential Return</th><th className="px-4 py-3">Return</th></tr></thead><tbody>{lots.map((lot, index) => { const shares = toNumber(lot.shares), price = toNumber(lot.price), profit = shares * (toNumber(sellPrice) - price), returnPct = lot.amount ? profit / lot.amount * 100 : 0; return <tr key={`${lot.date}-${index}`} className={cn("border-t border-white/10", lot.future && "bg-emerald-500/[.04]")}><td className="px-5 py-3"><span>{lot.future ? "Future DCA" : "Existing"}</span>{lot.note && <p className="mt-1 text-xs text-zinc-500">{lot.note}</p>}</td><td className="px-4 py-3">{formatShares(shares)}</td><td className="px-4 py-3">{money(price)}</td><td className="px-4 py-3">{money(lot.amount)}</td><td className="px-4 py-3">{formatDate(lot.date)}</td><td className="px-4 py-3">{signedMoney(profit)}</td><td className="px-4 py-3">{pct(returnPct)}</td></tr>; })}</tbody></table></div>
+      <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-sm"><thead className="bg-white/[.025] text-left text-xs uppercase tracking-wide text-zinc-500"><tr><th className="px-5 py-3">Type</th><th className="px-4 py-3">Shares</th><th className="px-4 py-3">Buy Price</th><th className="px-4 py-3">Cost</th><th className="px-4 py-3">Buy Date</th><th className="px-4 py-3">Potential Return</th><th className="px-4 py-3">Return</th><th className="px-4 py-3 text-right">Actions</th></tr></thead><tbody>{lots.map((lot, index) => { const shares = toNumber(lot.shares), price = toNumber(lot.price), profit = shares * (toNumber(sellPrice) - price), returnPct = lot.amount ? profit / lot.amount * 100 : 0; return <tr key={`${lot.date}-${index}`} className={cn("border-t border-white/10", lot.future && "bg-emerald-500/[.04]")}><td className="px-5 py-3"><span>{lot.future ? "Future DCA" : "Existing"}</span>{lot.note && <p className="mt-1 text-xs text-zinc-500">{lot.note}</p>}</td><td className="px-4 py-3">{lot.future ? <input type="number" step="any" value={lot.shares} onChange={(event) => updateFutureLot(index, "shares", parseNumericInput(event.target.value))} className="h-9 w-24 rounded-lg border border-white/10 bg-black/20 px-2 outline-none"/> : formatShares(shares)}</td><td className="px-4 py-3">{lot.future ? <div className="relative w-28"><span className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500">$</span><input type="number" step="0.01" value={lot.price} onChange={(event) => updateFutureLot(index, "price", parseNumericInput(event.target.value))} className="h-9 w-full rounded-lg border border-white/10 bg-black/20 pl-5 pr-2 outline-none"/></div> : money(price)}</td><td className="px-4 py-3">{money(lot.amount)}</td><td className="px-4 py-3">{formatDate(lot.date)}</td><td className="px-4 py-3">{signedMoney(profit)}</td><td className="px-4 py-3">{pct(returnPct)}</td><td className="px-4 py-3 text-right"><button onClick={() => deleteLot(index)} aria-label="Delete Purchase Lot" title="Delete Purchase Lot" className="rounded-lg p-2 text-zinc-500 hover:bg-rose-500/10 hover:text-rose-400"><Trash2 size={16}/></button></td></tr>; })}</tbody></table></div>
     </section>
 
     <div className="grid gap-4 lg:grid-cols-2">
-      <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><h2 className="font-semibold">Before Vs. After DCA</h2><div className="mt-5 flex items-center justify-between"><div><p className="text-sm text-zinc-500">Existing Average</p><p className="mt-1 text-xl font-semibold">{totals.oldAvg ? money(totals.oldAvg) : "—"}</p></div><ArrowDownRight/><div className="text-right"><p className="text-sm text-zinc-500">New Average</p><p className="mt-1 text-xl font-semibold">{totals.avg ? money(totals.avg) : "—"}</p></div></div></section>
+      <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><h2 className="font-semibold">Before Vs. After DCA</h2><div className="mt-5 flex items-center justify-between"><div><p className="text-sm text-zinc-500">Existing Average</p><p className="mt-1 text-xl font-semibold">{totals.oldAvg ? money(totals.oldAvg) : "—"}</p></div><ArrowDownRight/><div className="text-right"><p className="text-sm text-zinc-500">Average Price</p><p className="mt-1 text-xl font-semibold">{totals.avg ? money(totals.avg) : "—"}</p></div></div></section>
       <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><h2 className="flex items-center gap-2 font-semibold">{totals.profit >= 0 ? <ArrowUpRight size={18}/> : <ArrowDownRight size={18}/>}Scenario Insight</h2><p className="mt-4 text-sm leading-6 text-zinc-300">{totals.amount && toNumber(sellPrice) > 0 ? <>At A Sell Price Of <strong>{money(toNumber(sellPrice))}</strong>, This Position Would Be Worth <strong>{money(totals.value)}</strong> With A Potential Return Of <strong>{signedMoney(totals.profit)}</strong>.</> : "Enter Position And Purchase-Lot Data To Calculate The Scenario."}</p></section>
     </div>
   </div>;
