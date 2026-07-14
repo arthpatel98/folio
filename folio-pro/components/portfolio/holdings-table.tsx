@@ -67,7 +67,7 @@ export function HoldingsTable({
   const storageKey = `folio-column-widths-${assetType}`;
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   useEffect(() => {
-    try { setColumnSizing(JSON.parse(window.localStorage.getItem(storageKey) ?? "{}")); } catch { setColumnSizing({}); }
+    try { const saved = JSON.parse(window.localStorage.getItem(storageKey) ?? "{}"); setColumnSizing({ ...saved, Symbol: Math.max(Number(saved.Symbol) || 0, 280) }); } catch { setColumnSizing({ Symbol: 300 }); }
     try {
       const savedSort = window.localStorage.getItem(sortStorageKey);
       if (savedSort) setSorting(JSON.parse(savedSort));
@@ -79,6 +79,8 @@ export function HoldingsTable({
   const columns = useMemo<ColumnDef<Holding>[]>(() => [
     {
       accessorKey: "Symbol",
+      size: 300,
+      minSize: 280,
       header: assetType === "stock" ? "Ticker" : "Ticker",
       cell: ({ row }) => (
         <div className="min-w-[210px]">
@@ -231,7 +233,7 @@ export function HoldingsTable({
             {table.getHeaderGroups().map((headerGroup) => <tr key={headerGroup.id}>{headerGroup.headers.map((header, index) => {
               const sorted = header.column.getIsSorted();
               const rightAligned = index > 0 && header.column.id !== "sector";
-              return <th key={header.id} style={{ width: header.getSize() }} className={cn("relative h-[68px] whitespace-nowrap px-6 text-sm font-semibold transition hover:bg-black/[.03] dark:hover:bg-white/[.03]", rightAligned && "text-right", index === 0 && "sticky left-0 z-30 bg-slate-200/95 shadow-[8px_0_12px_-12px_rgba(0,0,0,.45)] dark:bg-slate-800/70") }>
+              return <th key={header.id} style={{ width: header.getSize() }} className={cn("relative h-[68px] overflow-hidden whitespace-nowrap px-6 text-sm font-semibold transition hover:bg-black/[.03] dark:hover:bg-white/[.03]", rightAligned && "text-right", index === 0 && "sticky left-0 z-30 min-w-[280px] bg-slate-200/95 shadow-[8px_0_12px_-12px_rgba(0,0,0,.45)] dark:bg-slate-800/70") }>
                 <button type="button" onClick={header.column.getToggleSortingHandler()} className={cn("inline-flex w-full items-center gap-2", rightAligned && "justify-end")}>{flexRender(header.column.columnDef.header, header.getContext())}{sorted === "asc" ? <ArrowUp size={15} className="text-emerald-500" /> : sorted === "desc" ? <ArrowDown size={15} className="text-emerald-500" /> : <ArrowUpDown size={14} className="opacity-25" />}</button>
                 <div onMouseDown={header.getResizeHandler()} onTouchStart={header.getResizeHandler()} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none touch-none hover:bg-emerald-500/50" title="Drag to resize column" />
               </th>;
@@ -264,7 +266,7 @@ export function HoldingsTable({
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-2xl dark:border-white/10 dark:bg-zinc-950">
           <Dialog.Title className="text-xl font-semibold">Remove Position?</Dialog.Title>
           <Dialog.Description className="mt-2 text-sm text-zinc-500">
-            {pendingDelete ? `Remove ${pendingDelete.symbol} from your ${assetType === "option" ? "options" : "stocks"}?` : ""}
+            {pendingDelete ? `Remove ${pendingDelete.symbol} From Your ${assetType === "option" ? "Options" : "Stocks"}?` : ""}
           </Dialog.Description>
           <div className="mt-6 flex justify-center gap-3">
             <Dialog.Close asChild><Button type="button" variant="outline">Cancel</Button></Dialog.Close>

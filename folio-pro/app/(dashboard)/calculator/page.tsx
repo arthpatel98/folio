@@ -1,9 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft,
   BarChart3,
   CheckCircle2,
   Info,
@@ -66,40 +64,46 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 export default function CalculatorPage() {
   const holdings = usePortfolioStore((state) => state.holdings);
   const cash = usePortfolioStore((state) => state.cash);
-  const stocks = useMemo(
-    () => holdings.filter((holding) => (holding.assetType ?? "stock") === "stock"),
-    [holdings],
-  );
+  const positions = useMemo(() => holdings.slice().sort((a, b) => {
+    const aLabel = (a.assetType === "option" ? a.company : a.symbol).toUpperCase();
+    const bLabel = (b.assetType === "option" ? b.company : b.symbol).toUpperCase();
+    return aLabel.localeCompare(bLabel);
+  }), [holdings]);
+  const positionKey = (holding: (typeof holdings)[number]) => [holding.assetType ?? "stock", holding.symbol, holding.optionType ?? "", holding.optionExpiry ?? "", holding.company].join("|");
 
-  const [symbol, setSymbol] = useState("");
-  const selected = stocks.find((holding) => holding.symbol === symbol) ?? stocks[0];
+  const [selectedKey, setSelectedKey] = useState("");
+  const selected = positions.find((holding) => positionKey(holding) === selectedKey) ?? positions[0];
+  const isOption = selected?.assetType === "option";
+  const multiplier = isOption ? 100 : 1;
   const [shares, setShares] = useState(0);
-  const [averageCost, setAverageCost] = useState(0);
-  const [targetPrice, setTargetPrice] = useState(0);
+  const [averageCostInput, setAverageCostInput] = useState("0.00");
+  const [targetPriceInput, setTargetPriceInput] = useState("");
   const [targetReturn, setTargetReturn] = useState(25);
   const [sharesToSell, setSharesToSell] = useState(0);
 
   useEffect(() => {
     if (!selected) return;
-    setSymbol(selected.symbol);
+    setSelectedKey(positionKey(selected));
     setShares(selected.shares);
-    setAverageCost(selected.averageCost);
-    setTargetPrice(selected.currentPrice);
-    setSharesToSell(Math.min(selected.shares, Math.max(1, Math.ceil(selected.shares / 2))));
-  }, [selected?.symbol]);
+    setAverageCostInput(selected.averageCost.toFixed(2));
+    setTargetPriceInput("");
+    setSharesToSell(Math.min(Math.abs(selected.shares), Math.max(1, Math.ceil(Math.abs(selected.shares) / 2))));
+  }, [selectedKey, selected?.symbol, selected?.company, selected?.optionExpiry]);
 
-  const totalInvestment = shares * averageCost;
-  const sellingValue = shares * targetPrice;
+  const averageCost = numberValue(averageCostInput);
+  const targetPrice = numberValue(targetPriceInput);
+  const totalInvestment = Math.abs(shares) * averageCost * multiplier;
+  const sellingValue = Math.abs(shares) * targetPrice * multiplier;
   const profit = sellingValue - totalInvestment;
   const roi = totalInvestment ? (profit / totalInvestment) * 100 : 0;
-  const profitPerShare = targetPrice - averageCost;
+  const profitPerShare = (targetPrice - averageCost) * multiplier;
   const requiredSellingPrice = averageCost * (1 + targetReturn / 100);
-  const targetPotentialProfit = shares * (requiredSellingPrice - averageCost);
-  const safeSharesToSell = Math.min(Math.max(sharesToSell, 0), shares);
-  const partialProceeds = safeSharesToSell * targetPrice;
-  const partialProfit = safeSharesToSell * (targetPrice - averageCost);
-  const remainingShares = Math.max(shares - safeSharesToSell, 0);
-  const remainingCostBasis = remainingShares * averageCost;
+  const targetPotentialProfit = Math.abs(shares) * (requiredSellingPrice - averageCost) * multiplier;
+  const safeSharesToSell = Math.min(Math.max(sharesToSell, 0), Math.abs(shares));
+  const partialProceeds = safeSharesToSell * targetPrice * multiplier;
+  const partialProfit = safeSharesToSell * (targetPrice - averageCost) * multiplier;
+  const remainingShares = Math.max(Math.abs(shares) - safeSharesToSell, 0);
+  const remainingCostBasis = remainingShares * averageCost * multiplier;
   const summary = useMemo(() => portfolioSummary(holdings, cash), [holdings, cash]);
   const projectedPortfolio = summary.value + profit;
   const portfolioImpact = summary.value ? (profit / summary.value) * 100 : 0;
@@ -116,26 +120,23 @@ export default function CalculatorPage() {
     <div className="space-y-5">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Stock Profit / Loss Calculator</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">Profit / Loss Calculator</h1>
           <p className="mt-1 text-sm text-zinc-500">Calculate your potential profit or loss at any selling price.</p>
         </div>
-        <Link href="/holdings" className="inline-flex h-10 items-center gap-2 self-start rounded-xl border border-white/10 bg-white/[.03] px-4 text-sm font-medium text-zinc-200 transition hover:bg-white/[.07]">
-          <ArrowLeft size={16} /> Back to Holdings
-        </Link>
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/35 shadow-sm">
         <div className="grid gap-6 p-5 lg:grid-cols-[.95fr_1.45fr] lg:p-6">
           <div className="lg:border-r lg:border-white/10 lg:pr-6">
-            <FieldLabel>1. Select Stock</FieldLabel>
+            <FieldLabel>1. Select Existing Position</FieldLabel>
             <select
-              value={selected?.symbol ?? ""}
-              onChange={(event) => setSymbol(event.target.value)}
+              value={selected ? positionKey(selected) : ""}
+              onChange={(event) => setSelectedKey(event.target.value)}
               className="h-12 w-full rounded-xl border border-white/10 bg-zinc-950/70 px-4 text-sm outline-none focus:border-emerald-400/60"
             >
-              {stocks.map((holding) => (
-                <option key={holding.symbol} value={holding.symbol}>
-                  {holding.symbol} - {holding.company}
+              {positions.map((holding) => (
+                <option key={positionKey(holding)} value={positionKey(holding)}>
+                  {holding.assetType === "option" ? holding.company : holding.symbol}
                 </option>
               ))}
             </select>
@@ -146,12 +147,12 @@ export default function CalculatorPage() {
             <FieldLabel>2. Position Details (Your Holding)</FieldLabel>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-xl border border-white/10 bg-black/15 p-4">
-                <p className="text-xs text-zinc-500">Shares</p>
+                <p className="text-xs text-zinc-500">{isOption ? "Contracts" : "Shares"}</p>
                 <input value={shares} min={0} step="any" type="number" onChange={(e) => setShares(numberValue(e.target.value))} className="mt-2 w-full bg-transparent text-lg font-semibold outline-none" />
               </div>
               <div className="rounded-xl border border-white/10 bg-black/15 p-4">
-                <p className="text-xs text-zinc-500">Avg. Cost / Share</p>
-                <div className="mt-2 flex items-center text-lg font-semibold"><span>$</span><input value={averageCost} min={0} step="any" type="number" onChange={(e) => setAverageCost(numberValue(e.target.value))} className="w-full bg-transparent outline-none" /></div>
+                <p className="text-xs text-zinc-500">{isOption ? "Avg. Cost / Contract" : "Avg. Cost / Share"}</p>
+                <div className="mt-2 flex items-center text-lg font-semibold"><span>$</span><input value={averageCostInput} inputMode="decimal" onChange={(e) => setAverageCostInput(e.target.value)} onBlur={() => setAverageCostInput(numberValue(averageCostInput).toFixed(2))} className="w-full bg-transparent outline-none" /></div>
               </div>
               <div className="rounded-xl border border-white/10 bg-black/15 p-4">
                 <p className="text-xs text-zinc-500">Total Cost</p>
@@ -166,7 +167,7 @@ export default function CalculatorPage() {
             <FieldLabel>3. Target Selling Price</FieldLabel>
             <div className="flex h-12 items-center rounded-xl border border-white/10 bg-black/15 px-4 text-lg font-semibold focus-within:border-emerald-400/60">
               <span className="mr-2 text-zinc-400">$</span>
-              <input value={targetPrice} min={0} step="any" type="number" onChange={(e) => setTargetPrice(numberValue(e.target.value))} className="w-full bg-transparent outline-none" />
+              <input value={targetPriceInput} min={0} step="any" type="number" placeholder="Enter Target Price" onChange={(e) => setTargetPriceInput(e.target.value)} className="w-full bg-transparent outline-none" />
             </div>
             {selected && <p className="mt-3 text-sm text-zinc-400">Current Price: {money(selected.currentPrice)} <span className={currentChange >= 0 ? "text-emerald-400" : "text-rose-400"}>({currentChange >= 0 ? "+" : ""}{currentChange.toFixed(2)}%)</span></p>}
           </div>
@@ -174,8 +175,8 @@ export default function CalculatorPage() {
       </section>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <ResultCard label="Total Investment" value={money(totalInvestment)} caption={`${shares.toLocaleString()} shares × ${money(averageCost)}`} />
-        <ResultCard label="Selling Value" value={money(sellingValue)} caption={`${shares.toLocaleString()} shares × ${money(targetPrice)}`} />
+        <ResultCard label="Total Investment" value={money(totalInvestment)} caption={`${Math.abs(shares).toLocaleString()} ${isOption ? "contracts" : "shares"} × ${money(averageCost)}${isOption ? " × 100" : ""}`} />
+        <ResultCard label="Selling Value" value={money(sellingValue)} caption={`${Math.abs(shares).toLocaleString()} ${isOption ? "contracts" : "shares"} × ${money(targetPrice)}${isOption ? " × 100" : ""}`} />
         <ResultCard label={isProfit ? "Net Profit" : "Net Loss"} value={`${profit < 0 ? "-" : ""}${money(Math.abs(profit))}`} caption={isProfit ? "Profit" : "Loss"} tone={isProfit ? "positive" : "negative"} />
         <ResultCard label="Return (ROI)" value={`${roi >= 0 ? "+" : ""}${roi.toFixed(2)}%`} caption="Total Return" tone={isProfit ? "positive" : "negative"} />
       </div>
@@ -206,7 +207,7 @@ export default function CalculatorPage() {
             max={rangeCeiling}
             step={Math.max((rangeCeiling - rangeFloor) / 300, 0.01)}
             value={sliderValue}
-            onChange={(event) => setTargetPrice(numberValue(event.target.value))}
+            onChange={(event) => setTargetPriceInput(event.target.value)}
             className="mt-5 w-full accent-emerald-400"
           />
           <p className="mt-3 text-center text-sm text-emerald-400">Target Price: {money(targetPrice)}</p>
@@ -236,17 +237,17 @@ export default function CalculatorPage() {
 
         <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5">
           <h2 className="flex items-center gap-2 font-semibold">Partial Sale Calculator <Info size={15} className="text-zinc-500" /></h2>
-          <FieldLabel>Shares to Sell</FieldLabel>
+          <FieldLabel>{isOption ? "Contracts to Sell" : "Shares to Sell"}</FieldLabel>
           <div className="flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4">
-            <input value={sharesToSell} min={0} max={shares} type="number" step="any" onChange={(e) => setSharesToSell(numberValue(e.target.value))} className="w-full bg-transparent outline-none" />
-            <span className="whitespace-nowrap text-sm text-zinc-400">of {shares.toLocaleString()}</span>
+            <input value={sharesToSell} min={0} max={Math.abs(shares)} type="number" step="any" onChange={(e) => setSharesToSell(numberValue(e.target.value))} className="w-full bg-transparent outline-none" />
+            <span className="whitespace-nowrap text-sm text-zinc-400">of {Math.abs(shares).toLocaleString()}</span>
           </div>
           <div className="mt-5 space-y-3 text-sm">
             <div className="flex justify-between"><span className="text-zinc-400">Proceeds (At Target Price)</span><span>{money(partialProceeds)}</span></div>
             <div className="flex justify-between"><span className="text-zinc-400">Profit on Sale</span><span className={partialProfit >= 0 ? "text-emerald-400" : "text-rose-400"}>{partialProfit < 0 ? "-" : "+"}{money(Math.abs(partialProfit))}</span></div>
-            <div className="flex justify-between"><span className="text-zinc-400">Remaining Shares</span><span>{remainingShares.toLocaleString()}</span></div>
+            <div className="flex justify-between"><span className="text-zinc-400">Remaining {isOption ? "Contracts" : "Shares"}</span><span>{remainingShares.toLocaleString()}</span></div>
             <div className="flex justify-between"><span className="text-zinc-400">Remaining Cost Basis</span><span>{money(remainingCostBasis)}</span></div>
-            <div className="flex justify-between"><span className="text-zinc-400">New Avg. Cost / Share</span><span>{remainingShares ? money(averageCost) : money(0)}</span></div>
+            <div className="flex justify-between"><span className="text-zinc-400">New Avg. Cost / {isOption ? "Contract" : "Share"}</span><span>{remainingShares ? money(averageCost) : money(0)}</span></div>
           </div>
         </section>
 

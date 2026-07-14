@@ -7,7 +7,7 @@ import { BarChart3, BriefcaseBusiness, Calculator, Check, ChevronDown, Coins, La
 import { cn } from "@/lib/utils";
 import { portfolios, useActivePortfolio } from "@/components/portfolio/portfolio-context";
 
-const items=[['/','Overview',LayoutDashboard],['/holdings','Holdings',BriefcaseBusiness],['/realized','Realized P/L',Landmark],['/analytics','Analytics',BarChart3],['/calculator','Calculator',Calculator],['/dca','DCA Calculator',Coins]] as const;
+const items=[['/','Overview',LayoutDashboard],['/holdings','Holdings',BriefcaseBusiness],['/realized','Realized P/L',Landmark],['/analytics','Analytics',BarChart3],['/calculator','Profit / Loss Calculator',Calculator],['/dca','DCA Calculator',Coins]] as const;
 
 export function Sidebar(){
   const path=usePathname();
