@@ -6,6 +6,7 @@ import { Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePortfolioStore } from "@/store/portfolio-store";
+import { toast } from "sonner";
 import { AssetType, Holding, Sector } from "@/types/portfolio";
 
 const sectors: Sector[] = [
@@ -15,6 +16,9 @@ const sectors: Sector[] = [
   "Crypto / Bitcoin",
   "Digital Advertising / AI",
   "Drones",
+  "Space",
+  "Defense",
+  "BioTech",
   "E-Commerce & Cloud",
   "Education Technology",
   "Electrical Equipment / Power Infrastructure",

@@ -6,6 +6,7 @@ import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePortfolioStore } from "@/store/portfolio-store";
+import { toast } from "sonner";
 import { AssetType, OptionType, Sector } from "@/types/portfolio";
 
 const sectors: Sector[] = [
@@ -15,6 +16,9 @@ const sectors: Sector[] = [
   "Crypto / Bitcoin",
   "Digital Advertising / AI",
   "Drones",
+  "Space",
+  "Defense",
+  "BioTech",
   "E-Commerce & Cloud",
   "Education Technology",
   "Electrical Equipment / Power Infrastructure",
@@ -78,10 +82,18 @@ export function AddHoldingDialog() {
     [holdings],
   );
 
-  const matching = useMemo(() => holdings.find((holding) =>
-    (holding.assetType ?? "stock") === form.assetType
-      && holding.symbol.toUpperCase() === form.symbol.trim().toUpperCase()
-  ), [form.assetType, form.symbol, holdings]);
+  const ownedOptions = useMemo(
+    () => holdings.filter((holding) => holding.assetType === "option" && holding.shares !== 0).slice().sort((a, b) => a.symbol.localeCompare(b.symbol)),
+    [holdings],
+  );
+
+  const matching = useMemo(() => {
+    if (form.assetType === "option" && form.action === "buy") return undefined;
+    return holdings.find((holding) =>
+      (holding.assetType ?? "stock") === form.assetType
+        && holding.symbol.toUpperCase() === form.symbol.trim().toUpperCase()
+    );
+  }, [form.action, form.assetType, form.symbol, holdings]);
 
   const resetForSelection = (field: "action" | "assetType", value: string) => {
     setError("");
@@ -95,7 +107,7 @@ export function AddHoldingDialog() {
     setForm((current) => {
       const next = { ...current, [field]: value } as FormState;
       if (field === "symbol") {
-        const found = holdings.find((holding) =>
+        const found = current.assetType === "option" && current.action === "buy" ? undefined : holdings.find((holding) =>
           (holding.assetType ?? "stock") === current.assetType
             && holding.symbol.toUpperCase() === value.trim().toUpperCase()
         );
@@ -124,11 +136,13 @@ export function AddHoldingDialog() {
     const tradePrice = Number(form.tradePrice);
     const isOption = form.assetType === "option";
     const isSellStock = form.action === "sell" && form.assetType === "stock";
+    const isSellOption = form.action === "sell" && form.assetType === "option";
     const company = (matching?.company ?? form.company).trim();
     const sector = matching?.sector ?? form.sector;
 
     if (!symbol) return setError("Ticker Symbol is required.");
     if (isSellStock && !matching) return setError("Select a stock you currently own.");
+    if (isSellOption && !matching) return setError("Select an option contract you currently own.");
     if (!isSellStock && !company) return setError(isOption ? "Contract Details are required." : "Company Name is required.");
     if (!Number.isFinite(quantity) || (!isOption && quantity <= 0) || (isOption && quantity === 0)) {
       return setError(isOption ? "Enter a valid non-zero contract quantity." : "Enter a valid share quantity.");
@@ -166,11 +180,13 @@ export function AddHoldingDialog() {
     });
 
     if (!result.ok) return setError(result.message ?? "Unable to update the position.");
+    toast.success(form.action === "buy" ? "Position Added Successfully" : "Sale Recorded Successfully");
     setForm(createInitialForm());
     setOpen(false);
   }
 
   const isSellStock = form.action === "sell" && form.assetType === "stock";
+  const isSellOption = form.action === "sell" && form.assetType === "option";
 
   return (
     <Dialog.Root open={open} onOpenChange={(nextOpen) => {
@@ -214,29 +230,41 @@ export function AddHoldingDialog() {
                     {ownedStocks.map((holding) => <option key={holding.symbol} value={holding.symbol}>{holding.symbol}</option>)}
                   </select>
                 </Field>
-                <Field label="Sold Shares"><Input required type="number" min="0.000001" step="any" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /></Field>
+                <Field label="Sell Shares"><Input required type="number" min="0.000001" step="any" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /></Field>
+                <Field label="Sell Price"><Input required type="number" min="0.000001" step="any" value={form.tradePrice} onChange={(e) => update("tradePrice", e.target.value)} /></Field>
+              </>
+            ) : isSellOption ? (
+              <>
+                <Field label="Option Contract">
+                  <select required value={form.symbol} onChange={(e) => update("symbol", e.target.value)} className="field-select" autoFocus>
+                    <option value="">Select Contract</option>
+                    {ownedOptions.map((holding) => <option key={`${holding.symbol}-${holding.optionType}-${holding.optionExpiry}`} value={holding.symbol}>{holding.symbol} · {holding.company} · {holding.optionType?.replace("-", " ")} · {holding.optionExpiry ?? "No Expiry"}</option>)}
+                  </select>
+                </Field>
+                <Field label="Option Type">
+                  <select required value={matching?.optionType ?? form.optionType} onChange={(e) => update("optionType", e.target.value)} className="field-select">
+                    {optionTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Contracts"><Input required type="number" min="1" step="1" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /></Field>
                 <Field label="Sell Price"><Input required type="number" min="0.000001" step="any" value={form.tradePrice} onChange={(e) => update("tradePrice", e.target.value)} /></Field>
               </>
             ) : (
               <>
                 <Field label={form.assetType === "option" ? "Underlying Ticker" : "Ticker Symbol"}>
-                  <Input
-                    required
-                    value={form.symbol}
-                    onChange={(e) => update("symbol", e.target.value)}
-                    list={form.action === "buy" && form.assetType === "stock" ? "owned-stock-tickers" : undefined}
-                    autoFocus
-                  />
-                  {form.action === "buy" && form.assetType === "stock" && (
-                    <datalist id="owned-stock-tickers">
-                      {ownedStocks.map((holding) => <option key={holding.symbol} value={holding.symbol}>{holding.company}</option>)}
-                    </datalist>
+                  {form.action === "buy" && form.assetType === "stock" ? (
+                    <select required value={form.symbol} onChange={(e) => update("symbol", e.target.value)} className="field-select" autoFocus>
+                      <option value="">Select Ticker</option>
+                      {ownedStocks.map((holding) => <option key={holding.symbol} value={holding.symbol}>{holding.symbol}</option>)}
+                    </select>
+                  ) : (
+                    <Input required value={form.symbol} onChange={(e) => update("symbol", e.target.value)} autoFocus />
                   )}
                 </Field>
 
                 <Field label="Position Status">
                   <div className="flex h-10 items-center rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm dark:border-white/10 dark:bg-white/[.03]">
-                    <span className={matching ? "text-emerald-400" : "text-zinc-400"}>{matching ? `Existing · ${matching.shares} ${form.assetType === "option" ? "contracts" : "shares"}` : "New Position"}</span>
+                    <span className={matching ? "text-emerald-400" : "text-zinc-400"}>{matching ? `Existing ${form.assetType === "option" ? "Contracts" : "Shares"} - ${matching.shares}` : "New Position"}</span>
                   </div>
                 </Field>
 

@@ -3,18 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BarChart3, BriefcaseBusiness, Calculator, Check, ChevronDown, Coins, Eye, Goal, LayoutDashboard, Landmark, Layers3, Settings, TrendingUp } from "lucide-react";
+import { BarChart3, BriefcaseBusiness, Calculator, Check, ChevronDown, Coins, LayoutDashboard, Landmark, Layers3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { portfolios, useActivePortfolio } from "@/components/portfolio/portfolio-context";
 
-const items=[['/','Overview',LayoutDashboard],['/holdings','Holdings',BriefcaseBusiness],['/realized','Realized P/L',Landmark],['/analytics','Analytics',BarChart3],['/calculator','Calculator',Calculator],['/dca','DCA Calculator',Coins],['/watchlist','Watchlist',Eye],['/goals','Goals',Goal],['/settings','Settings',Settings]] as const;
+const items=[['/','Overview',LayoutDashboard],['/holdings','Holdings',BriefcaseBusiness],['/realized','Realized P/L',Landmark],['/analytics','Analytics',BarChart3],['/calculator','Calculator',Calculator],['/dca','DCA Calculator',Coins]] as const;
 
 export function Sidebar(){
   const path=usePathname();
   const [open,setOpen]=useState(false);
   const {active,activeId,setActiveId}=useActivePortfolio();
   return <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-zinc-200 bg-white/95 p-4 text-zinc-900 dark:border-white/10 dark:bg-zinc-950/90 dark:text-zinc-100 backdrop-blur-xl lg:block">
-    <div className="mb-4 flex items-center gap-3 px-2 py-3"><div className="grid size-10 place-items-center rounded-2xl bg-emerald-400 text-zinc-950 shadow-glow"><TrendingUp size={20}/></div><div className="font-semibold">Arth’s Portfolios</div></div>
+    <div className="mb-4 flex items-center gap-3 px-2 py-3"><img src="/finance-logo.png" alt="Finance" className="size-10 rounded-2xl object-cover shadow-glow"/><div className="font-semibold">Arth’s Portfolios</div></div>
     <div className="relative mb-5">
       <button onClick={()=>setOpen(!open)} className="flex w-full items-center gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-white/[.045] p-3 text-left transition hover:bg-white/[.07]">
         <div className="grid size-9 place-items-center rounded-xl bg-emerald-400/15 text-xs font-bold text-emerald-400">{active.badge}</div>

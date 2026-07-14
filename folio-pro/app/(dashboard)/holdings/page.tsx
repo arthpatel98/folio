@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Banknote, BriefcaseBusiness, Download, Layers3, RefreshCw, Search, WalletCards } from "lucide-react";
+import { Banknote, BriefcaseBusiness, Download, Layers3, Search, WalletCards } from "lucide-react";
 import { HoldingsTable } from "@/components/portfolio/holdings-table";
 import { AddHoldingDialog } from "@/components/portfolio/add-holding-dialog";
 import { EditCashDialog } from "@/components/portfolio/edit-cash-dialog";
@@ -153,13 +153,13 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-3xl font-semibold tracking-tight">Portfolio Overview</h1><p className="mt-1 text-sm text-zinc-500">Portfolio Performance and Open Positions at a Glance.</p>{pricesUpdatedAt && <p className="mt-1 text-xs text-zinc-500">Prices Updated {pricesUpdatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}{pricesError && <p className="mt-1 text-xs text-amber-500">{pricesError}</p>}</div><div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => refreshPrices()} disabled={pricesLoading || !hasRefreshableSymbols} aria-label="Refresh Prices" title="Refresh Prices" className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><RefreshCw size={17} className={pricesLoading ? "animate-spin" : ""}/></button><button onClick={downloadExcel} className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><Download size={16}/>Download Portfolio</button><AddHoldingDialog /></div></div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-3xl font-semibold tracking-tight">Portfolio Overview</h1><p className="mt-1 text-sm text-zinc-500">Portfolio Performance and Open Positions at a Glance.</p>{pricesUpdatedAt && <p className="mt-1 text-xs text-zinc-500">Prices Updated {pricesUpdatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}{pricesError && <p className="mt-1 text-xs text-amber-500">{pricesError}</p>}</div><div className="flex flex-wrap items-center gap-2"><button onClick={downloadExcel} className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 transition hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><Download size={16}/>Download Portfolio</button><AddHoldingDialog /></div></div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricBlock label="Portfolio Value" value={money(summary.value)} subvalue={`Day Return: ${summary.today >= 0 ? "↑ +" : "↓ -"}${money(Math.abs(summary.today))} (${summary.todayPct >= 0 ? "+" : ""}${summary.todayPct.toFixed(2)}%)`} positive={summary.today >= 0} icon={WalletCards}/>
-        <MetricBlock label="Total Holdings" value={money(positionValue)} subvalue={`${holdings.length} Open Positions`} icon={BriefcaseBusiness} tone="blue"/>
-        <MetricBlock label="Total Stocks" value={money(stockValue)} subvalue={`${stockHoldings.length} Open Positions\n(${profitableStocks} Profitable)`} icon={Layers3} tone="green"/>
-        <MetricBlock label="Total Options" value={money(optionValue)} subvalue={`${optionHoldings.length} Open Positions\n(${profitableOptions} Profitable)`} icon={Layers3} tone="purple"/>
+        <MetricBlock label="Portfolio Value" value={money(summary.value)} subvalue={<>Day Return: {summary.today >= 0 ? "↑ +" : "↓ -"}{money(Math.abs(summary.today))}<br />( {summary.todayPct >= 0 ? "+" : ""}{summary.todayPct.toFixed(2)}% )</>} positive={summary.today >= 0} icon={WalletCards}/>
+        <MetricBlock label="Total Holdings Value" value={money(positionValue)} subvalue={`${holdings.length} Open Positions`} icon={BriefcaseBusiness} tone="blue"/>
+        <MetricBlock label="Total Stocks Value" value={money(stockValue)} subvalue={`${stockHoldings.length} Open Positions\n( ${profitableStocks} Profitable Positions )`} icon={Layers3} tone="green"/>
+        <MetricBlock label="Total Options Value" value={money(optionValue)} subvalue={`${optionHoldings.length} Open Positions\n( ${profitableOptions} Profitable Positions )`} icon={Layers3} tone="purple"/>
         <MetricBlock label="Cash" value={money(cash)} subvalue={`${summary.value ? ((cash / summary.value) * 100).toFixed(2) : "0.00"}% of Portfolio`} icon={Banknote} tone="purple"/>
       </div>
 

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useState } from "react";
 import {
   ColumnDef,
@@ -17,6 +18,8 @@ import { holdingMetrics } from "@/lib/calculations/portfolio";
 import { cn, money } from "@/lib/utils";
 import { EditHoldingDialog } from "@/components/portfolio/edit-holding-dialog";
 import { usePortfolioStore } from "@/store/portfolio-store";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 function SignedMoney({ value }: { value: number }) {
   return <span className={cn(value >= 0 ? "text-emerald-500" : "text-red-500")}>{value < 0 ? "-" : ""}{money(Math.abs(value))}</span>;
@@ -58,13 +61,20 @@ export function HoldingsTable({
 }) {
   const removeHolding = usePortfolioStore((state) => state.removeHolding);
   const allocationBase = portfolioValue ?? data.reduce((sum, holding) => sum + holdingMetrics(holding).marketValue, 0);
+  const sortStorageKey = `folio-holdings-sort-${assetType}`;
   const [sorting, setSorting] = useState<SortingState>([{ id: "marketValue", desc: true }]);
+  const [pendingDelete, setPendingDelete] = useState<Holding | null>(null);
   const storageKey = `folio-column-widths-${assetType}`;
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   useEffect(() => {
     try { setColumnSizing(JSON.parse(window.localStorage.getItem(storageKey) ?? "{}")); } catch { setColumnSizing({}); }
-  }, [storageKey]);
+    try {
+      const savedSort = window.localStorage.getItem(sortStorageKey);
+      if (savedSort) setSorting(JSON.parse(savedSort));
+    } catch {}
+  }, [storageKey, sortStorageKey]);
   useEffect(() => { window.localStorage.setItem(storageKey, JSON.stringify(columnSizing)); }, [columnSizing, storageKey]);
+  useEffect(() => { window.localStorage.setItem(sortStorageKey, JSON.stringify(sorting)); }, [sorting, sortStorageKey]);
 
   const columns = useMemo<ColumnDef<Holding>[]>(() => [
     {
@@ -182,15 +192,13 @@ export function HoldingsTable({
       cell: ({ row }) => (
         <div className="flex items-center justify-end gap-2">
           <EditHoldingDialog holding={row.original} />
-          <button type="button" onClick={() => {
-            if (window.confirm(`Remove ${row.original.symbol} from your ${assetType}s?`)) removeHolding(row.original.symbol, assetType);
-          }} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 text-red-500 transition hover:bg-red-500/10" aria-label={`Remove ${row.original.symbol}`} title={`Remove ${row.original.symbol}`}>
+          <button type="button" onClick={() => setPendingDelete(row.original)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 text-red-500 transition hover:bg-red-500/10" aria-label={`Remove ${row.original.symbol}`} title={`Remove ${row.original.symbol}`}>
             <Trash2 size={16} />
           </button>
         </div>
       ),
     },
-  ], [allocationBase, assetType, removeHolding]);
+  ], [allocationBase, assetType]);
 
   const subtotal = useMemo(() => {
     const totals = data.reduce((acc, holding) => {
@@ -212,6 +220,7 @@ export function HoldingsTable({
   const table = useReactTable({ data, columns, defaultColumn: { size: 160, minSize: 80, maxSize: 600 }, state: { sorting, columnSizing }, onSortingChange: setSorting, onColumnSizingChange: setColumnSizing, columnResizeMode: "onChange", getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel() });
 
   return (
+    <>
     <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-950/30">
       <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-white/5">
         <div className="flex items-center gap-3"><div className="rounded-xl bg-emerald-500/10 p-2 text-emerald-500"><BriefcaseBusiness size={19} /></div><div><h2 className="font-semibold">{title}</h2><p className="text-xs text-zinc-500">{data.length} Open {data.length === 1 ? "Position" : "Positions"}</p></div></div>
@@ -222,7 +231,7 @@ export function HoldingsTable({
             {table.getHeaderGroups().map((headerGroup) => <tr key={headerGroup.id}>{headerGroup.headers.map((header, index) => {
               const sorted = header.column.getIsSorted();
               const rightAligned = index > 0 && header.column.id !== "sector";
-              return <th key={header.id} style={{ width: header.getSize() }} className={cn("relative h-[68px] whitespace-nowrap px-6 text-sm font-semibold transition hover:bg-black/[.03] dark:hover:bg-white/[.03]", rightAligned && "text-right", index === 0 && "sticky left-0 z-30 bg-slate-200/95 shadow-[8px_0_12px_-12px_rgba(0,0,0,.45)] dark:bg-slate-800") }>
+              return <th key={header.id} style={{ width: header.getSize() }} className={cn("relative h-[68px] whitespace-nowrap px-6 text-sm font-semibold transition hover:bg-black/[.03] dark:hover:bg-white/[.03]", rightAligned && "text-right", index === 0 && "sticky left-0 z-30 bg-slate-200/95 shadow-[8px_0_12px_-12px_rgba(0,0,0,.45)] dark:bg-slate-800/70") }>
                 <button type="button" onClick={header.column.getToggleSortingHandler()} className={cn("inline-flex w-full items-center gap-2", rightAligned && "justify-end")}>{flexRender(header.column.columnDef.header, header.getContext())}{sorted === "asc" ? <ArrowUp size={15} className="text-emerald-500" /> : sorted === "desc" ? <ArrowDown size={15} className="text-emerald-500" /> : <ArrowUpDown size={14} className="opacity-25" />}</button>
                 <div onMouseDown={header.getResizeHandler()} onTouchStart={header.getResizeHandler()} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none touch-none hover:bg-emerald-500/50" title="Drag to resize column" />
               </th>;
@@ -249,5 +258,26 @@ export function HoldingsTable({
         {!table.getRowModel().rows.length && <div className="px-6 py-14 text-center text-sm text-zinc-500">No {title.toLowerCase()} match your search.</div>}
       </div>
     </section>
+    <Dialog.Root open={Boolean(pendingDelete)} onOpenChange={(open) => !open && setPendingDelete(null)}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-2xl dark:border-white/10 dark:bg-zinc-950">
+          <Dialog.Title className="text-xl font-semibold">Remove Position?</Dialog.Title>
+          <Dialog.Description className="mt-2 text-sm text-zinc-500">
+            {pendingDelete ? `Remove ${pendingDelete.symbol} from your ${assetType === "option" ? "options" : "stocks"}?` : ""}
+          </Dialog.Description>
+          <div className="mt-6 flex justify-center gap-3">
+            <Dialog.Close asChild><Button type="button" variant="outline">Cancel</Button></Dialog.Close>
+            <Button type="button" className="bg-red-500 text-white hover:bg-red-600" onClick={() => {
+              if (!pendingDelete) return;
+              removeHolding(pendingDelete.symbol, assetType);
+              toast.success("Position Removed Successfully");
+              setPendingDelete(null);
+            }}>Remove Position</Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+    </>
   );
 }
