@@ -92,16 +92,17 @@ export default function CalculatorPage() {
 
   const averageCost = numberValue(averageCostInput);
   const targetPrice = numberValue(targetPriceInput);
+  const positionDirection = shares < 0 ? -1 : 1;
   const totalInvestment = Math.abs(shares) * averageCost * multiplier;
   const sellingValue = Math.abs(shares) * targetPrice * multiplier;
-  const profit = sellingValue - totalInvestment;
+  const profit = (sellingValue - totalInvestment) * positionDirection;
   const roi = totalInvestment ? (profit / totalInvestment) * 100 : 0;
-  const profitPerShare = (targetPrice - averageCost) * multiplier;
-  const requiredSellingPrice = averageCost * (1 + targetReturn / 100);
-  const targetPotentialProfit = Math.abs(shares) * (requiredSellingPrice - averageCost) * multiplier;
+  const profitPerShare = (targetPrice - averageCost) * multiplier * positionDirection;
+  const requiredSellingPrice = Math.max(0, averageCost * (1 + (targetReturn / 100) * positionDirection));
+  const targetPotentialProfit = Math.abs(shares) * (requiredSellingPrice - averageCost) * multiplier * positionDirection;
   const safeSharesToSell = Math.min(Math.max(sharesToSell, 0), Math.abs(shares));
   const partialProceeds = safeSharesToSell * targetPrice * multiplier;
-  const partialProfit = safeSharesToSell * (targetPrice - averageCost) * multiplier;
+  const partialProfit = safeSharesToSell * (targetPrice - averageCost) * multiplier * positionDirection;
   const remainingShares = Math.max(Math.abs(shares) - safeSharesToSell, 0);
   const remainingCostBasis = remainingShares * averageCost * multiplier;
   const summary = useMemo(() => portfolioSummary(holdings, cash), [holdings, cash]);

@@ -128,6 +128,7 @@ export function EditHoldingDialog({ holding }: { holding: Holding }) {
       updatedAt: "Just now",
     });
 
+    toast.success("Changes Saved Successfully");
     setOpen(false);
   }
 

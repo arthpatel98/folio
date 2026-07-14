@@ -227,20 +227,24 @@ export function HoldingsTable({
       <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-white/5">
         <div className="flex items-center gap-3"><div className="rounded-xl bg-emerald-500/10 p-2 text-emerald-500"><BriefcaseBusiness size={19} /></div><div><h2 className="font-semibold">{title}</h2><p className="text-xs text-zinc-500">{data.length} Open {data.length === 1 ? "Position" : "Positions"}</p></div></div>
       </div>
-      <div className="overflow-x-auto">
+      <div className="relative isolate overflow-x-auto">
         <table className="table-fixed text-left text-sm" style={{ width: table.getTotalSize(), minWidth: assetType === "option" ? 1760 : 1540 }}>
-          <thead className="bg-slate-200/95 text-zinc-600 dark:bg-slate-800/70 dark:text-zinc-300">
+          <thead className="relative z-10 bg-slate-200 text-zinc-600 dark:bg-slate-800 dark:text-zinc-300">
             {table.getHeaderGroups().map((headerGroup) => <tr key={headerGroup.id}>{headerGroup.headers.map((header, index) => {
               const sorted = header.column.getIsSorted();
               const rightAligned = index > 0 && header.column.id !== "sector";
-              return <th key={header.id} style={{ width: header.getSize() }} className={cn("relative h-[68px] overflow-hidden whitespace-nowrap px-6 text-sm font-semibold transition hover:bg-black/[.03] dark:hover:bg-white/[.03]", rightAligned && "text-right", index === 0 && "sticky left-0 z-30 min-w-[280px] bg-slate-200/95 shadow-[8px_0_12px_-12px_rgba(0,0,0,.45)] dark:bg-slate-800/70") }>
+              const headerWidth = index === 0 ? Math.max(header.getSize(), 300) : header.getSize();
+              return <th key={header.id} style={{ width: headerWidth, minWidth: headerWidth, maxWidth: headerWidth }} className={cn("relative z-0 h-[68px] overflow-hidden whitespace-nowrap bg-slate-200 px-6 text-sm font-semibold transition hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700", rightAligned && "text-right", index === 0 && "sticky left-0 z-50 bg-slate-200 shadow-[10px_0_14px_-12px_rgba(0,0,0,.75)] dark:bg-slate-800") }>
                 <button type="button" onClick={header.column.getToggleSortingHandler()} className={cn("inline-flex w-full items-center gap-2", rightAligned && "justify-end")}>{flexRender(header.column.columnDef.header, header.getContext())}{sorted === "asc" ? <ArrowUp size={15} className="text-emerald-500" /> : sorted === "desc" ? <ArrowDown size={15} className="text-emerald-500" /> : <ArrowUpDown size={14} className="opacity-25" />}</button>
                 <div onMouseDown={header.getResizeHandler()} onTouchStart={header.getResizeHandler()} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none touch-none hover:bg-emerald-500/50" title="Drag to resize column" />
               </th>;
             })}</tr>)}
           </thead>
           <tbody>{table.getRowModel().rows.map((row) => <tr key={row.id} className="group h-[112px] border-b border-zinc-200/80 bg-white text-zinc-900 transition last:border-0 hover:bg-zinc-50 dark:border-white/[.06] dark:bg-zinc-950/20 dark:text-zinc-100 dark:hover:bg-white/[.025]">
-            {row.getVisibleCells().map((cell, index) => <td key={cell.id} style={{ width: cell.column.getSize() }} className={cn("whitespace-nowrap px-6 py-5 text-base", index > 0 && cell.column.id !== "sector" && "text-right", cell.column.id === "sector" && "text-left", index === 0 && "sticky left-0 z-20 bg-white shadow-[8px_0_12px_-12px_rgba(0,0,0,.35)] group-hover:bg-zinc-50 dark:bg-zinc-950 dark:group-hover:bg-zinc-900") }>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}
+            {row.getVisibleCells().map((cell, index) => {
+              const cellWidth = index === 0 ? Math.max(cell.column.getSize(), 300) : cell.column.getSize();
+              return <td key={cell.id} style={{ width: cellWidth, minWidth: cellWidth, maxWidth: cellWidth }} className={cn("whitespace-nowrap px-6 py-5 text-base", index > 0 && cell.column.id !== "sector" && "text-right", cell.column.id === "sector" && "text-left", index === 0 && "sticky left-0 z-40 bg-white shadow-[10px_0_14px_-12px_rgba(0,0,0,.65)] group-hover:bg-zinc-50 dark:bg-zinc-950 dark:group-hover:bg-zinc-900") }>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>;
+            })}
           </tr>)}</tbody>
           {!!table.getRowModel().rows.length && <tfoot>
             <tr className="h-[96px] border-t-2 border-zinc-300 bg-zinc-100/95 font-semibold text-zinc-900 dark:border-white/15 dark:bg-white/[.055] dark:text-zinc-100">
@@ -252,7 +256,8 @@ export function HoldingsTable({
                 if (column.id === "totalReturn") content = <div className="space-y-1"><div className="text-base"><SignedMoney value={subtotal.totalGain} /></div><SignedPercent value={subtotal.totalGainPct} /></div>;
                 if (column.id === "totalCost") content = money(subtotal.costBasis);
                 if (column.id === "marketValue") content = <div className="space-y-1"><div className="text-base">{money(subtotal.marketValue)}</div><div className="text-sm font-normal text-zinc-500">{allocationBase ? (Math.abs(subtotal.marketValue / allocationBase) * 100).toFixed(2) : "0.00"}%</div></div>;
-                return <td key={column.id} style={{ width: column.getSize() }} className={cn("whitespace-nowrap px-6 py-5 text-base", rightAligned && "text-right", column.id === "sector" && "text-left", index === 0 && "sticky left-0 z-20 bg-zinc-100/95 shadow-[8px_0_12px_-12px_rgba(0,0,0,.35)] dark:bg-zinc-900")}>{content}</td>;
+                const footerWidth = index === 0 ? Math.max(column.getSize(), 300) : column.getSize();
+                return <td key={column.id} style={{ width: footerWidth, minWidth: footerWidth, maxWidth: footerWidth }} className={cn("whitespace-nowrap px-6 py-5 text-base", rightAligned && "text-right", column.id === "sector" && "text-left", index === 0 && "sticky left-0 z-40 bg-zinc-100 shadow-[10px_0_14px_-12px_rgba(0,0,0,.65)] dark:bg-zinc-900")}>{content}</td>;
               })}
             </tr>
           </tfoot>}
