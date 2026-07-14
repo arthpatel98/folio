@@ -206,6 +206,7 @@ export function AddHoldingDialog() {
             {error && <p className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-300 sm:col-span-2">{error}</p>}
             <div className="mt-2 flex justify-end gap-3 sm:col-span-2"><Dialog.Close asChild><Button type="button" variant="outline">Cancel</Button></Dialog.Close><Button type="submit">{form.action === "buy" ? (form.assetType === "option" ? "Add Position" : "Complete Purchase") : "Remove Position"}</Button></div>
           </form>
+          <style jsx>{`.field-select{display:flex;height:2.5rem;width:100%;border-radius:.75rem;border:1px solid #e4e4e7;background:#fff;padding:0 .75rem;font-size:.875rem;color:#18181b;outline:none}.field-select option{background:#fff;color:#18181b}:global(.dark) .field-select{border-color:rgba(255,255,255,.1);background:rgba(255,255,255,.03);color:#f4f4f5}:global(.dark) .field-select option{background:#09090b;color:#f4f4f5}`}</style>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
