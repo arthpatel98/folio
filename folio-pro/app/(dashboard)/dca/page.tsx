@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ArrowDownRight, ArrowUpRight, Plus, Save, Trash2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowDownRight, ArrowUpRight, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { cn, money } from "@/lib/utils";
 import { DcaLot, DcaPosition, NumericValue } from "@/lib/dca-data";
 import { DCA_SELECTED_POSITION_KEY, DCA_UPDATED_EVENT, loadDcaPositions, saveDcaPositions, upsertDcaPosition } from "@/lib/dca-storage";
@@ -36,6 +36,21 @@ const clonePosition = (position: DcaPosition): DcaPosition => ({ ...position, lo
 
 type LotDraft = { shares: NumericValue; price: NumericValue; date: string; future: boolean };
 const emptyDraft = (future = false): LotDraft => ({ shares: "", price: "", date: "", future });
+const DCA_LOT_WIDTHS_KEY = "folio-dca-purchase-lot-column-widths";
+const DCA_LOT_SCROLL_KEY = "folio-dca-purchase-lot-scroll-left";
+const lotColumns = [
+  { key: "type", label: "Type", defaultWidth: 150 },
+  { key: "shares", label: "Shares", defaultWidth: 120 },
+  { key: "buyPrice", label: "Buy Price", defaultWidth: 130 },
+  { key: "cost", label: "Cost", defaultWidth: 130 },
+  { key: "buyDate", label: "Buy Date", defaultWidth: 180 },
+  { key: "days", label: "Days Since Added", defaultWidth: 170 },
+  { key: "return", label: "Potential Return", defaultWidth: 160 },
+  { key: "returnPct", label: "Potential Return %", defaultWidth: 180 },
+  { key: "actions", label: "Actions", defaultWidth: 130 },
+] as const;
+type LotColumnKey = typeof lotColumns[number]["key"];
+const defaultLotWidths = Object.fromEntries(lotColumns.map((column) => [column.key, column.defaultWidth])) as Record<LotColumnKey, number>;
 
 export default function DcaPage() {
   const { activeId } = useActivePortfolio();
@@ -49,6 +64,9 @@ export default function DcaPage() {
   const [showAddPosition, setShowAddPosition] = useState(false);
   const [showLotForm, setShowLotForm] = useState<"existing" | "future" | null>(null);
   const [lotDraft, setLotDraft] = useState<LotDraft>(emptyDraft());
+  const [editingLotIndex, setEditingLotIndex] = useState<number | null>(null);
+  const [lotColumnWidths, setLotColumnWidths] = useState<Record<LotColumnKey, number>>(defaultLotWidths);
+  const lotScrollRef = useRef<HTMLDivElement>(null);
   const [newSymbol, setNewSymbol] = useState("");
   const [newSellPrice, setNewSellPrice] = useState("");
   const [newShares, setNewShares] = useState<NumericValue>("");
@@ -115,6 +133,39 @@ export default function DcaPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
 
+
+  useEffect(() => {
+    try {
+      const savedWidths = window.localStorage.getItem(DCA_LOT_WIDTHS_KEY);
+      if (savedWidths) setLotColumnWidths({ ...defaultLotWidths, ...JSON.parse(savedWidths) });
+      const savedScroll = Number(window.localStorage.getItem(DCA_LOT_SCROLL_KEY) ?? "0");
+      window.requestAnimationFrame(() => {
+        if (lotScrollRef.current && Number.isFinite(savedScroll)) lotScrollRef.current.scrollLeft = savedScroll;
+      });
+    } catch {}
+  }, []);
+
+  const persistLotWidths = (widths: Record<LotColumnKey, number>) => {
+    setLotColumnWidths(widths);
+    try { window.localStorage.setItem(DCA_LOT_WIDTHS_KEY, JSON.stringify(widths)); } catch {}
+  };
+
+  const startColumnResize = (event: React.MouseEvent, key: LotColumnKey) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = lotColumnWidths[key];
+    const onMove = (moveEvent: MouseEvent) => {
+      const nextWidth = Math.max(90, Math.round(startWidth + moveEvent.clientX - startX));
+      persistLotWidths({ ...lotColumnWidths, [key]: nextWidth });
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
   const selectedPosition = positions.find((position) => position.id === positionId);
   const load = (id: string) => { applyPosition(positions.find((position) => position.id === id)); setSavedMessage(""); };
 
@@ -141,15 +192,25 @@ export default function DcaPage() {
     window.setTimeout(() => setSavedMessage(""), 1800);
   };
 
-  const addLot = () => {
+  const saveLot = () => {
     const shares = toNumber(lotDraft.shares), price = toNumber(lotDraft.price);
     if (shares <= 0 || price <= 0 || !lotDraft.date) return;
-    const lot: DcaLot = { amount: shares * price, shares, price, date: lotDraft.date, future: lotDraft.future };
-    const nextLots = sortLots([...lots, lot]);
+    const existing = editingLotIndex === null ? undefined : lots[editingLotIndex];
+    const lot: DcaLot = { ...existing, amount: shares * price, shares, price, date: lotDraft.date, future: lotDraft.future };
+    const nextLots = editingLotIndex === null
+      ? sortLots([...lots, lot])
+      : sortLots(lots.map((item, index) => index === editingLotIndex ? lot : item));
     setLots(nextLots);
     if (selectedPosition) upsertDcaPosition({ ...selectedPosition, sellPrice: parseNumericInput(sellPrice), lots: nextLots });
-    setLotDraft(emptyDraft()); setShowLotForm(null); setSavedMessage("Purchase Saved");
+    setLotDraft(emptyDraft()); setShowLotForm(null); setEditingLotIndex(null); setSavedMessage(editingLotIndex === null ? "Purchase Saved" : "Purchase Updated");
     window.setTimeout(() => setSavedMessage(""), 1800);
+  };
+
+  const editLot = (index: number) => {
+    const lot = lots[index];
+    setEditingLotIndex(index);
+    setShowLotForm(lot.future ? "future" : "existing");
+    setLotDraft({ shares: lot.shares, price: lot.price, date: lot.date === "Future" ? "" : lot.date, future: Boolean(lot.future) });
   };
 
   const deleteLot = (index: number) => {
@@ -212,14 +273,48 @@ export default function DcaPage() {
     </div>
 
     <section className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/35">
-      <div className="flex flex-col gap-3 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="font-semibold">Purchase Lots</h2><p className="mt-1 text-sm text-zinc-500">Saved Purchase Lots Are Read-Only. Holdings Purchases Are Added Automatically.</p></div><div className="flex gap-2"><button onClick={() => { setShowLotForm("existing"); setLotDraft(emptyDraft(false)); }} className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 px-4 text-sm font-semibold"><Plus size={16}/>Add Existing Purchase</button><button onClick={() => { setShowLotForm("future"); setLotDraft(emptyDraft(true)); }} className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950"><Plus size={16}/>Add Future Purchase</button></div></div>
+      <div className="flex flex-col gap-3 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="font-semibold">Purchase Lots</h2><p className="mt-1 text-sm text-zinc-500">Edit Existing Or Future Purchase Lots. Holdings Purchases Are Added Automatically.</p></div><div className="flex gap-2"><button onClick={() => { setEditingLotIndex(null); setShowLotForm("existing"); setLotDraft(emptyDraft(false)); }} className="inline-flex h-10 items-center gap-2 rounded-xl border border-white/10 px-4 text-sm font-semibold"><Plus size={16}/>Add Existing Purchase</button><button onClick={() => { setEditingLotIndex(null); setShowLotForm("future"); setLotDraft(emptyDraft(true)); }} className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950"><Plus size={16}/>Add Future Purchase</button></div></div>
       {showLotForm && <div className="grid gap-4 border-b border-white/10 p-5 sm:grid-cols-3 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-end">
         <label className="space-y-2 text-sm font-medium text-zinc-300">Shares<input type="number" step="any" value={lotDraft.shares} onChange={(e) => setLotDraft((d) => ({ ...d, shares: parseNumericInput(e.target.value) }))} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3"/></label>
         <label className="space-y-2 text-sm font-medium text-zinc-300">Buy Price<input type="number" step="any" value={lotDraft.price} onChange={(e) => setLotDraft((d) => ({ ...d, price: parseNumericInput(e.target.value) }))} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3"/></label>
         <label className="space-y-2 text-sm font-medium text-zinc-300">Buy Date<input type="date" value={lotDraft.date} onChange={(e) => setLotDraft((d) => ({ ...d, date: e.target.value }))} className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3"/></label>
-        <div className="flex gap-2"><button onClick={addLot} disabled={toNumber(lotDraft.shares) <= 0 || toNumber(lotDraft.price) <= 0 || !lotDraft.date} className="h-11 rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950 disabled:opacity-40">Save Purchase</button><button onClick={() => setShowLotForm(null)} className="h-11 rounded-xl border border-white/10 px-4 text-sm">Cancel</button></div>
+        <div className="flex gap-2"><button onClick={saveLot} disabled={toNumber(lotDraft.shares) <= 0 || toNumber(lotDraft.price) <= 0 || !lotDraft.date} className="h-11 rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950 disabled:opacity-40">{editingLotIndex === null ? "Save Purchase" : "Update Purchase"}</button><button onClick={() => { setShowLotForm(null); setEditingLotIndex(null); }} className="h-11 rounded-xl border border-white/10 px-4 text-sm">Cancel</button></div>
       </div>}
-      <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-sm"><thead className="bg-white/[.025] text-left text-xs uppercase tracking-wide text-zinc-500"><tr><th className="px-5 py-3">Type</th><th className="px-4 py-3">Shares</th><th className="px-4 py-3">Buy Price</th><th className="px-4 py-3">Cost</th><th className="px-4 py-3">Buy Date</th><th className="px-4 py-3">Days Since Added</th><th className="px-4 py-3">Potential Return</th><th className="px-4 py-3">Potential Return %</th><th className="px-4 py-3 text-right">Actions</th></tr></thead><tbody>{lots.map((lot, index) => { const shares = toNumber(lot.shares), price = toNumber(lot.price), profit = shares * (toNumber(sellPrice) - price), returnPct = lot.amount ? profit / lot.amount * 100 : 0; return <tr key={`${lot.date}-${index}`} className={cn("border-t border-white/10", lot.future && "bg-emerald-500/[.04]")}><td className="px-5 py-3"><span>{lot.future ? "Future DCA" : "Existing"}</span>{lot.note && <p className="mt-1 text-xs text-zinc-500">{lot.note}</p>}</td><td className="px-4 py-3">{lot.future ? <input type="number" step="any" value={lot.shares} onChange={(event) => updateFutureLot(index, "shares", parseNumericInput(event.target.value))} className="h-9 w-24 rounded-lg border border-white/10 bg-black/20 px-2 outline-none"/> : formatShares(shares)}</td><td className="px-4 py-3">{lot.future ? <div className="relative w-28"><span className="absolute left-2 top-1/2 -translate-y-1/2 text-zinc-500">$</span><input type="number" step="0.01" value={lot.price} onChange={(event) => updateFutureLot(index, "price", parseNumericInput(event.target.value))} className="h-9 w-full rounded-lg border border-white/10 bg-black/20 pl-5 pr-2 outline-none"/></div> : money(price)}</td><td className="px-4 py-3">{fixedMoney(lot.amount)}</td><td className="px-4 py-3">{formatDate(lot.date)}</td><td className="px-4 py-3">{daysSinceAdded(lot.date)}</td><td className="px-4 py-3">{signedMoney(profit)}</td><td className="px-4 py-3">{pct(returnPct)}</td><td className="px-4 py-3 text-right"><button onClick={() => deleteLot(index)} aria-label="Delete Purchase Lot" title="Delete Purchase Lot" className="rounded-lg p-2 text-zinc-500 hover:bg-rose-500/10 hover:text-rose-400"><Trash2 size={16}/></button></td></tr>; })}</tbody></table></div>
+      <div
+        ref={lotScrollRef}
+        className="overflow-x-auto"
+        onScroll={(event) => {
+          try { window.localStorage.setItem(DCA_LOT_SCROLL_KEY, String(event.currentTarget.scrollLeft)); } catch {}
+        }}
+      >
+        <table className="table-fixed text-sm" style={{ width: Object.values(lotColumnWidths).reduce((sum, width) => sum + width, 0) }}>
+          <colgroup>{lotColumns.map((column) => <col key={column.key} style={{ width: lotColumnWidths[column.key] }} />)}</colgroup>
+          <thead className="bg-white/[.025] text-left text-xs tracking-wide text-zinc-500">
+            <tr>{lotColumns.map((column) => <th key={column.key} className={cn("relative whitespace-nowrap px-4 py-3 font-medium", column.key === "type" && "pl-5", column.key === "actions" && "text-right")}>
+              {column.label}
+              <span onMouseDown={(event) => startColumnResize(event, column.key)} className="absolute inset-y-0 right-0 w-2 cursor-col-resize select-none" aria-hidden="true" />
+            </th>)}</tr>
+          </thead>
+          <tbody>{lots.map((lot, index) => {
+            const shares = toNumber(lot.shares), price = toNumber(lot.price), cost = shares * price;
+            const profit = shares * (toNumber(sellPrice) - price), returnPct = cost ? profit / cost * 100 : 0;
+            return <tr key={`${lot.date}-${index}`} className={cn("border-t border-white/10", lot.future && "bg-emerald-500/[.04]")}>
+              <td className="whitespace-nowrap overflow-hidden text-ellipsis px-5 py-3"><span>{lot.future ? "Future DCA" : "Existing"}</span>{lot.note && <p className="mt-1 truncate text-xs text-zinc-500">{lot.note}</p>}</td>
+              <td className="whitespace-nowrap px-4 py-3">{formatShares(shares)}</td>
+              <td className="whitespace-nowrap px-4 py-3">{fixedMoney(price)}</td>
+              <td className="whitespace-nowrap px-4 py-3">{fixedMoney(cost)}</td>
+              <td className="whitespace-nowrap px-4 py-3">{formatDate(lot.date)}</td>
+              <td className="whitespace-nowrap px-4 py-3">{daysSinceAdded(lot.date)}</td>
+              <td className="whitespace-nowrap px-4 py-3">{signedMoney(profit)}</td>
+              <td className="whitespace-nowrap px-4 py-3">{pct(returnPct)}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-right">
+                <button onClick={() => editLot(index)} aria-label="Edit Purchase Lot" title="Edit Purchase Lot" className="rounded-lg p-2 text-zinc-500 hover:bg-emerald-500/10 hover:text-emerald-400"><Pencil size={16}/></button>
+                <button onClick={() => deleteLot(index)} aria-label="Delete Purchase Lot" title="Delete Purchase Lot" className="rounded-lg p-2 text-zinc-500 hover:bg-rose-500/10 hover:text-rose-400"><Trash2 size={16}/></button>
+              </td>
+            </tr>;
+          })}</tbody>
+        </table>
+      </div>
     </section>
 
     <div className="grid gap-4 lg:grid-cols-2">
