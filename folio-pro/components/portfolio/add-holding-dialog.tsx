@@ -187,7 +187,7 @@ export function AddHoldingDialog() {
               <Field label="Sell Price"><Input required type="number" min="0.000001" step="any" value={form.tradePrice} onChange={(e) => update("tradePrice", e.target.value)} /></Field>
             </> : form.assetType === "stock" ? <>
               <Field label="Select Position"><select required value={stockSelection} onChange={(e) => selectBuyStock(e.target.value)} className="field-select" autoFocus><option value={NEW_POSITION}>New Position</option>{ownedStocks.map((holding) => <option key={holding.symbol} value={holding.symbol}>{holding.symbol}</option>)}</select></Field>
-              {isNewStock ? <Field label="New Position Ticker"><Input required value={form.symbol} onChange={(e) => update("symbol", e.target.value)} className="uppercase" placeholder="ENTER TICKER" /></Field> : <Field label="Position Status"><div className="flex h-10 items-center rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm dark:border-white/10 dark:bg-white/[.03]"><span className="text-emerald-400">Existing Shares - {matching?.shares ?? 0}</span></div></Field>}
+              {isNewStock ? <Field label="New Position Ticker"><Input required value={form.symbol} onChange={(e) => update("symbol", e.target.value)} className="uppercase" placeholder="Enter Ticker" /></Field> : <Field label="Position Status"><div className="flex h-10 items-center rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm dark:border-white/10 dark:bg-white/[.03]"><span className="text-emerald-400">Existing Shares - {matching?.shares ?? 0}</span></div></Field>}
               {!matching && <Field label="Company Name"><Input required value={form.company} onChange={(e) => update("company", e.target.value)} /></Field>}
               <Field label="Shares"><Input required type="number" min="0.000001" step="any" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /></Field>
               <Field label="Share Price"><Input required type="number" min="0.000001" step="any" value={form.tradePrice} onChange={(e) => update("tradePrice", e.target.value)} /></Field>
@@ -202,7 +202,6 @@ export function AddHoldingDialog() {
               <SectorField value={form.sector} onChange={(value) => update("sector", value)} />
             </>}
 
-            {form.assetType === "option" && form.quantity && form.tradePrice && <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3 text-sm text-blue-200 sm:col-span-2">{form.quantity} contract{Math.abs(Number(form.quantity)) === 1 ? "" : "s"} represent {Math.abs(Number(form.quantity)) * 100} shares. Total position value: ${(Math.abs(Number(form.quantity)) * Number(form.tradePrice) * 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.</div>}
             {error && <p className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-300 sm:col-span-2">{error}</p>}
             <div className="mt-2 flex justify-end gap-3 sm:col-span-2"><Dialog.Close asChild><Button type="button" variant="outline">Cancel</Button></Dialog.Close><Button type="submit">{form.action === "buy" ? (form.assetType === "option" ? "Add Position" : "Complete Purchase") : "Remove Position"}</Button></div>
           </form>
