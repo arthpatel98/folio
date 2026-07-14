@@ -99,7 +99,7 @@ type State = {
   updateHolding: (originalSymbol: string, originalAssetType: AssetType, holding: Holding) => void;
   removeHolding: (symbol: string, assetType: AssetType) => void;
   addTransaction: (transaction: Transaction) => void;
-  executeTrade: (trade: { action: "buy" | "sell"; holding: Holding; quantity: number; price: number }) => { ok: boolean; message?: string };
+  executeTrade: (trade: { action: "buy" | "sell"; holding: Holding; quantity: number; price: number; tradeDate?: string; fees?: number }) => { ok: boolean; message?: string };
   updateStockQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>) => void;
   updateOptionQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>) => void;
 };
@@ -237,7 +237,7 @@ export const usePortfolioStore = create<State>()(
           }, {} as Record<DataPortfolioId, Holding[]>);
           return { holdingsByPortfolio, ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, state.cashByPortfolio) };
         }),
-      executeTrade: ({ action, holding, quantity, price }) => {
+      executeTrade: ({ action, holding, quantity, price, tradeDate, fees = 0 }) => {
         const state = get();
         const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
         const assetType = holding.assetType ?? "stock";
@@ -309,14 +309,14 @@ export const usePortfolioStore = create<State>()(
             quantity,
             price,
             amount: tradeValue,
-            date: new Date().toISOString().slice(0, 10),
-            fees: 0,
+            date: tradeDate || new Date().toISOString().slice(0, 10),
+            fees: Number.isFinite(fees) ? Math.max(0, fees) : 0,
             assetType,
             optionType: holding.optionType,
             optionExpiry: holding.optionExpiry,
             optionStrike: holding.optionStrike,
             optionSymbol: holding.optionSymbol,
-            notes: `${action === "buy" ? "Bought" : "Sold"} from Holdings`,
+            notes: `${action === "buy" ? "Bought" : "Sold"} from Holdings${fees > 0 ? " | Platform Fee" : ""}`,
           };
           const transactionsByPortfolio = { ...latest.transactionsByPortfolio, [target]: [transaction, ...latest.transactionsByPortfolio[target]] };
           return {
@@ -327,7 +327,7 @@ export const usePortfolioStore = create<State>()(
           };
         });
         if (assetType === "stock") {
-          recordStockTrade(target, holding.symbol, action, quantity, price, new Date().toISOString().slice(0, 10));
+          recordStockTrade(target, holding.symbol, action, quantity, price, tradeDate || new Date().toISOString().slice(0, 10));
         }
         return { ok: true };
       },

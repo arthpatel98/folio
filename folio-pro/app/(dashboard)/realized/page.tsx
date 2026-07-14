@@ -248,6 +248,7 @@ function csvCell(value: string | number) {
 
 export default function Page() {
   const activePortfolioId = usePortfolioStore((state) => state.activePortfolioId);
+  const transactionsByPortfolio = usePortfolioStore((state) => state.transactionsByPortfolio);
   const defaultPositionsByPortfolio = useMemo<PositionsByPortfolio>(() => ({
     robinhood: initialPositions,
     "fidelity-401k": initialPositions.filter((item) => item.symbol === "IREN").map((item) => ({ ...item, id: `401k-${item.id}` })),
@@ -320,9 +321,31 @@ export default function Page() {
     if (hasHydrated) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(positionsByPortfolio));
   }, [hasHydrated, positionsByPortfolio]);
 
-  const visiblePositions = useMemo(() => activePortfolioId === "all"
-    ? Object.values(positionsByPortfolio).flat()
-    : positionsByPortfolio[activePortfolioId], [activePortfolioId, positionsByPortfolio]);
+  const visiblePositions = useMemo(() => {
+    const portfolioIds: RealizedPortfolioId[] = activePortfolioId === "all"
+      ? ["robinhood", "fidelity-401k", "fidelity-roth"]
+      : [activePortfolioId];
+    const base = portfolioIds.flatMap((portfolioId) => positionsByPortfolio[portfolioId].map((position) => ({ ...position })));
+    const feeTotals = new Map<string, number>();
+    portfolioIds.forEach((portfolioId) => {
+      transactionsByPortfolio[portfolioId].forEach((transaction) => {
+        const fees = Number(transaction.fees) || 0;
+        if (fees <= 0 || !transaction.symbol || !transaction.notes?.includes("Platform Fee")) return;
+        const type: TradeType = transaction.assetType === "option" ? "option" : "stock";
+        const key = `${transaction.symbol.trim().toUpperCase()}:${type}`;
+        feeTotals.set(key, (feeTotals.get(key) ?? 0) + fees);
+      });
+    });
+    feeTotals.forEach((fees, key) => {
+      const separator = key.lastIndexOf(":");
+      const symbol = key.slice(0, separator);
+      const type = key.slice(separator + 1) as TradeType;
+      const match = base.find((position) => position.symbol === symbol && position.type === type);
+      if (match) match.fees += fees;
+      else base.push(makePosition(symbol + (type === "option" ? " Option" : ""), 0, fees, "", `tracked-fee-${symbol}-${type}`));
+    });
+    return base;
+  }, [activePortfolioId, positionsByPortfolio, transactionsByPortfolio]);
 
   const totals = useMemo(() => ({
     realized: visiblePositions.reduce((sum, item) => sum + item.amount, 0),
