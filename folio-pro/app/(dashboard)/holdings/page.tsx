@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { holdingMetrics, portfolioSummary } from "@/lib/calculations/portfolio";
 import { cn, money } from "@/lib/utils";
 import { buildOptionSymbol } from "@/lib/options";
+import { isUsMarketOpen } from "@/lib/market-hours";
 import { usePortfolioStore } from "@/store/portfolio-store";
 import * as XLSX from "xlsx";
 
@@ -53,6 +54,7 @@ export default function Page() {
     Array.from(new Set(holdings
       .filter((holding) => (holding.assetType ?? "stock") === "stock")
       .map((holding) => holding.symbol.trim().toUpperCase())
+      .filter((symbol) => symbol !== "VSTL")
       .filter(Boolean)))
       .sort(),
   [holdings]);
@@ -67,7 +69,7 @@ export default function Page() {
   const hasRefreshableSymbols = Boolean(stockSymbolsKey || optionSymbolsKey);
 
   const refreshPrices = useCallback(async (silent = false) => {
-    if (!hasRefreshableSymbols || pricesLoading) return;
+    if (!hasRefreshableSymbols || pricesLoading || !isUsMarketOpen()) return;
     if (!silent) setPricesLoading(true);
     setPricesError(null);
 
@@ -114,8 +116,11 @@ export default function Page() {
       if (missingOptionDetails.length) setPricesError(`Use Option Details format like UNHG $25 Call for: ${Array.from(new Set(missingOptionDetails)).join(", ")}`);
       return;
     }
+    if (!isUsMarketOpen()) return;
     refreshPrices(true);
-    const timer = window.setInterval(() => refreshPrices(true), 5 * 60 * 1000);
+    const timer = window.setInterval(() => {
+      if (isUsMarketOpen()) refreshPrices(true);
+    }, 5 * 60 * 1000);
     return () => window.clearInterval(timer);
   }, [stockSymbolsKey, optionSymbolsKey]); // Refresh when holdings change, then every five minutes.
 

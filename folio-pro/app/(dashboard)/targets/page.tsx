@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, CircleDollarSign, Flag, Info, Target, TrendingUp } from "lucide-react";
+import { CalendarDays, CircleDollarSign, Flag, Target, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore } from "@/store/portfolio-store";
@@ -21,6 +21,7 @@ const money2=(v:number)=>v.toLocaleString("en-US",{style:"currency",currency:"US
 const pct=(v:number)=>`${v.toFixed(2)}%`;
 const keyFor=(h:Holding)=>`${h.assetType??"stock"}:${h.symbol}:${h.optionExpiry??""}:${h.optionStrike??""}`;
 function portfolioValue(holdings:Holding[],cash:number){return holdings.reduce((s,h)=>s+h.currentPrice*h.shares*(h.assetType==="option"?100:1),0)+cash;}
+function positionLabel(h:Holding){if(h.assetType!=="option")return h.symbol;const type=h.optionType?`${h.optionType.charAt(0).toUpperCase()}${h.optionType.slice(1).toLowerCase()}`:"Option";const expiry=h.optionExpiry?new Date(`${h.optionExpiry}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):"No Expiry";return `${h.symbol} $${h.optionStrike??0} ${type} · ${expiry}`;}
 
 export default function TargetPlannerPage(){
   const {activeId,active}=useActivePortfolio();
@@ -33,13 +34,14 @@ export default function TargetPlannerPage(){
   const rows=useMemo(()=>isRobinhood?ROBINHOOD_TARGETS.map(([date,target,increase])=>({date,target,increase})):isRoth?ROTH_TARGETS.map(([date,target,increase])=>({date,target,increase})):ROBINHOOD_TARGETS.map(([date,target,increase],i)=>({date,target:target+ROTH_TARGETS[i][1],increase:increase+ROTH_TARGETS[i][2]})),[isRobinhood,isRoth]);
   const [selectedDate,setSelectedDate]=useState<string>(rows[1].date);
   const [scenarios,setScenarios]=useState<Record<string,Scenario>>({});
+  const [cashError,setCashError]=useState<string | null>(null);
   const storageKey=`folio-target-scenarios:${activeId}`;
   useEffect(()=>{const raw=localStorage.getItem(storageKey);setScenarios(raw?JSON.parse(raw):{});setSelectedDate(rows[1].date)},[storageKey,rows]);
   useEffect(()=>{localStorage.setItem(storageKey,JSON.stringify(scenarios))},[storageKey,scenarios]);
   const currentValue=portfolioValue(selectedHoldings,selectedCash);
   const selectedTarget=rows.find(r=>r.date===selectedDate)??rows[0];
   const baseGap=Math.max(0,selectedTarget.target-currentValue);
-  const owned=selectedHoldings.filter(h=>Math.abs(h.shares)>0);
+  const owned=selectedHoldings.filter(h=>Math.abs(h.shares)>0).sort((a,b)=>a.symbol.localeCompare(b.symbol)||positionLabel(a).localeCompare(positionLabel(b)));
   const details=owned.map(h=>{
     const k=keyFor(h); const s=scenarios[k]??{targetPrice:h.currentPrice,additionalQty:0,gapShare:25};
     const multiplier=h.assetType==="option"?100:1;
@@ -61,6 +63,14 @@ export default function TargetPlannerPage(){
   const remainingGap=Math.max(0,selectedTarget.target-projectedValue);
   const totalInvestment=details.reduce((s,d)=>s+d.investment,0);
   const update=(k:string,patch:Partial<Scenario>,h:Holding)=>setScenarios(prev=>{ const base=prev[k] ?? { targetPrice:h.currentPrice, additionalQty:0, gapShare:25 }; return {...prev,[k]:{...base,...patch}}; });
+  const updateAdditionalQty=(detail:typeof details[number],value:number)=>{
+    const nextQty=Math.max(0,Number.isFinite(value)?value:0);
+    const nextInvestment=nextQty*detail.h.currentPrice*detail.multiplier;
+    const otherInvestment=totalInvestment-detail.investment;
+    if(otherInvestment+nextInvestment>selectedCash+0.005){setCashError("Not Enough Cash");return;}
+    setCashError(null);
+    update(detail.k,{additionalQty:nextQty},detail.h);
+  };
 
   return <div className="space-y-6">
     <div><h1 className="text-3xl font-semibold">Target Scenario Builder</h1><p className="mt-1 text-sm text-zinc-500">Enter your own price targets and see how owned stocks and options could change your portfolio by each milestone date.</p></div>
@@ -76,19 +86,18 @@ export default function TargetPlannerPage(){
     <Card className="p-5"><div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><h2 className="font-semibold">1. Select Target Date</h2><p className="mt-1 text-sm text-zinc-500">Choose one of your saved Target Portfolio Values milestones.</p></div><select value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} className="h-11 rounded-xl border border-white/10 bg-zinc-950 px-4 text-sm outline-none">{rows.map(r=><option key={r.date} value={r.date}>{r.date} · {money(r.target)}</option>)}</select></div><div className="mt-5 grid gap-3 sm:grid-cols-3"><Mini label="Starting Value" value={money2(currentValue)}/><Mini label="Profit Needed" value={money(baseGap)}/><Mini label="Selected Portfolio" value={active.name}/></div></Card>
 
     <Card className="overflow-hidden">
-      <div className="border-b border-white/10 p-5"><h2 className="font-semibold">2. Build Your Price-Target Scenarios</h2><p className="mt-1 text-sm text-zinc-500">Only positions already owned in {active.name} are available. Values save automatically.</p></div>
-      <div className="overflow-x-auto"><table className="w-full min-w-[1320px] text-sm"><thead className="bg-white/[.035] text-left text-xs uppercase tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Position</th><th className="px-4 py-3">Owned</th><th className="px-4 py-3">Current Price</th><th className="px-4 py-3">Your Target Price</th><th className="px-4 py-3">Expected Return</th><th className="px-4 py-3">Buy More</th><th className="px-4 py-3">New Investment</th><th className="px-4 py-3">Profit At Target</th><th className="px-4 py-3">Target Gap Covered</th><th className="px-4 py-3">Target Date</th></tr></thead><tbody>{details.map(d=><tr key={d.k} className="border-t border-white/[.06]"><td className="px-4 py-3"><div className="font-medium">{d.h.symbol}</div><div className="text-xs text-zinc-600">{d.h.assetType==="option"?`${d.h.optionExpiry??"Option"} · $${d.h.optionStrike??0}`:d.h.company}</div></td><td className="px-4 py-3">{d.ownedQty.toLocaleString()} {d.h.assetType==="option"?"contracts":"shares"}</td><td className="px-4 py-3">{money2(d.h.currentPrice)}</td><td className="px-4 py-3"><input type="number" min="0" step="0.01" value={d.s.targetPrice} onChange={e=>update(d.k,{targetPrice:Number(e.target.value)},d.h)} className="h-9 w-28 rounded-lg border border-blue-400/20 bg-blue-400/[.06] px-3 text-blue-200 outline-none"/></td><td className={cn("px-4 py-3 font-medium",d.expectedReturn>=0?"text-emerald-400":"text-red-400")}>{d.expectedReturn>=0?"+":""}{pct(d.expectedReturn)}</td><td className="px-4 py-3"><input type="number" min="0" step="1" value={d.s.additionalQty} onChange={e=>update(d.k,{additionalQty:Number(e.target.value)},d.h)} className="h-9 w-24 rounded-lg border border-white/10 bg-zinc-950 px-3 outline-none"/></td><td className="px-4 py-3">{money2(d.investment)}</td><td className={cn("px-4 py-3 font-medium",d.totalProfit>=0?"text-emerald-400":"text-red-400")}>{d.totalProfit>=0?"+":""}{money2(d.totalProfit)}</td><td className="px-4 py-3">{pct(d.gapCovered)}</td><td className="px-4 py-3">{selectedDate}</td></tr>)}</tbody></table></div>
+      <div className="border-b border-white/10 p-5"><h2 className="font-semibold">2. Build Your Price-Target Scenarios</h2><p className="mt-1 text-sm text-zinc-500">Only positions already owned in {active.name} are available. Values save automatically.</p><p className="mt-2 text-xs text-zinc-500">Available Cash: <span className="font-medium text-white">{money2(selectedCash)}</span></p>{cashError&&<p className="mt-2 text-sm font-medium text-red-400">{cashError}</p>}</div>
+      <div className="overflow-x-auto"><table className="w-full min-w-[1320px] text-sm"><thead className="bg-white/[.035] text-left text-xs uppercase tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Position</th><th className="px-4 py-3">Owned</th><th className="px-4 py-3">Current Price</th><th className="px-4 py-3">Your Target Price</th><th className="px-4 py-3">Expected Return</th><th className="px-4 py-3">Buy More</th><th className="px-4 py-3">New Investment</th><th className="px-4 py-3">Profit At Target</th><th className="px-4 py-3">Target Gap Covered</th><th className="px-4 py-3">Target Date</th></tr></thead><tbody>{details.map(d=><tr key={d.k} className="border-t border-white/[.06]"><td className="px-4 py-3"><div className="font-medium">{positionLabel(d.h)}</div></td><td className="px-4 py-3">{d.ownedQty.toLocaleString()} {d.h.assetType==="option"?"contracts":"shares"}</td><td className="px-4 py-3">{money2(d.h.currentPrice)}</td><td className="px-4 py-3"><input type="number" min="0" step="0.01" value={d.s.targetPrice} onChange={e=>update(d.k,{targetPrice:Number(e.target.value)},d.h)} className="h-9 w-28 rounded-lg border border-blue-400/20 bg-blue-400/[.06] px-3 text-blue-200 outline-none"/></td><td className={cn("px-4 py-3 font-medium",d.expectedReturn>=0?"text-emerald-400":"text-red-400")}>{d.expectedReturn>=0?"+":""}{pct(d.expectedReturn)}</td><td className="px-4 py-3"><input type="number" min="0" step="1" value={d.s.additionalQty} onChange={e=>updateAdditionalQty(d,Number(e.target.value))} className="h-9 w-24 rounded-lg border border-white/10 bg-zinc-950 px-3 outline-none"/></td><td className="px-4 py-3">{money2(d.investment)}</td><td className={cn("px-4 py-3 font-medium",d.totalProfit>=0?"text-emerald-400":"text-red-400")}>{d.totalProfit>=0?"+":""}{money2(d.totalProfit)}</td><td className="px-4 py-3">{pct(d.gapCovered)}</td><td className="px-4 py-3">{selectedDate}</td></tr>)}</tbody></table></div>
     </Card>
 
     <div className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">
-      <Card className="overflow-hidden"><div className="border-b border-white/10 p-5"><h2 className="font-semibold">3. Work Backward From The Target Gap</h2><p className="mt-1 text-sm text-zinc-500">Choose how much of the gap each idea should cover. The calculator estimates the total and additional quantity required.</p></div><div className="divide-y divide-white/[.06]">{details.map(d=><div key={d.k} className="grid gap-4 p-4 md:grid-cols-[1fr_1.2fr_.8fr_.8fr] md:items-center"><div><div className="font-medium">{d.h.symbol}</div><div className="text-xs text-zinc-500">Target {money2(d.s.targetPrice)}</div></div><div><div className="mb-2 flex justify-between text-xs"><span>Gap Share</span><span className="text-blue-300">{d.s.gapShare}%</span></div><input type="range" min="5" max="100" step="5" value={d.s.gapShare} onChange={e=>update(d.k,{gapShare:Number(e.target.value)},d.h)} className="w-full"/></div><div><div className="text-xs text-zinc-500">Total Needed</div><div className="font-semibold">{d.qtyForGoal.toLocaleString()} {d.h.assetType==="option"?"contracts":"shares"}</div></div><div><div className="text-xs text-zinc-500">Add From Here</div><div className="font-semibold text-blue-300">{d.extraForGoal.toLocaleString()}</div></div></div>)}</div></Card>
+      <Card className="overflow-hidden"><div className="border-b border-white/10 p-5"><h2 className="font-semibold">3. Work Backward From The Target Gap</h2><p className="mt-1 text-sm text-zinc-500">Choose how much of the gap each idea should cover. The calculator estimates the total and additional quantity required.</p></div><div className="divide-y divide-white/[.06]">{details.map(d=><div key={d.k} className="grid gap-4 p-4 md:grid-cols-[1fr_1.2fr_.8fr_.8fr] md:items-center"><div><div className="font-medium">{positionLabel(d.h)}</div><div className="text-xs text-zinc-500">Target {money2(d.s.targetPrice)}</div></div><div><div className="mb-2 flex justify-between text-xs"><span>Gap Share</span><span className="text-blue-300">{d.s.gapShare}%</span></div><input type="range" min="5" max="100" step="5" value={d.s.gapShare} onChange={e=>update(d.k,{gapShare:Number(e.target.value)},d.h)} className="w-full"/></div><div><div className="text-xs text-zinc-500">Total Needed</div><div className="font-semibold">{d.qtyForGoal.toLocaleString()} {d.h.assetType==="option"?"contracts":"shares"}</div></div><div><div className="text-xs text-zinc-500">Add From Here</div><div className="font-semibold text-blue-300">{d.extraForGoal.toLocaleString()}</div></div></div>)}</div></Card>
 
       <Card className="p-5"><h2 className="font-semibold">Scenario Summary</h2><div className="mt-4 space-y-3"><Summary label="Target Date" value={selectedDate}/><Summary label="Target Portfolio Value" value={money(selectedTarget.target)}/><Summary label="Current Portfolio Value" value={money2(currentValue)}/><Summary label="New Capital Required" value={money2(totalInvestment)}/><Summary label="Potential Profit" value={`${scenarioProfit>=0?"+":""}${money2(scenarioProfit)}`} good={scenarioProfit>=0}/><Summary label="Projected Portfolio Value" value={money2(projectedValue)} good={projectedValue>=selectedTarget.target}/><Summary label="Remaining Gap" value={money2(remainingGap)} good={remainingGap===0}/></div><div className="mt-5 h-2 overflow-hidden rounded-full bg-white/[.07]"><div className="h-full rounded-full bg-emerald-400" style={{width:`${Math.min(100,baseGap?Math.max(0,scenarioProfit/baseGap*100):100)}%`}}/></div><p className="mt-3 text-sm text-zinc-500">Your scenarios cover <span className="font-medium text-white">{baseGap?pct(Math.max(0,scenarioProfit/baseGap*100)):"100.00%"}</span> of the selected target gap.</p></Card>
     </div>
 
     {details[0]&&<Sensitivity detail={details[0]} targetDate={selectedDate} currentValue={currentValue} targetValue={selectedTarget.target}/>} 
 
-    <div className="flex gap-3 rounded-xl border border-amber-400/15 bg-amber-400/[.05] p-4 text-sm text-zinc-400"><Info className="shrink-0 text-amber-400" size={18}/><p>This is a user-driven planning simulator. It calculates outcomes from the price targets and quantities you enter; it does not predict prices or guarantee returns. Options can expire worthless, and taxes, spreads, liquidity, and timing can materially change results.</p></div>
   </div>;
 }
 
