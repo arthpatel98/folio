@@ -199,7 +199,7 @@ export const usePortfolioStore = create<State>()(
           const portfolioIds: DataPortfolioId[] = ["robinhood", "fidelity-401k", "fidelity-roth"];
           const holdingsByPortfolio = portfolioIds.reduce<Record<DataPortfolioId, Holding[]>>((result, portfolioId) => {
             result[portfolioId] = state.holdingsByPortfolio[portfolioId].map((holding) => {
-              if ((holding.assetType ?? "stock") !== "stock") return holding;
+              if ((holding.assetType ?? "stock") !== "stock" || holding.symbol.trim().toUpperCase() === "VSTL") return holding;
               const quote = quotes[holding.symbol.trim().toUpperCase()];
               if (!quote || !Number.isFinite(quote.currentPrice) || quote.currentPrice <= 0) return holding;
               return {
@@ -257,6 +257,17 @@ export const usePortfolioStore = create<State>()(
 
         set((latest) => {
           const existing = latest.holdingsByPortfolio[target].find((item) => holdingKey(item.symbol, item.assetType ?? "stock") === key);
+          const oldQuantityForRealized = existing?.shares ?? 0;
+          const closesStock = assetType === "stock" && action === "sell";
+          const closesOption = assetType === "option" && oldQuantityForRealized !== 0 && Math.sign(oldQuantityForRealized) !== Math.sign(signedDelta);
+          const closedQuantity = closesStock ? Math.min(quantity, Math.abs(oldQuantityForRealized)) : closesOption ? Math.min(Math.abs(signedDelta), Math.abs(oldQuantityForRealized)) : 0;
+          const realizedCostBasis = closedQuantity * (existing?.averageCost ?? holding.averageCost) * multiplier;
+          const realizedProceeds = closedQuantity * price * multiplier;
+          const realizedGain = closedQuantity > 0
+            ? (assetType === "option"
+                ? (price - (existing?.averageCost ?? holding.averageCost)) * closedQuantity * multiplier * Math.sign(oldQuantityForRealized)
+                : realizedProceeds - realizedCostBasis) - fees
+            : undefined;
           let nextHoldings: Holding[];
           if (assetType === "option") {
             const oldQuantity = existing?.shares ?? 0;
@@ -317,6 +328,9 @@ export const usePortfolioStore = create<State>()(
             optionStrike: holding.optionStrike,
             optionSymbol: holding.optionSymbol,
             notes: `${action === "buy" ? "Bought" : "Sold"} from Holdings${fees > 0 ? " | Platform Fee" : ""}`,
+            realizedGain,
+            realizedCostBasis: closedQuantity > 0 ? realizedCostBasis : undefined,
+            realizedProceeds: closedQuantity > 0 ? realizedProceeds : undefined,
           };
           const transactionsByPortfolio = { ...latest.transactionsByPortfolio, [target]: [transaction, ...latest.transactionsByPortfolio[target]] };
           return {

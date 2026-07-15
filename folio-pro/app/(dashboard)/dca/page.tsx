@@ -7,7 +7,7 @@ import { DcaLot, DcaPosition, NumericValue } from "@/lib/dca-data";
 import { DCA_SELECTED_POSITION_KEY, DCA_UPDATED_EVENT, loadDcaPositions, saveDcaPositions, upsertDcaPosition } from "@/lib/dca-storage";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore } from "@/store/portfolio-store";
-import { portfolioSummary } from "@/lib/calculations/portfolio";
+import { holdingMetrics, portfolioSummary } from "@/lib/calculations/portfolio";
 
 const toNumber = (value: NumericValue | string) => value === "" || !Number.isFinite(Number(value)) ? 0 : Number(value);
 const parseNumericInput = (value: string): NumericValue => value === "" ? "" : Number(value);
@@ -87,24 +87,27 @@ export default function DcaPage() {
   const [targetReturn, setTargetReturn] = useState(25);
   const [sharesToSell, setSharesToSell] = useState(0);
 
-  const mergeWithHeldStocks = (savedPositions: DcaPosition[]) => {
+  const mergeWithHeldPositions = (savedPositions: DcaPosition[]) => {
     const saved = savedPositions.filter((position) => activeId === "all" || position.portfolioId === activeId);
     const savedKeys = new Set(saved.map((position) => `${position.portfolioId}:${position.symbol.trim().toUpperCase()}`));
     const portfolioIds = activeId === "all" ? (["robinhood", "fidelity-401k", "fidelity-roth"] as const) : [activeId];
     const placeholders: DcaPosition[] = [];
     portfolioIds.forEach((portfolioId) => {
       holdingsByPortfolio[portfolioId]
-        .filter((holding) => (holding.assetType ?? "stock") === "stock" && holding.shares > 0)
+        .filter((holding) => holding.shares !== 0)
         .forEach((holding) => {
           const symbol = holding.symbol.trim().toUpperCase();
+          const optionLabel = holding.assetType === "option"
+            ? `${symbol} ${holding.optionStrike !== undefined ? `$${holding.optionStrike}` : ""} ${holding.optionType?.includes("put") ? "Put" : "Call"}${holding.optionExpiry ? ` · ${formatDate(holding.optionExpiry)}` : ""}`.replace(/\s+/g, " ").trim()
+            : symbol;
           const key = `${portfolioId}:${symbol}`;
-          if (!savedKeys.has(key)) placeholders.push({ id: `PORTFOLIO-${portfolioId}-${symbol}`, symbol, label: symbol, sellPrice: "", lots: [], custom: true, portfolioId });
+          if (!savedKeys.has(key) || holding.assetType === "option") placeholders.push({ id: `PORTFOLIO-${portfolioId}-${holding.assetType ?? "stock"}-${holding.optionSymbol ?? optionLabel}`, symbol, label: optionLabel, sellPrice: "", lots: [], custom: true, portfolioId });
         });
     });
     return [...saved, ...placeholders].sort((a, b) => (a.label ?? a.symbol).localeCompare(b.label ?? b.symbol));
   };
 
-  const positions = useMemo(() => mergeWithHeldStocks(allPositions), [allPositions, activeId, holdingsByPortfolio]);
+  const positions = useMemo(() => mergeWithHeldPositions(allPositions), [allPositions, activeId, holdingsByPortfolio]);
 
   const readSavedSelection = () => {
     try {
@@ -132,7 +135,7 @@ export default function DcaPage() {
   const loadAll = (preferredId?: string) => {
     const next = loadDcaPositions();
     setAllPositions(next);
-    const visible = mergeWithHeldStocks(next);
+    const visible = mergeWithHeldPositions(next);
     const wanted = preferredId || readSavedSelection();
     const selected = visible.find((position) => position.id === wanted) ?? visible[0];
     applyPosition(selected);
@@ -181,6 +184,20 @@ export default function DcaPage() {
   };
 
   const selectedPosition = positions.find((position) => position.id === positionId);
+  const selectedHolding = selectedPosition ? activeHoldings.find((holding) => {
+    if (holding.symbol.trim().toUpperCase() !== selectedPosition.symbol.trim().toUpperCase()) return false;
+    if (!selectedPosition.id.includes("-option-")) return (holding.assetType ?? "stock") === "stock";
+    const label = selectedPosition.label ?? "";
+    return holding.assetType === "option" && (!holding.optionStrike || label.includes(`$${holding.optionStrike}`)) && (!holding.optionExpiry || label.includes(formatDate(holding.optionExpiry)));
+  }) : undefined;
+  const isOption = selectedHolding?.assetType === "option";
+  const optionMetrics = selectedHolding ? holdingMetrics(selectedHolding) : null;
+  const optionContracts = Math.abs(selectedHolding?.shares ?? 0);
+  const optionDirection = Math.sign(selectedHolding?.shares ?? 0) || 1;
+  const optionAverage = selectedHolding?.averageCost ?? 0;
+  const optionTargetPrice = toNumber(sellPrice) || selectedHolding?.currentPrice || 0;
+  const optionPotentialProfit = isOption ? (optionTargetPrice - optionAverage) * optionContracts * 100 * optionDirection : 0;
+  const optionPotentialPct = optionAverage && optionContracts ? optionPotentialProfit / (optionAverage * optionContracts * 100) * 100 : 0;
   const load = (id: string) => { applyPosition(positions.find((position) => position.id === id)); setSavedMessage(""); };
 
   useEffect(() => {
@@ -216,8 +233,14 @@ export default function DcaPage() {
   }, [lots, sellPrice]);
 
   const targetPrice = toNumber(sellPrice);
-  const requiredSellingPrice = totals.avg * (1 + targetReturn / 100);
-  const targetPotentialProfit = totals.shares * (requiredSellingPrice - totals.avg);
+  const baseAverage = isOption ? optionAverage : totals.avg;
+  const baseQuantity = isOption ? optionContracts * 100 : totals.shares;
+  const requiredSellingPrice = isOption && optionDirection < 0
+    ? Math.max(0, baseAverage * (1 - targetReturn / 100))
+    : baseAverage * (1 + targetReturn / 100);
+  const targetPotentialProfit = isOption
+    ? (requiredSellingPrice - baseAverage) * baseQuantity * optionDirection
+    : totals.shares * (requiredSellingPrice - totals.avg);
   const safeSharesToSell = Math.min(Math.max(sharesToSell, 0), totals.shares);
   const fifoRows = useMemo(() => {
     let remaining = safeSharesToSell;
@@ -237,12 +260,13 @@ export default function DcaPage() {
   const remainingShares = Math.max(totals.shares - safeSharesToSell, 0);
   const remainingCostBasis = Math.max(totals.amount - consumedCostBasis, 0);
   const remainingAverageCost = remainingShares ? remainingCostBasis / remainingShares : 0;
-  const rangeFloor = Math.max(0, totals.avg * 0.4);
-  const rangeCeiling = Math.max(rangeFloor, totals.avg * 1.6);
-  const sliderValue = sellPrice === "" ? totals.avg : Math.min(Math.max(targetPrice, rangeFloor), rangeCeiling);
+  const rangeFloor = Math.max(0, baseAverage * 0.4);
+  const rangeCeiling = Math.max(rangeFloor, baseAverage * 1.6);
+  const sliderValue = sellPrice === "" ? baseAverage : Math.min(Math.max(targetPrice, rangeFloor), rangeCeiling);
   const portfolio = useMemo(() => portfolioSummary(activeHoldings, activeCash), [activeHoldings, activeCash]);
-  const projectedPortfolio = portfolio.value + totals.profit;
-  const portfolioImpact = portfolio.value ? totals.profit / portfolio.value * 100 : 0;
+  const selectedProfit = isOption ? optionPotentialProfit : totals.profit;
+  const projectedPortfolio = portfolio.value + selectedProfit;
+  const portfolioImpact = portfolio.value ? selectedProfit / portfolio.value * 100 : 0;
 
   const saveLot = () => {
     const shares = toNumber(lotDraft.shares), price = toNumber(lotDraft.price), cost = toNumber(lotDraft.cost);
@@ -307,7 +331,7 @@ export default function DcaPage() {
     const next = loadDcaPositions().filter((position) => position.id !== selectedPosition.id);
     saveDcaPositions(next);
     setAllPositions(next);
-    const visible = mergeWithHeldStocks(next);
+    const visible = mergeWithHeldPositions(next);
     applyPosition(visible[0]);
     setSavedMessage("Position Removed");
     window.setTimeout(() => setSavedMessage(""), 1800);
@@ -315,7 +339,7 @@ export default function DcaPage() {
 
   return <div className="space-y-5">
     <div>
-      <h1 className="text-3xl font-semibold tracking-tight">DCA Calculator</h1><p className="mt-1 text-sm text-zinc-500">Track Existing Purchase Lots And Test How A Future Purchase Changes Your Average Cost And Potential Return.</p>
+      <h1 className="text-3xl font-semibold tracking-tight">Position Simulator</h1><p className="mt-1 text-sm text-zinc-500">Simulate Potential Prices, Returns, And Portfolio Impact For Your Stock And Option Positions.</p>
     </div>
 
     {showAddPosition && <section className="rounded-2xl border border-white/10 bg-zinc-950/50 p-5">
@@ -334,15 +358,29 @@ export default function DcaPage() {
       <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
         <div><label className="mb-2 block text-sm font-medium text-zinc-300">Position</label><select value={positionId} onChange={(event) => load(event.target.value)} className="h-12 w-full rounded-xl border border-white/10 bg-zinc-950/70 px-4 text-sm outline-none">{positions.map((position) => <option key={position.id} value={position.id}>{position.label ?? position.symbol}</option>)}</select></div>
         <div><label className="mb-2 block text-sm font-medium text-zinc-300">Potential Sell Price</label><div className="relative"><span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-zinc-500">$</span><input type="text" inputMode="decimal" value={sellPriceFocused ? String(sellPrice) : (sellPrice === "" ? "" : Number(sellPrice).toFixed(2))} onFocus={() => setSellPriceFocused(true)} onChange={(event) => { const value = event.target.value; if (/^\d*(?:\.\d{0,2})?$/.test(value)) setSellPrice(value); }} onBlur={() => { const normalized = sellPrice === "" ? "" : Number(Number(sellPrice).toFixed(2)); setSellPriceFocused(false); setSellPrice(normalized === "" ? "" : normalized.toFixed(2)); if (selectedPosition) upsertDcaPosition({ ...selectedPosition, sellPrice: normalized, lots: sortLots(lots) }); }} className="h-12 w-full rounded-xl border border-white/10 bg-black/15 pl-8 pr-4 text-lg font-semibold outline-none"/></div></div>
-        <div className="flex gap-2"><button onClick={() => setShowAddPosition(true)} aria-label="Add Position" title="Add Position" className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-400 text-zinc-950 hover:bg-emerald-300"><Plus size={19}/></button><button onClick={removeSelectedPosition} disabled={!selectedPosition || activeId === "all"} className="inline-flex h-12 items-center justify-center rounded-xl border border-rose-500/30 px-4 text-sm font-semibold text-rose-400 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-40">Remove</button></div>
+        <div className="flex gap-2"><button onClick={() => setShowAddPosition(true)} aria-label="Add Position" title="Add Position" className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-400 text-zinc-950 hover:bg-emerald-300"><Plus size={19}/></button><button onClick={removeSelectedPosition} disabled={!selectedPosition || activeId === "all"} aria-label="Remove Position" title="Remove Position" className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-40"><Trash2 size={18}/></button></div>
       </div>
       {savedMessage && <p className="mt-3 text-sm text-emerald-400">{savedMessage}</p>}
     </section>
 
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-      {[ ["Total Investment", totals.amount ? money(totals.amount) : "—"], ["Total Shares", totals.shares ? formatShares(totals.shares) : "—"], ["Average Price", totals.avg ? money(totals.avg) : "—"], ["Average Days Held", totals.avgDaysHeld ? `${totals.avgDaysHeld.toLocaleString()} Days` : "—"], ["Potential Return", totals.amount ? signedMoney(totals.profit) : "—"], ["Potential Return %", totals.amount ? pct(totals.roi) : "—"] ].map(([label, value], index) => <div key={label} className={cn("rounded-2xl border border-white/10 bg-zinc-950/35 p-5", index >= 4 && (totals.profit >= 0 ? "border-emerald-500/35 bg-emerald-500/[.06]" : "border-rose-500/35 bg-rose-500/[.06]"))}><p className="text-sm text-zinc-500">{label}</p><p className="mt-3 text-2xl font-semibold">{value}</p></div>)}
-    </div>
+    {isOption && selectedHolding && optionMetrics ? (
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        {[
+          ["Contracts", formatShares(optionContracts)],
+          ["Average Premium", money(optionAverage)],
+          ["Current Premium", money(selectedHolding.currentPrice)],
+          ["Market Value", money(optionMetrics.marketValue)],
+          ["Potential P/L", signedMoney(optionPotentialProfit)],
+          ["Potential P/L %", pct(optionPotentialPct)],
+        ].map(([label, value], index) => <div key={label} className={cn("rounded-2xl border border-white/10 bg-zinc-950/35 p-5", index >= 4 && (optionPotentialProfit >= 0 ? "border-emerald-500/35 bg-emerald-500/[.06]" : "border-rose-500/35 bg-rose-500/[.06]"))}><p className="text-sm text-zinc-500">{label}</p><p className="mt-3 text-2xl font-semibold">{value}</p></div>)}
+      </div>
+    ) : (
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+        {[ ["Total Investment", totals.amount ? money(totals.amount) : "—"], ["Total Shares", totals.shares ? formatShares(totals.shares) : "—"], ["Average Price", totals.avg ? money(totals.avg) : "—"], ["Average Days Held", totals.avgDaysHeld ? `${totals.avgDaysHeld.toLocaleString()} Days` : "—"], ["Potential Return", totals.amount ? signedMoney(totals.profit) : "—"], ["Potential Return %", totals.amount ? pct(totals.roi) : "—"] ].map(([label, value], index) => <div key={label} className={cn("rounded-2xl border border-white/10 bg-zinc-950/35 p-5", index >= 4 && (totals.profit >= 0 ? "border-emerald-500/35 bg-emerald-500/[.06]" : "border-rose-500/35 bg-rose-500/[.06]"))}><p className="text-sm text-zinc-500">{label}</p><p className="mt-3 text-2xl font-semibold">{value}</p></div>)}
+      </div>
+    )}
 
+    {!isOption && <>
     <section className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/35">
       <div className="flex flex-col gap-3 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="font-semibold">Purchase Lots</h2><p className="mt-1 text-sm text-zinc-500">Edit Existing Or Future Purchase Lots. Holdings Purchases Are Added Automatically.</p></div><button onClick={() => { setEditingLotIndex(null); setNewLotType("existing"); setShowLotForm("existing"); setLotDraft(emptyDraft(false)); }} aria-label="Add Purchase" title="Add Purchase" className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400 text-zinc-950 hover:bg-emerald-300"><Plus size={18}/></button></div>
       {showLotForm && <div className="border-b border-white/10 p-5">
@@ -392,12 +430,13 @@ export default function DcaPage() {
         </table>
       </div>
     </section>
+    </>}
 
     <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5">
       <h2 className="flex items-center gap-2 font-semibold">Price Range Simulator <InfoTip text="Move the slider from 60% below to 60% above average cost to test different potential selling prices." /></h2>
-      <div className="mt-6 grid grid-cols-3 text-sm"><div><p className="font-semibold text-rose-400">{money(rangeFloor)}</p><p className="mt-1 text-xs text-zinc-500">-60.00%</p></div><div className="text-center"><p className="font-semibold">{money(totals.avg)}</p><p className="mt-1 text-xs text-zinc-500">Average Cost</p></div><div className="text-right"><p className="font-semibold text-emerald-400">{money(rangeCeiling)}</p><p className="mt-1 text-xs text-zinc-500">+60.00%</p></div></div>
+      <div className="mt-6 grid grid-cols-3 text-sm"><div><p className="font-semibold text-rose-400">{money(rangeFloor)}</p><p className="mt-1 text-xs text-zinc-500">-60.00%</p></div><div className="text-center"><p className="font-semibold">{money(baseAverage)}</p><p className="mt-1 text-xs text-zinc-500">{isOption ? "Average Premium" : "Average Cost"}</p></div><div className="text-right"><p className="font-semibold text-emerald-400">{money(rangeCeiling)}</p><p className="mt-1 text-xs text-zinc-500">+60.00%</p></div></div>
       <input aria-label="Potential selling price" type="range" min={rangeFloor} max={rangeCeiling} step={Math.max((rangeCeiling-rangeFloor)/300,0.01)} value={sliderValue} onChange={(event) => setSellPrice(Number(event.target.value).toFixed(2))} className="mt-5 w-full accent-emerald-400"/>
-      <p className="mt-3 text-center text-sm text-emerald-400">Potential Sell Price: {money(sellPrice === "" ? totals.avg : targetPrice)}</p>
+      <p className="mt-3 text-center text-sm text-emerald-400">Potential Sell Price: {money(sellPrice === "" ? baseAverage : targetPrice)}</p>
     </section>
 
     <div className="grid gap-4 xl:grid-cols-3">
@@ -406,22 +445,24 @@ export default function DcaPage() {
         <label className="mt-4 block text-sm text-zinc-400">Target Return (%)</label><div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={targetReturn} type="number" step="any" onChange={(e)=>setTargetReturn(toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span>%</span></div>
         <div className="mt-4 rounded-xl border border-emerald-500/35 bg-emerald-500/[.07] p-5 text-center"><p className="text-sm text-zinc-300">Required Selling Price</p><p className="mt-2 text-3xl font-semibold text-emerald-400">{money(requiredSellingPrice)}</p><p className="mt-2 text-sm text-emerald-400">Potential Return: {signedMoney(targetPotentialProfit)} ({targetReturn.toFixed(2)}%)</p></div>
       </section>
-      <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5">
+      {!isOption && <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5">
         <h2 className="flex items-center gap-2 font-semibold">Partial Sale Calculator <InfoTip text="Uses FIFO purchase lots, selling the oldest available shares first." /></h2>
         <label className="mt-4 block text-sm text-zinc-400">Shares To Sell</label><div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={sharesToSell} min={0} max={totals.shares} type="number" step="any" onChange={(e)=>setSharesToSell(toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span className="whitespace-nowrap text-sm text-zinc-400">of {formatShares(totals.shares)}</span></div>
         {fifoRows.length>0 && <div className="mt-5 max-h-44 overflow-auto rounded-xl border border-white/10"><table className="min-w-full text-xs"><thead className="bg-white/[.04] text-zinc-400"><tr><th className="px-3 py-2 text-left">FIFO Lot</th><th className="px-3 py-2 text-right">Shares</th><th className="px-3 py-2 text-right">Buy</th><th className="px-3 py-2 text-right">Return</th></tr></thead><tbody>{fifoRows.map((row,index)=><tr key={`${row.date}-${index}`} className="border-t border-white/10"><td className="px-3 py-2">{row.date}</td><td className="px-3 py-2 text-right">{formatShares(row.shares)}</td><td className="px-3 py-2 text-right">{money(row.buyPrice)}</td><td className={cn("px-3 py-2 text-right",row.returnValue>=0?"text-emerald-400":"text-rose-400")}>{signedMoney(row.returnValue)}</td></tr>)}</tbody></table></div>}
         <div className="mt-5 space-y-3 text-sm"><div className="flex justify-between"><span className="text-zinc-400">Proceeds</span><span>{money(partialProceeds)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Net Realized Return</span><span className={partialProfit>=0?"text-emerald-400":"text-rose-400"}>{signedMoney(partialProfit)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Remaining Shares</span><span>{formatShares(remainingShares)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Remaining Cost Basis</span><span>{money(remainingCostBasis)}</span></div><div className="flex justify-between"><span className="text-zinc-400">New Average Cost</span><span>{money(remainingAverageCost)}</span></div></div>
-      </section>
+      </section>}
+
       <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5">
         <h2 className="flex items-center gap-2 font-semibold">Portfolio Impact <InfoTip text="Estimates how the full-position profit or loss at the potential sell price changes the active portfolio value." /></h2>
-        <p className="mt-4 text-sm text-zinc-400">If You Sell At {money(targetPrice)}</p><div className="mt-5 space-y-3 text-sm"><div className="flex justify-between"><span className="text-zinc-400">Current Portfolio Value</span><span>{money(portfolio.value)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Change In Value</span><span className={totals.profit>=0?"text-emerald-400":"text-rose-400"}>{signedMoney(totals.profit)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Projected Portfolio Value</span><span>{money(projectedPortfolio)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Portfolio Return Impact</span><span className={totals.profit>=0?"text-emerald-400":"text-rose-400"}>{pct(portfolioImpact)}</span></div></div>
-        <div className={cn("mt-5 flex gap-3 rounded-xl border p-4 text-sm",totals.profit>=0?"border-emerald-500/25 bg-emerald-500/[.06] text-emerald-400":"border-rose-500/25 bg-rose-500/[.06] text-rose-400")}><BarChart3 className="shrink-0" size={20}/><p>This Sale Would {totals.profit>=0?"Increase":"Decrease"} Your Portfolio Value By {money(Math.abs(totals.profit))} ({Math.abs(portfolioImpact).toFixed(2)}%).</p></div>
+        <p className="mt-4 text-sm text-zinc-400">If You Sell At {money(targetPrice)}</p><div className="mt-5 space-y-3 text-sm"><div className="flex justify-between"><span className="text-zinc-400">Current Portfolio Value</span><span>{money(portfolio.value)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Change In Value</span><span className={selectedProfit>=0?"text-emerald-400":"text-rose-400"}>{signedMoney(selectedProfit)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Projected Portfolio Value</span><span>{money(projectedPortfolio)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Portfolio Return Impact</span><span className={totals.profit>=0?"text-emerald-400":"text-rose-400"}>{pct(portfolioImpact)}</span></div></div>
+        <div className={cn("mt-5 flex gap-3 rounded-xl border p-4 text-sm",selectedProfit>=0?"border-emerald-500/25 bg-emerald-500/[.06] text-emerald-400":"border-rose-500/25 bg-rose-500/[.06] text-rose-400")}><BarChart3 className="shrink-0" size={20}/><p>This Sale Would {selectedProfit>=0?"Increase":"Decrease"} Your Portfolio Value By {money(Math.abs(selectedProfit))} ({Math.abs(portfolioImpact).toFixed(2)}%).</p></div>
       </section>
     </div>
 
-    <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><h2 className="font-semibold">Before DCA Vs. After DCA</h2><div className="mt-5 grid gap-4 md:grid-cols-2">
+    {!isOption && <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><h2 className="font-semibold">Before DCA Vs. After DCA</h2><div className="mt-5 grid gap-4 md:grid-cols-2">
       <div className="rounded-2xl border border-white/10 bg-black/15 p-5"><p className="text-sm text-zinc-500">Before DCA</p><p className="mt-1 text-xs text-zinc-600">Existing Average Price</p><p className="mt-4 text-3xl font-semibold">{totals.oldAvg ? money(totals.oldAvg) : "—"}</p></div>
       <div className={cn("rounded-2xl border p-5", totals.avg < totals.oldAvg ? "border-emerald-500/30 bg-emerald-500/[.06]" : totals.avg > totals.oldAvg ? "border-rose-500/30 bg-rose-500/[.06]" : "border-white/10 bg-black/15")}><p className="text-sm text-zinc-500">After DCA</p><p className="mt-1 text-xs text-zinc-600">New Average Price</p><div className="mt-4 flex items-end justify-between gap-4"><p className="text-3xl font-semibold">{totals.avg ? money(totals.avg) : "—"}</p>{totals.oldAvg > 0 && totals.avg > 0 && (() => { const difference = totals.avg - totals.oldAvg; const percent = difference / totals.oldAvg * 100; const Icon = difference > 0 ? ArrowUp : difference < 0 ? ArrowDown : ArrowRight; return <div className={cn("flex items-center gap-1.5 text-sm font-semibold", difference < 0 ? "text-emerald-400" : difference > 0 ? "text-rose-400" : "text-zinc-400")}><Icon size={17}/><span>{signedMoney(difference)} · {Math.abs(percent).toFixed(2)}%</span></div>; })()}</div></div>
-    </div></section>
+    </div></section>}
+
   </div>;
 }

@@ -56,6 +56,9 @@ export interface Transaction {
   optionExpiry?: string;
   optionStrike?: number;
   optionSymbol?: string;
+  realizedGain?: number;
+  realizedCostBasis?: number;
+  realizedProceeds?: number;
 }
 
 export interface PerformancePoint {

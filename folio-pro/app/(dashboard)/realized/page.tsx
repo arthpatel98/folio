@@ -25,6 +25,12 @@ type RealizedPosition = {
   dividendAmount: number;
   dividendNraWithholding: number;
   lastDividendDate: string;
+  quantity?: number;
+  sellPrice?: number;
+  costBasis?: number;
+  proceeds?: number;
+  optionDetails?: string;
+  sourceTransaction?: boolean;
 };
 
 type ImportedRow = Record<string, unknown>;
@@ -41,6 +47,12 @@ type PositionGroup = {
   dividendAmount: number;
   dividendNraWithholding: number;
   lastDividendDate: string;
+  quantity?: number;
+  sellPrice?: number;
+  costBasis?: number;
+  proceeds?: number;
+  optionDetails?: string;
+  sourceTransaction?: boolean;
 };
 
 type SortKey = "symbol" | "mix" | "amount" | "fees" | "latestDate" | "patNeeded" | "dividendAmount" | "dividendNraWithholding" | "lastDividendDate";
@@ -326,11 +338,29 @@ export default function Page() {
       ? ["robinhood", "fidelity-401k", "fidelity-roth"]
       : [activePortfolioId];
     const base = portfolioIds.flatMap((portfolioId) => positionsByPortfolio[portfolioId].map((position) => ({ ...position })));
+    portfolioIds.forEach((portfolioId) => {
+      transactionsByPortfolio[portfolioId].forEach((transaction) => {
+        if (transaction.realizedGain === undefined || !transaction.symbol) return;
+        const optionDetails = transaction.assetType === "option"
+          ? `${transaction.symbol.toUpperCase()} ${transaction.optionStrike !== undefined ? `$${transaction.optionStrike}` : ""} ${transaction.optionType?.includes("put") ? "Put" : "Call"}${transaction.optionExpiry ? ` · ${normalizeDate(transaction.optionExpiry)}` : ""}`.replace(/\s+/g, " ").trim()
+          : undefined;
+        base.push({
+          ...makePosition(transaction.symbol + (transaction.assetType === "option" ? " Option" : ""), transaction.realizedGain, Number(transaction.fees) || 0, normalizeDate(transaction.date), `sale-${portfolioId}-${transaction.id}`),
+          quantity: Math.abs(Number(transaction.quantity) || 0),
+          sellPrice: Number(transaction.price) || 0,
+          costBasis: transaction.realizedCostBasis,
+          proceeds: transaction.realizedProceeds,
+          optionDetails,
+          sourceTransaction: true,
+          comment: optionDetails ?? "Sold From Holdings",
+        });
+      });
+    });
     const feeTotals = new Map<string, number>();
     portfolioIds.forEach((portfolioId) => {
       transactionsByPortfolio[portfolioId].forEach((transaction) => {
         const fees = Number(transaction.fees) || 0;
-        if (fees <= 0 || !transaction.symbol || !transaction.notes?.includes("Platform Fee")) return;
+        if (fees <= 0 || transaction.realizedGain !== undefined || !transaction.symbol || !transaction.notes?.includes("Platform Fee")) return;
         const type: TradeType = transaction.assetType === "option" ? "option" : "stock";
         const key = `${transaction.symbol.trim().toUpperCase()}:${type}`;
         feeTotals.set(key, (feeTotals.get(key) ?? 0) + fees);
@@ -631,13 +661,13 @@ export default function Page() {
                     </tr>
                     {expanded && (
                       <tr className="border-b bg-zinc-500/[0.035]">
-                        <td colSpan={11} className="p-0">
+                        <td colSpan={15} className="p-0">
                           <div className="m-3 overflow-hidden rounded-lg border border-zinc-500/15">
                             <table className="w-full text-center text-xs">
                               <thead className="bg-zinc-500/5 uppercase tracking-wide text-zinc-500">
                                 <tr>
                                   <th className="px-3 py-3">Select</th><th className="px-3 py-3">Type</th><th className="px-3 py-3">Realized P/L</th><th className="px-3 py-3">Fees</th>
-                                  <th className="px-3 py-3">Sell date</th><th className="px-3 py-3">PAT</th><th className="px-3 py-3">Loss</th>
+                                  <th className="px-3 py-3">Sell date</th><th className="px-3 py-3">Quantity</th><th className="px-3 py-3">Sell Price</th><th className="px-3 py-3">Cost Basis</th><th className="px-3 py-3">Proceeds</th><th className="px-3 py-3">PAT</th><th className="px-3 py-3">Loss</th>
                                   <th className="px-3 py-3">PAT Needed</th><th className="px-3 py-3">Dividend Amount</th><th className="px-3 py-3">Dividend NRA Withholding</th><th className="px-3 py-3">Last Dividend Date</th><th className="px-3 py-3">Comment</th><th className="px-3 py-3">Actions</th>
                                 </tr>
                               </thead>
@@ -649,6 +679,10 @@ export default function Page() {
                                     <td className={`px-3 py-3 font-medium tabular-nums ${position.amount < 0 ? "text-red-500" : "text-emerald-500"}`}>{money(position.amount)}</td>
                                     <td className="px-3 py-3 tabular-nums text-zinc-500">{money(position.fees)}</td>
                                     <td className="whitespace-nowrap px-3 py-3 text-zinc-500">{position.lastSellDate || "—"}</td>
+                                    <td className="px-3 py-3 tabular-nums">{position.quantity ?? "—"}</td>
+                                    <td className="px-3 py-3 tabular-nums">{position.sellPrice !== undefined ? money(position.sellPrice) : "—"}</td>
+                                    <td className="px-3 py-3 tabular-nums">{position.costBasis !== undefined ? money(position.costBasis) : "—"}</td>
+                                    <td className="px-3 py-3 tabular-nums">{position.proceeds !== undefined ? money(position.proceeds) : "—"}</td>
                                     <td className="px-3 py-3 tabular-nums text-emerald-500">{optionalMoney(position.pat)}</td>
                                     <td className="px-3 py-3 tabular-nums text-red-500">{optionalMoney(position.loss)}</td>
                                     <td className="px-3 py-3 tabular-nums">{optionalMoney(derivedPatNeeded(position.pat, position.loss))}</td>
@@ -706,7 +740,7 @@ export default function Page() {
               </label>
               <label className="space-y-2 text-sm font-medium">Last sell date<Input type="date" value={dateInputValue(editingPosition.lastSellDate)} onChange={(e) => setEditingPosition({ ...editingPosition, lastSellDate: e.target.value })} /></label>
               <label className="space-y-2 text-sm font-medium">Realized P/L<Input inputMode="decimal" value={editingPosition.amount} onChange={(e) => editNumber("amount", e.target.value)} /></label>
-              <label className="space-y-2 text-sm font-medium">Fees<Input inputMode="decimal" value={editingPosition.fees} onChange={(e) => editNumber("fees", e.target.value)} /></label>
+              <label className="space-y-2 text-sm font-medium">Fees<Input type="number" inputMode="decimal" step="any" value={editingPosition.fees} onChange={(e) => editNumber("fees", e.target.value)} /></label>
               <label className="space-y-2 text-sm font-medium">PAT<Input type="number" step="0.01" placeholder="-" value={editingPosition.pat ?? ""} onChange={(e) => editOptionalMoney("pat", e.target.value)} /></label>
               <label className="space-y-2 text-sm font-medium">Loss<Input type="number" step="0.01" placeholder="-" value={editingPosition.loss ?? ""} onChange={(e) => editOptionalMoney("loss", e.target.value)} /></label>
               <label className="space-y-2 text-sm font-medium">PAT Needed<Input readOnly placeholder="-" value={derivedPatNeeded(editingPosition.pat, editingPosition.loss) === null ? "" : money(derivedPatNeeded(editingPosition.pat, editingPosition.loss) ?? 0)} className="cursor-not-allowed bg-zinc-500/5 text-zinc-500" /></label>
