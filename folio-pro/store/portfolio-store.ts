@@ -100,8 +100,8 @@ type State = {
   removeHolding: (symbol: string, assetType: AssetType) => void;
   addTransaction: (transaction: Transaction) => void;
   executeTrade: (trade: { action: "buy" | "sell"; holding: Holding; quantity: number; price: number; tradeDate?: string; fees?: number }) => { ok: boolean; message?: string };
-  updateStockQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>) => void;
-  updateOptionQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>) => void;
+  updateStockQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>, portfolioId?: DataPortfolioId) => void;
+  updateOptionQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>, portfolioId?: DataPortfolioId) => void;
 };
 
 export const usePortfolioStore = create<State>()(
@@ -194,9 +194,9 @@ export const usePortfolioStore = create<State>()(
             ...visibleState(state.activePortfolioId, state.holdingsByPortfolio, transactionsByPortfolio, state.cashByPortfolio),
           };
         }),
-      updateStockQuotes: (quotes) =>
+      updateStockQuotes: (quotes, portfolioId) =>
         set((state) => {
-          const portfolioIds: DataPortfolioId[] = ["robinhood", "fidelity-401k", "fidelity-roth"];
+          const portfolioIds: DataPortfolioId[] = portfolioId ? [portfolioId] : ["robinhood", "fidelity-401k", "fidelity-roth"];
           const holdingsByPortfolio = portfolioIds.reduce<Record<DataPortfolioId, Holding[]>>((result, portfolioId) => {
             result[portfolioId] = state.holdingsByPortfolio[portfolioId].map((holding) => {
               if ((holding.assetType ?? "stock") !== "stock" || holding.symbol.trim().toUpperCase() === "VSTL") return holding;
@@ -217,9 +217,9 @@ export const usePortfolioStore = create<State>()(
             ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, state.cashByPortfolio),
           };
         }),
-      updateOptionQuotes: (quotes) =>
+      updateOptionQuotes: (quotes, portfolioId) =>
         set((state) => {
-          const portfolioIds: DataPortfolioId[] = ["robinhood", "fidelity-401k", "fidelity-roth"];
+          const portfolioIds: DataPortfolioId[] = portfolioId ? [portfolioId] : ["robinhood", "fidelity-401k", "fidelity-roth"];
           const holdingsByPortfolio = portfolioIds.reduce<Record<DataPortfolioId, Holding[]>>((result, portfolioId) => {
             result[portfolioId] = state.holdingsByPortfolio[portfolioId].map((holding) => {
               if (holding.assetType !== "option") return holding;

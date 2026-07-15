@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { holdingMetrics, portfolioSummary } from "@/lib/calculations/portfolio";
 import { cn, money } from "@/lib/utils";
 import { buildOptionSymbol } from "@/lib/options";
-import { isUsMarketOpen } from "@/lib/market-hours";
+import { isUsMarketDay, isUsMarketOpen } from "@/lib/market-hours";
 import { usePortfolioStore } from "@/store/portfolio-store";
 import * as XLSX from "xlsx";
 
@@ -68,8 +68,10 @@ export default function Page() {
   const optionSymbolsKey = Array.from(new Set(optionContracts.map((item) => item.contract).filter((value): value is string => Boolean(value)))).sort().join(",");
   const hasRefreshableSymbols = Boolean(stockSymbolsKey || optionSymbolsKey);
 
-  const refreshPrices = useCallback(async (silent = false) => {
-    if (!hasRefreshableSymbols || pricesLoading || !isUsMarketOpen()) return;
+  const refreshPrices = useCallback(async (silent = false, force = false) => {
+    if (!hasRefreshableSymbols || pricesLoading) return;
+    const is401k = activePortfolioId === "fidelity-401k";
+    if (!force && (is401k || !isUsMarketOpen())) return;
     if (!silent) setPricesLoading(true);
     setPricesError(null);
 
@@ -83,7 +85,7 @@ export default function Page() {
           const response = await fetch(`/api/market-prices?symbols=${encodeURIComponent(stockSymbolsKey)}`, { cache: "no-store" });
           const body = await response.json() as { prices?: Record<string, { currentPrice: number; previousClose: number }>; unavailable?: string[]; refreshedAt?: string; error?: string };
           if (!response.ok) throw new Error(body.error || "Could not refresh stock prices.");
-          if (body.prices && Object.keys(body.prices).length) updateStockQuotes(body.prices);
+          if (body.prices && Object.keys(body.prices).length) updateStockQuotes(body.prices, activePortfolioId === "all" ? undefined : activePortfolioId);
           if (body.unavailable?.length) messages.push(`No stock quote found for: ${body.unavailable.join(", ")}`);
           refreshedAt = body.refreshedAt ? new Date(body.refreshedAt) : new Date();
         })());
@@ -94,7 +96,7 @@ export default function Page() {
           const response = await fetch(`/api/option-prices?symbols=${encodeURIComponent(optionSymbolsKey)}`, { cache: "no-store" });
           const body = await response.json() as { prices?: Record<string, { currentPrice: number; previousClose: number }>; unavailable?: string[]; refreshedAt?: string; error?: string };
           if (!response.ok) throw new Error(body.error || "Could not refresh option prices.");
-          if (body.prices && Object.keys(body.prices).length) updateOptionQuotes(body.prices);
+          if (body.prices && Object.keys(body.prices).length) updateOptionQuotes(body.prices, activePortfolioId === "all" ? undefined : activePortfolioId);
           if (body.unavailable?.length) messages.push(`No option quote found for: ${body.unavailable.join(", ")}`);
           refreshedAt = body.refreshedAt ? new Date(body.refreshedAt) : new Date();
         })());
@@ -109,20 +111,50 @@ export default function Page() {
     } finally {
       setPricesLoading(false);
     }
-  }, [hasRefreshableSymbols, missingOptionDetails.join(","), optionSymbolsKey, pricesLoading, stockSymbolsKey, updateOptionQuotes, updateStockQuotes]);
+  }, [activePortfolioId, hasRefreshableSymbols, missingOptionDetails.join(","), optionSymbolsKey, pricesLoading, stockSymbolsKey, updateOptionQuotes, updateStockQuotes]);
 
   useEffect(() => {
     if (!hasRefreshableSymbols) {
       if (missingOptionDetails.length) setPricesError(`Use Option Details format like UNHG $25 Call for: ${Array.from(new Set(missingOptionDetails)).join(", ")}`);
       return;
     }
+
+    if (activePortfolioId === "fidelity-401k") {
+      const checkScheduledRefresh = () => {
+        const now = new Date();
+        if (!isUsMarketDay(now)) return;
+        const parts = new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/New_York",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        }).formatToParts(now);
+        const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+        const hour = Number(get("hour"));
+        const minute = Number(get("minute"));
+        const slot = hour === 17 && minute === 30 ? "17:30" : hour === 18 && minute === 0 ? "18:00" : "";
+        if (!slot) return;
+        const dateKey = `${get("year")}-${get("month")}-${get("day")}`;
+        const storageKey = `folio-401k-refresh:${dateKey}:${slot}`;
+        if (window.localStorage.getItem(storageKey)) return;
+        window.localStorage.setItem(storageKey, "requested");
+        refreshPrices(true, true);
+      };
+      checkScheduledRefresh();
+      const timer = window.setInterval(checkScheduledRefresh, 30 * 1000);
+      return () => window.clearInterval(timer);
+    }
+
     if (!isUsMarketOpen()) return;
     refreshPrices(true);
     const timer = window.setInterval(() => {
       if (isUsMarketOpen()) refreshPrices(true);
     }, 5 * 60 * 1000);
     return () => window.clearInterval(timer);
-  }, [stockSymbolsKey, optionSymbolsKey]); // Refresh when holdings change, then every five minutes.
+  }, [activePortfolioId, hasRefreshableSymbols, missingOptionDetails.join(","), optionSymbolsKey, refreshPrices, stockSymbolsKey]);
 
   function portfolioRows() {
     return holdings.map((holding) => {

@@ -88,23 +88,66 @@ export default function DcaPage() {
   const [sharesToSell, setSharesToSell] = useState<NumericValue>("");
 
   const mergeWithHeldPositions = (savedPositions: DcaPosition[]) => {
-    const saved = savedPositions.filter((position) => activeId === "all" || position.portfolioId === activeId);
-    const savedKeys = new Set(saved.map((position) => `${position.portfolioId}:${position.symbol.trim().toUpperCase()}`));
     const portfolioIds = activeId === "all" ? (["robinhood", "fidelity-401k", "fidelity-roth"] as const) : [activeId];
+    const visibleSaved = savedPositions
+      .filter((position) => activeId === "all" || position.portfolioId === activeId)
+      .map((position) => {
+        const portfolioId = position.portfolioId;
+        if (!portfolioId || position.id.includes("-option-") || position.lots.length > 0) return position;
+        const holding = holdingsByPortfolio[portfolioId].find((item) =>
+          (item.assetType ?? "stock") === "stock"
+          && item.symbol.trim().toUpperCase() === position.symbol.trim().toUpperCase()
+          && item.shares !== 0,
+        );
+        if (!holding) return position;
+        return {
+          ...position,
+          lots: [{
+            amount: Math.abs(holding.shares) * holding.averageCost,
+            shares: Math.abs(holding.shares),
+            price: holding.averageCost,
+            date: "",
+            future: false,
+          }],
+        };
+      });
+
+    const savedStockKeys = new Set(visibleSaved
+      .filter((position) => !position.id.includes("-option-"))
+      .map((position) => `${position.portfolioId}:${position.symbol.trim().toUpperCase()}`));
     const placeholders: DcaPosition[] = [];
+
     portfolioIds.forEach((portfolioId) => {
       holdingsByPortfolio[portfolioId]
         .filter((holding) => holding.shares !== 0)
         .forEach((holding) => {
           const symbol = holding.symbol.trim().toUpperCase();
-          const optionLabel = holding.assetType === "option"
+          const isOptionHolding = holding.assetType === "option";
+          const optionLabel = isOptionHolding
             ? `${symbol} ${holding.optionStrike !== undefined ? `$${holding.optionStrike}` : ""} ${holding.optionType?.includes("put") ? "Put" : "Call"}${holding.optionExpiry ? ` · ${formatDate(holding.optionExpiry)}` : ""}`.replace(/\s+/g, " ").trim()
             : symbol;
-          const key = `${portfolioId}:${symbol}`;
-          if (!savedKeys.has(key) || holding.assetType === "option") placeholders.push({ id: `PORTFOLIO-${portfolioId}-${holding.assetType ?? "stock"}-${holding.optionSymbol ?? optionLabel}`, symbol, label: optionLabel, sellPrice: "", lots: [], custom: true, portfolioId });
+          const stockKey = `${portfolioId}:${symbol}`;
+          if (!isOptionHolding && savedStockKeys.has(stockKey)) return;
+
+          placeholders.push({
+            id: `PORTFOLIO-${portfolioId}-${holding.assetType ?? "stock"}-${holding.optionSymbol ?? optionLabel}`,
+            symbol,
+            label: optionLabel,
+            sellPrice: "",
+            lots: isOptionHolding ? [] : [{
+              amount: Math.abs(holding.shares) * holding.averageCost,
+              shares: Math.abs(holding.shares),
+              price: holding.averageCost,
+              date: "",
+              future: false,
+            }],
+            custom: true,
+            portfolioId,
+          });
         });
     });
-    return [...saved, ...placeholders].sort((a, b) => (a.label ?? a.symbol).localeCompare(b.label ?? b.symbol));
+
+    return [...visibleSaved, ...placeholders].sort((a, b) => (a.label ?? a.symbol).localeCompare(b.label ?? b.symbol));
   };
 
   const positions = useMemo(() => mergeWithHeldPositions(allPositions), [allPositions, activeId, holdingsByPortfolio]);

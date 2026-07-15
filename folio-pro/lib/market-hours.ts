@@ -59,6 +59,24 @@ function marketHolidayKeys(year: number) {
   ].map(dateKey));
 }
 
+
+export function isUsMarketDay(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    weekday: "short",
+  }).formatToParts(now);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  const year = Number(get("year"));
+  const month = get("month");
+  const day = get("day");
+  const weekday = get("weekday");
+  if (weekday === "Sat" || weekday === "Sun") return false;
+  return !marketHolidayKeys(year).has(`${year}-${month}-${day}`);
+}
+
 export function isUsMarketOpen(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
