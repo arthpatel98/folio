@@ -310,116 +310,17 @@ export default function CalculatorPage() {
         <ResultCard label="Potential Return %" value={`${roi >= 0 ? "+" : ""}${roi.toFixed(2)}%`} tone={isProfit ? "positive" : "negative"} info="Potential Return divided by Total Investment, expressed as a percentage." />
       </div>
 
-      <section className="grid overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/35 lg:grid-cols-[.75fr_1.35fr]">
-        <div className="border-b border-white/10 p-5 lg:border-b-0 lg:border-r lg:p-6">
-          <h2 className="flex items-center gap-2 font-semibold">Total Return Calculator <InfoTip text="Summarizes the full-position outcome at your target selling price." /></h2>
-          <div className="mt-5 space-y-3 text-sm">
-            <div className="flex justify-between gap-4"><span className="text-zinc-400">Total Investment</span><span>{money(totalInvestment)}</span></div>
-            <div className="flex justify-between gap-4"><span className="text-zinc-400">Selling Value</span><span>{money(sellingValue)}</span></div>
-            <div className="flex justify-between gap-4 border-t border-white/10 pt-3"><span className={isProfit ? "text-emerald-400" : "text-rose-400"}>Potential Return</span><span className={isProfit ? "text-emerald-400" : "text-rose-400"}>{signedMoney(profit)}</span></div>
-            <div className="flex justify-between gap-4"><span className="text-zinc-400">Potential Return %</span><span className={isProfit ? "text-emerald-400" : "text-rose-400"}>{roi >= 0 ? "+" : ""}{roi.toFixed(2)}%</span></div>
-            <div className="flex justify-between gap-4"><span className="text-zinc-400">Return Per {isOption ? "Contract" : "Share"}</span><span className={profitPerShare >= 0 ? "text-emerald-400" : "text-rose-400"}>{signedMoney(profitPerShare)}</span></div>
-          </div>
-        </div>
-
-        <div className="p-5 lg:p-6">
-          <h2 className="flex items-center gap-2 font-semibold">Price Range Simulator <InfoTip text="Move the slider from 60% below to 60% above average cost to test different selling prices." /></h2>
-          <div className="mt-6 grid grid-cols-3 text-sm">
-            <div><p className="font-semibold text-rose-400">{money(rangeFloor)}</p><p className="mt-1 text-xs text-zinc-500">-60.00%</p></div>
-            <div className="text-center"><p className="font-semibold">{money(averageCost)}</p><p className="mt-1 text-xs text-zinc-500">Average Cost</p></div>
-            <div className="text-right"><p className="font-semibold text-emerald-400">{money(rangeCeiling)}</p><p className="mt-1 text-xs text-zinc-500">+60.00%</p></div>
-          </div>
-          <input
-            aria-label="Target selling price"
-            type="range"
-            min={rangeFloor}
-            max={rangeCeiling}
-            step={Math.max((rangeCeiling - rangeFloor) / 300, 0.01)}
-            value={sliderValue}
-            onChange={(event) => setTargetPriceInput(event.target.value)}
-            className="mt-5 w-full accent-emerald-400"
-          />
-          <p className="mt-3 text-center text-sm text-emerald-400">Target Price: {money(targetPriceInput === "" ? averageCost : targetPrice)}</p>
+      <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5 lg:p-6">
+        <h2 className="flex items-center gap-2 font-semibold">Total Return Calculator <InfoTip text="Summarizes the full-position outcome at your target selling price." /></h2>
+        <div className="mt-5 max-w-xl space-y-3 text-sm">
+          <div className="flex justify-between gap-4"><span className="text-zinc-400">Total Investment</span><span>{money(totalInvestment)}</span></div>
+          <div className="flex justify-between gap-4"><span className="text-zinc-400">Selling Value</span><span>{money(sellingValue)}</span></div>
+          <div className="flex justify-between gap-4 border-t border-white/10 pt-3"><span className={isProfit ? "text-emerald-400" : "text-rose-400"}>Potential Return</span><span className={isProfit ? "text-emerald-400" : "text-rose-400"}>{signedMoney(profit)}</span></div>
+          <div className="flex justify-between gap-4"><span className="text-zinc-400">Potential Return %</span><span className={isProfit ? "text-emerald-400" : "text-rose-400"}>{roi >= 0 ? "+" : ""}{roi.toFixed(2)}%</span></div>
+          <div className="flex justify-between gap-4"><span className="text-zinc-400">Return Per {isOption ? "Contract" : "Share"}</span><span className={profitPerShare >= 0 ? "text-emerald-400" : "text-rose-400"}>{signedMoney(profitPerShare)}</span></div>
         </div>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5">
-          <h2 className="flex items-center gap-2 font-semibold">Target Return Calculator <InfoTip text="Enter a desired percentage return to calculate the selling price required to reach it." /></h2>
-          <p className="mt-4 text-sm text-zinc-400">What return do you want to achieve?</p>
-          <FieldLabel info="The percentage gain you want relative to the position cost basis. For a negative option position, the required price moves in the opposite direction.">Target Return (%)</FieldLabel>
-          <div className="flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4">
-            <input value={targetReturn} type="number" step="any" onChange={(e) => setTargetReturn(numberValue(e.target.value))} className="w-full bg-transparent outline-none" />
-            <span>%</span>
-          </div>
-          <div className="mt-4 rounded-xl border border-emerald-500/35 bg-emerald-500/[.07] p-5 text-center">
-            <p className="text-sm text-zinc-300">Required Selling Price</p>
-            <p className="mt-2 text-3xl font-semibold text-emerald-400">{money(requiredSellingPrice)}</p>
-            <p className="mt-2 text-sm text-emerald-400">Potential Return: {signedMoney(targetPotentialProfit)} ({targetReturn.toFixed(2)}%)</p>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5">
-          <h2 className="flex items-center gap-2 font-semibold">Partial Sale Calculator <InfoTip text="For stocks, shares are matched to DCA purchase lots using FIFO: the oldest available shares are sold first. Each lot shows its individual gain or loss. Options use the position average cost." /></h2>
-          <FieldLabel info={`Enter how many ${isOption ? "contracts" : "shares"} you plan to sell at the target price.`}>{isOption ? "Contracts to Sell" : "Shares to Sell"}</FieldLabel>
-          <div className="flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4">
-            <input value={sharesToSell} min={0} max={Math.abs(shares)} type="number" step="any" onChange={(e) => setSharesToSell(numberValue(e.target.value))} className="w-full bg-transparent outline-none" />
-            <span className="whitespace-nowrap text-sm text-zinc-400">of {Math.abs(shares).toLocaleString()}</span>
-          </div>
-
-          {!isOption && fifoRows.length > 0 ? (
-            <div className="mt-5 overflow-hidden rounded-xl border border-white/10">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-xs">
-                  <thead className="bg-white/[.04] text-zinc-400">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-medium">FIFO Lot</th>
-                      <th className="px-3 py-2 text-right font-medium">Shares</th>
-                      <th className="px-3 py-2 text-right font-medium">Buy</th>
-                      <th className="px-3 py-2 text-right font-medium">Sell</th>
-                      <th className="px-3 py-2 text-right font-medium">Return</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/10">
-                    {fifoRows.map((row, index) => (
-                      <tr key={`${row.date}-${index}`}>
-                        <td className="whitespace-nowrap px-3 py-2 text-zinc-400">{row.date}</td>
-                        <td className="px-3 py-2 text-right">{row.shares.toLocaleString()}</td>
-                        <td className="px-3 py-2 text-right">{money(row.buyPrice)}</td>
-                        <td className="px-3 py-2 text-right">{money(row.sellPrice)}</td>
-                        <td className={cn("px-3 py-2 text-right font-medium", row.returnValue >= 0 ? "text-emerald-400" : "text-rose-400")}>{signedMoney(row.returnValue)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="mt-5 space-y-3 text-sm">
-            <div className="flex justify-between"><span className="text-zinc-400">Proceeds (At Target Price)</span><span>{money(partialProceeds)}</span></div>
-            <div className="flex justify-between"><span className="text-zinc-400">Net Realized Return</span><span className={partialProfit >= 0 ? "text-emerald-400" : "text-rose-400"}>{signedMoney(partialProfit)}</span></div>
-            <div className="flex justify-between"><span className="text-zinc-400">Remaining {isOption ? "Contracts" : "Shares"}</span><span>{remainingShares.toLocaleString()}</span></div>
-            <div className="flex justify-between"><span className="text-zinc-400">Remaining Cost Basis</span><span>{money(remainingCostBasis)}</span></div>
-            <div className="flex justify-between"><span className="text-zinc-400">New Avg. Cost / {isOption ? "Contract" : "Share"}</span><span>{money(remainingAverageCost)}</span></div>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5">
-          <h2 className="flex items-center gap-2 font-semibold">Portfolio Impact <InfoTip text="Estimates how the potential return would change the total value of the active portfolio." /></h2>
-          <p className="mt-4 text-sm text-zinc-400">If you sell at {money(targetPrice)}</p>
-          <div className="mt-5 space-y-3 text-sm">
-            <div className="flex justify-between"><span className="text-zinc-400">Current Portfolio Value</span><span>{money(summary.value)}</span></div>
-            <div className="flex justify-between"><span className="text-zinc-400">Change in Value</span><span className={isProfit ? "text-emerald-400" : "text-rose-400"}>{signedMoney(profit)}</span></div>
-            <div className="flex justify-between"><span className="text-zinc-400">Projected Portfolio Value</span><span>{money(projectedPortfolio)}</span></div>
-            <div className="flex justify-between"><span className="text-zinc-400">Portfolio Return Impact</span><span className={isProfit ? "text-emerald-400" : "text-rose-400"}>{portfolioImpact >= 0 ? "+" : ""}{portfolioImpact.toFixed(2)}%</span></div>
-          </div>
-          <div className={cn("mt-5 flex gap-3 rounded-xl border p-4 text-sm", isProfit ? "border-emerald-500/25 bg-emerald-500/[.06] text-emerald-400" : "border-rose-500/25 bg-rose-500/[.06] text-rose-400")}>
-            <BarChart3 className="shrink-0" size={20} />
-            <p>This sale would {isProfit ? "increase" : "decrease"} your portfolio value by {money(Math.abs(profit))} ({Math.abs(portfolioImpact).toFixed(2)}%).</p>
-          </div>
-        </section>
-      </div>
     </div>
   );
 }
