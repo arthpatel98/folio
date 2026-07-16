@@ -11,3 +11,13 @@ input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+
+@media (max-width: 640px) {
+  html, body { overflow-x: hidden; }
+  main { width: 100%; min-width: 0; }
+  h1 { font-size: 1.75rem !important; line-height: 2.1rem !important; }
+  input, select, textarea, button { min-width: 0; }
+  input, select, textarea { font-size: 16px !important; }
+  table th, table td { padding-left: .75rem !important; padding-right: .75rem !important; }
+}

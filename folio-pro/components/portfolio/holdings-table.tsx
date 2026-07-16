@@ -224,25 +224,25 @@ export function HoldingsTable({
   return (
     <>
     <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-950/30">
-      <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-white/5">
+      <div className="flex items-center justify-between border-b border-zinc-200 px-3 py-3 sm:px-5 sm:py-4 dark:border-white/5">
         <div className="flex items-center gap-3"><div className="rounded-xl bg-emerald-500/10 p-2 text-emerald-500"><BriefcaseBusiness size={19} /></div><div><h2 className="font-semibold">{title}</h2><p className="text-xs text-zinc-500">{data.length} Open {data.length === 1 ? "Position" : "Positions"}</p></div></div>
       </div>
-      <div className="relative isolate overflow-x-auto">
+      <div className="relative isolate -mx-px overflow-x-auto overscroll-x-contain pb-1">
         <table className="table-fixed text-left text-sm" style={{ width: table.getTotalSize(), minWidth: assetType === "option" ? 1760 : 1540 }}>
           <thead className="relative z-10 bg-slate-200 text-zinc-600 dark:bg-slate-800 dark:text-zinc-300">
             {table.getHeaderGroups().map((headerGroup) => <tr key={headerGroup.id}>{headerGroup.headers.map((header, index) => {
               const sorted = header.column.getIsSorted();
               const rightAligned = index > 0 && header.column.id !== "sector";
-              const headerWidth = index === 0 ? Math.max(header.getSize(), 300) : header.getSize();
-              return <th key={header.id} style={{ width: headerWidth, minWidth: headerWidth, maxWidth: headerWidth }} className={cn("relative z-0 h-[68px] overflow-hidden whitespace-nowrap bg-slate-200 px-6 text-sm font-semibold transition hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700", rightAligned && "text-right", index === 0 && "sticky left-0 z-50 bg-slate-200 shadow-[10px_0_14px_-12px_rgba(0,0,0,.75)] dark:bg-slate-800") }>
+              const headerWidth = index === 0 ? Math.max(header.getSize(), 220) : header.getSize();
+              return <th key={header.id} style={{ width: headerWidth, minWidth: headerWidth, maxWidth: headerWidth }} className={cn("relative z-0 h-[56px] overflow-hidden whitespace-nowrap bg-slate-200 px-3 text-xs sm:h-[68px] sm:px-6 sm:text-sm font-semibold transition hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700", rightAligned && "text-right", index === 0 && "sticky left-0 z-50 bg-slate-200 shadow-[10px_0_14px_-12px_rgba(0,0,0,.75)] dark:bg-slate-800") }>
                 <button type="button" onClick={header.column.getToggleSortingHandler()} className={cn("inline-flex w-full items-center gap-2", rightAligned && "justify-end")}>{flexRender(header.column.columnDef.header, header.getContext())}{sorted === "asc" ? <ArrowUp size={15} className="text-emerald-500" /> : sorted === "desc" ? <ArrowDown size={15} className="text-emerald-500" /> : <ArrowUpDown size={14} className="opacity-25" />}</button>
                 <div onMouseDown={header.getResizeHandler()} onTouchStart={header.getResizeHandler()} className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize select-none touch-none hover:bg-emerald-500/50" title="Drag to resize column" />
               </th>;
             })}</tr>)}
           </thead>
-          <tbody>{table.getRowModel().rows.map((row) => <tr key={row.id} className="group h-[112px] border-b border-zinc-200/80 bg-white text-zinc-900 transition last:border-0 hover:bg-zinc-50 dark:border-white/[.06] dark:bg-zinc-950/20 dark:text-zinc-100 dark:hover:bg-white/[.025]">
+          <tbody>{table.getRowModel().rows.map((row) => <tr key={row.id} className="group h-[88px] sm:h-[112px] border-b border-zinc-200/80 bg-white text-zinc-900 transition last:border-0 hover:bg-zinc-50 dark:border-white/[.06] dark:bg-zinc-950/20 dark:text-zinc-100 dark:hover:bg-white/[.025]">
             {row.getVisibleCells().map((cell, index) => {
-              const cellWidth = index === 0 ? Math.max(cell.column.getSize(), 300) : cell.column.getSize();
+              const cellWidth = index === 0 ? Math.max(cell.column.getSize(), 220) : cell.column.getSize();
               return <td key={cell.id} style={{ width: cellWidth, minWidth: cellWidth, maxWidth: cellWidth }} className={cn("whitespace-nowrap px-6 py-5 text-base", index > 0 && cell.column.id !== "sector" && "text-right", cell.column.id === "sector" && "text-left", index === 0 && "sticky left-0 z-40 bg-white shadow-[10px_0_14px_-12px_rgba(0,0,0,.65)] group-hover:bg-zinc-50 dark:bg-zinc-950 dark:group-hover:bg-zinc-900") }>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>;
             })}
           </tr>)}</tbody>

@@ -579,10 +579,10 @@ export default function Page() {
     <div>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold">Realized P/L</h1>
+          <h1 className="text-2xl font-semibold sm:text-3xl">Realized P/L</h1>
           <p className="mt-1 text-sm text-zinc-500">Review realized results grouped by ticker, including stock and option trades.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <input ref={fileInputRef} className="hidden" type="file" accept=".csv" onChange={handleFileUpload} />
           <Button onClick={() => fileInputRef.current?.click()} disabled={isImporting}>
             <Upload className="mr-2 h-4 w-4" />{isImporting ? "Importing..." : "Import Document"}
@@ -594,7 +594,7 @@ export default function Page() {
 
       {message && <p className="mt-4 text-sm text-emerald-500">{message}</p>}
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Net Realized P/L" value={money(totals.realized)} />
         <MetricCard label="Options P/L Total" value={money(totals.optionsPl)} />
         <MetricCard label="Net Stocks P/L" value={money(totals.stocksPl)} />
@@ -619,7 +619,7 @@ export default function Page() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="-mx-5 overflow-x-auto overscroll-x-contain px-5 pb-1">
           <table className="w-full min-w-[1600px] text-center text-sm">
             <thead className="border-y text-xs uppercase tracking-wide text-zinc-500">
               <tr>
@@ -725,8 +725,8 @@ export default function Page() {
       </Card>
 
       {editingPosition && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">
-          <Card className="max-h-[90vh] w-full max-w-2xl overflow-y-auto p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">
+          <Card className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-b-none p-4 shadow-2xl sm:rounded-xl sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div><h2 className="text-xl font-semibold">Edit realized entry</h2><p className="mt-1 text-sm text-zinc-500">Update this stock or option entry.</p></div>
               <button onClick={() => setEditingPosition(null)} className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-500/10" aria-label="Close"><X size={18} /></button>
