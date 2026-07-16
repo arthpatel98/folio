@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Cloud, CloudDownload, CloudUpload, LogIn, LogOut } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { createClient } from "@/lib/supabase/client";
 import { downloadCloudState, getCloudState, uploadLocalState } from "@/lib/cloud-state";
 import { toast } from "sonner";
@@ -55,13 +54,8 @@ export default function Page() {
 
   return <div>
     <h1 className="text-3xl font-semibold">Settings</h1>
-    <p className="mt-1 text-sm text-zinc-500">Profile, cloud sync, market data and portfolio integrations.</p>
-    <div className="mt-6 grid gap-6 xl:grid-cols-2">
-      <Card className="p-5">
-        <h2 className="font-medium">Profile</h2>
-        <div className="mt-4 space-y-3"><Input defaultValue="Arth Patel"/><Input defaultValue={status.email ?? "arth@example.com"}/><Button>Save changes</Button></div>
-      </Card>
-
+    <p className="mt-1 text-sm text-zinc-500">Manage Cloud Sync And Sign-In Settings.</p>
+    <div className="mt-6 max-w-3xl">
       <Card className="p-5">
         <div className="flex items-center gap-2"><Cloud className="size-5 text-emerald-400"/><h2 className="font-medium">Supabase Cloud Sync</h2></div>
         {status.email ? <>
@@ -79,8 +73,6 @@ export default function Page() {
         </>}
       </Card>
 
-      <Card className="p-5"><h2 className="font-medium">Market data providers</h2><div className="mt-4 space-y-3">{["Alpaca"].map(x=><div key={x} className="flex items-center justify-between rounded-xl border p-3"><span className="text-sm">{x}</span><Button variant="outline" size="sm">Connect</Button></div>)}</div></Card>
-      <Card className="p-5"><h2 className="font-medium">Broker connections</h2><p className="mt-1 text-sm text-zinc-500">Use aggregator or broker-supported OAuth APIs in production. Never collect brokerage passwords directly.</p><div className="mt-4 flex flex-wrap gap-2">{["Robinhood","Charles Schwab","Fidelity","Interactive Brokers","CSV import"].map(x=><Button key={x} variant="outline">{x}</Button>)}</div></Card>
     </div>
   </div>;
 }

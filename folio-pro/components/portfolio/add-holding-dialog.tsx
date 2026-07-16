@@ -2,7 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { FormEvent, useMemo, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePortfolioStore } from "@/store/portfolio-store";
@@ -178,7 +178,7 @@ export function AddHoldingDialog() {
       setOpen(nextOpen);
       if (!nextOpen) { setForm(createInitialForm()); setStockSelection(NEW_POSITION); setError(""); }
     }}>
-      <Dialog.Trigger asChild><Button className="gap-2 rounded-lg px-4"><Plus size={17} /> Update Position</Button></Dialog.Trigger>
+      <Dialog.Trigger asChild><Button aria-label="Update Position" title="Update Position" className="size-10 rounded-lg p-0"><Pencil size={17} /></Button></Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[92vh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6 text-zinc-900 shadow-2xl dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-100">
