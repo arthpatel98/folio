@@ -338,21 +338,24 @@ export default function Page() {
       ? ["robinhood", "fidelity-401k", "fidelity-roth"]
       : [activePortfolioId];
     const base = portfolioIds.flatMap((portfolioId) => positionsByPortfolio[portfolioId].map((position) => ({ ...position })));
+    const savedPositionIds = new Set(base.map((position) => position.id));
     portfolioIds.forEach((portfolioId) => {
       transactionsByPortfolio[portfolioId].forEach((transaction) => {
         if (transaction.realizedGain === undefined || !transaction.symbol) return;
+        const transactionPositionId = `sale-${portfolioId}-${transaction.id}`;
+        if (savedPositionIds.has(transactionPositionId)) return;
         const optionDetails = transaction.assetType === "option"
           ? `${transaction.symbol.toUpperCase()} ${transaction.optionStrike !== undefined ? `$${transaction.optionStrike}` : ""} ${transaction.optionType?.includes("put") ? "Put" : "Call"}${transaction.optionExpiry ? ` · ${normalizeDate(transaction.optionExpiry)}` : ""}`.replace(/\s+/g, " ").trim()
           : undefined;
         base.push({
-          ...makePosition(transaction.symbol + (transaction.assetType === "option" ? " Option" : ""), transaction.realizedGain, Number(transaction.fees) || 0, normalizeDate(transaction.date), `sale-${portfolioId}-${transaction.id}`),
+          ...makePosition(transaction.symbol + (transaction.assetType === "option" ? " Option" : ""), transaction.realizedGain, Number(transaction.fees) || 0, normalizeDate(transaction.date), transactionPositionId),
           quantity: Math.abs(Number(transaction.quantity) || 0),
           sellPrice: Number(transaction.price) || 0,
           costBasis: transaction.realizedCostBasis,
           proceeds: transaction.realizedProceeds,
           optionDetails,
           sourceTransaction: true,
-          comment: optionDetails ?? "Sold From Holdings",
+          comment: optionDetails ?? transaction.symbol.toUpperCase(),
         });
       });
     });
@@ -539,7 +542,12 @@ export default function Page() {
       setMessage(`${cleaned.symbol} was removed because its comment matched an excluded trade description.`);
       return;
     }
-    setPositions((current) => current.map((item) => item.id === cleaned.id ? cleaned : item));
+    setPositions((current) => {
+      const savedCopy = { ...cleaned, sourceTransaction: false };
+      return current.some((item) => item.id === cleaned.id)
+        ? current.map((item) => item.id === cleaned.id ? savedCopy : item)
+        : [savedCopy, ...current];
+    });
     setEditingPosition(null);
     setMessage(`${cleaned.symbol} was updated.`);
   }
@@ -580,7 +588,7 @@ export default function Page() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold sm:text-3xl">Realized P/L</h1>
-          <p className="mt-1 text-sm text-zinc-500">Review realized results grouped by ticker, including stock and option trades.</p>
+          <p className="mt-1 text-sm text-zinc-500">Review Realized Results Grouped By Ticker, Including Stock And Option Trades.</p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <input ref={fileInputRef} className="hidden" type="file" accept=".csv" onChange={handleFileUpload} />
@@ -604,7 +612,7 @@ export default function Page() {
       <Card className="mt-6 overflow-hidden p-5">
         <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="font-medium">Realized P/L by Ticker</h2>
+            <h2 className="font-medium">Realized P/L By Ticker</h2>
             <p className="mt-1 text-xs text-zinc-500">Select a Ticker Row to See Its Individual Stock and Option Entries.</p>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -629,7 +637,7 @@ export default function Page() {
                 <th className="px-3 py-3"><SortHeader label="Mix" column="mix" /></th>
                 <th className="px-3 py-3"><SortHeader label="Realized P/L" column="amount" /></th>
                 <th className="px-3 py-3"><SortHeader label="Fees" column="fees" /></th>
-                <th className="px-3 py-3"><SortHeader label="Latest sell date" column="latestDate" /></th>
+                <th className="px-3 py-3"><SortHeader label="Latest Sell Date" column="latestDate" /></th>
                 <th className="px-3 py-3"><SortHeader label="PAT Needed" column="patNeeded" /></th>
                 <th className="px-3 py-3"><SortHeader label="Dividend Amount" column="dividendAmount" /></th>
                 <th className="px-3 py-3"><SortHeader label="Dividend NRA Withholding" column="dividendNraWithholding" /></th>
@@ -647,8 +655,8 @@ export default function Page() {
                       <td className="sticky left-0 z-10 bg-white px-3 py-4 font-semibold group-hover:bg-zinc-50 dark:bg-zinc-950 dark:group-hover:bg-zinc-900">{group.symbol}</td>
                       <td className="px-3 py-4">
                         <div className="flex justify-center gap-2">
-                          {group.stockCount > 0 && <span className="rounded-md border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-400">STOCK {group.stockCount}</span>}
-                          {group.optionCount > 0 && <span className="rounded-md border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-xs font-medium text-violet-400">OPTION {group.optionCount}</span>}
+                          {group.stockCount > 0 && <span className="rounded-md border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-400">Stock {group.stockCount}</span>}
+                          {group.optionCount > 0 && <span className="rounded-md border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-xs font-medium text-violet-400">Option {group.optionCount}</span>}
                         </div>
                       </td>
                       <td className={`px-3 py-4 font-semibold tabular-nums ${group.amount < 0 ? "text-red-500" : "text-emerald-500"}`}>{money(group.amount)}</td>
@@ -661,13 +669,13 @@ export default function Page() {
                     </tr>
                     {expanded && (
                       <tr className="border-b bg-zinc-500/[0.035]">
-                        <td colSpan={15} className="p-0">
+                        <td colSpan={11} className="p-0">
                           <div className="m-3 overflow-hidden rounded-lg border border-zinc-500/15">
                             <table className="w-full text-center text-xs">
                               <thead className="bg-zinc-500/5 uppercase tracking-wide text-zinc-500">
                                 <tr>
                                   <th className="px-3 py-3">Select</th><th className="px-3 py-3">Type</th><th className="px-3 py-3">Realized P/L</th><th className="px-3 py-3">Fees</th>
-                                  <th className="px-3 py-3">Sell date</th><th className="px-3 py-3">Quantity</th><th className="px-3 py-3">Sell Price</th><th className="px-3 py-3">Cost Basis</th><th className="px-3 py-3">Proceeds</th><th className="px-3 py-3">PAT</th><th className="px-3 py-3">Loss</th>
+                                  <th className="px-3 py-3">Sell Date</th><th className="px-3 py-3">PAT</th><th className="px-3 py-3">Loss</th>
                                   <th className="px-3 py-3">PAT Needed</th><th className="px-3 py-3">Dividend Amount</th><th className="px-3 py-3">Dividend NRA Withholding</th><th className="px-3 py-3">Last Dividend Date</th><th className="px-3 py-3">Comment</th><th className="px-3 py-3">Actions</th>
                                 </tr>
                               </thead>
@@ -675,14 +683,10 @@ export default function Page() {
                                 {group.positions.map((position) => (
                                   <tr key={position.id} className="border-t border-zinc-500/10">
                                     <td className="px-3 py-3"><input type="checkbox" checked={selectedPositionIds.has(position.id)} onChange={() => togglePositionSelection(position.id)} aria-label={`Select ${position.symbol} ${position.type} entry`} /></td>
-                                    <td className="px-3 py-3"><span className={`rounded-md border px-2 py-1 font-medium ${position.type === "option" ? "border-violet-500/30 bg-violet-500/10 text-violet-400" : "border-blue-500/30 bg-blue-500/10 text-blue-400"}`}>{position.type.toUpperCase()}</span></td>
+                                    <td className="px-3 py-3"><span className={`rounded-md border px-2 py-1 font-medium ${position.type === "option" ? "border-violet-500/30 bg-violet-500/10 text-violet-400" : "border-blue-500/30 bg-blue-500/10 text-blue-400"}`}>{position.type === "option" ? "Option" : "Stock"}</span></td>
                                     <td className={`px-3 py-3 font-medium tabular-nums ${position.amount < 0 ? "text-red-500" : "text-emerald-500"}`}>{money(position.amount)}</td>
                                     <td className="px-3 py-3 tabular-nums text-zinc-500">{money(position.fees)}</td>
                                     <td className="whitespace-nowrap px-3 py-3 text-zinc-500">{position.lastSellDate || "—"}</td>
-                                    <td className="px-3 py-3 tabular-nums">{position.quantity ?? "—"}</td>
-                                    <td className="px-3 py-3 tabular-nums">{position.sellPrice !== undefined ? money(position.sellPrice) : "—"}</td>
-                                    <td className="px-3 py-3 tabular-nums">{position.costBasis !== undefined ? money(position.costBasis) : "—"}</td>
-                                    <td className="px-3 py-3 tabular-nums">{position.proceeds !== undefined ? money(position.proceeds) : "—"}</td>
                                     <td className="px-3 py-3 tabular-nums text-emerald-500">{optionalMoney(position.pat)}</td>
                                     <td className="px-3 py-3 tabular-nums text-red-500">{optionalMoney(position.loss)}</td>
                                     <td className="px-3 py-3 tabular-nums">{optionalMoney(derivedPatNeeded(position.pat, position.loss))}</td>
@@ -728,7 +732,7 @@ export default function Page() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">
           <Card className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-b-none p-4 shadow-2xl sm:rounded-xl sm:p-6">
             <div className="flex items-start justify-between gap-4">
-              <div><h2 className="text-xl font-semibold">Edit realized entry</h2><p className="mt-1 text-sm text-zinc-500">Update this stock or option entry.</p></div>
+              <div><h2 className="text-xl font-semibold">Edit Realized Entry</h2><p className="mt-1 text-sm text-zinc-500">Update This Stock Or Option Entry.</p></div>
               <button onClick={() => setEditingPosition(null)} className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-500/10" aria-label="Close"><X size={18} /></button>
             </div>
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -738,18 +742,18 @@ export default function Page() {
                   <option value="stock">Stock</option><option value="option">Option</option>
                 </select>
               </label>
-              <label className="space-y-2 text-sm font-medium">Last sell date<Input type="date" value={dateInputValue(editingPosition.lastSellDate)} onChange={(e) => setEditingPosition({ ...editingPosition, lastSellDate: e.target.value })} /></label>
-              <label className="space-y-2 text-sm font-medium">Realized P/L<Input inputMode="decimal" value={editingPosition.amount} onChange={(e) => editNumber("amount", e.target.value)} /></label>
-              <label className="space-y-2 text-sm font-medium">Fees<Input type="number" inputMode="decimal" step="any" value={editingPosition.fees} onChange={(e) => editNumber("fees", e.target.value)} /></label>
+              <label className="space-y-2 text-sm font-medium">Last Sell Date<Input type="date" value={dateInputValue(editingPosition.lastSellDate)} onChange={(e) => setEditingPosition({ ...editingPosition, lastSellDate: e.target.value })} /></label>
+              <label className="space-y-2 text-sm font-medium">Realized P/L<Input inputMode="decimal" value={editingPosition.amount === 0 ? "" : editingPosition.amount} onChange={(e) => editNumber("amount", e.target.value)} /></label>
+              <label className="space-y-2 text-sm font-medium">Fees<Input type="number" inputMode="decimal" step="any" value={editingPosition.fees === 0 ? "" : editingPosition.fees} onChange={(e) => editNumber("fees", e.target.value)} /></label>
               <label className="space-y-2 text-sm font-medium">PAT<Input type="number" step="0.01" placeholder="-" value={editingPosition.pat ?? ""} onChange={(e) => editOptionalMoney("pat", e.target.value)} /></label>
               <label className="space-y-2 text-sm font-medium">Loss<Input type="number" step="0.01" placeholder="-" value={editingPosition.loss ?? ""} onChange={(e) => editOptionalMoney("loss", e.target.value)} /></label>
               <label className="space-y-2 text-sm font-medium">PAT Needed<Input readOnly placeholder="-" value={derivedPatNeeded(editingPosition.pat, editingPosition.loss) === null ? "" : money(derivedPatNeeded(editingPosition.pat, editingPosition.loss) ?? 0)} className="cursor-not-allowed bg-zinc-500/5 text-zinc-500" /></label>
-              <label className="space-y-2 text-sm font-medium">Dividend Amount<div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">$</span><Input type="number" step="0.01" min="0" className="pl-7" value={editingPosition.dividendAmount} onChange={(e) => editNumber("dividendAmount", e.target.value)} /></div></label>
-              <label className="space-y-2 text-sm font-medium">Dividend NRA Withholding<div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">$</span><Input type="number" step="0.01" min="0" className="pl-7" value={editingPosition.dividendNraWithholding} onChange={(e) => editNumber("dividendNraWithholding", e.target.value)} /></div></label>
+              <label className="space-y-2 text-sm font-medium">Dividend Amount<div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">$</span><Input type="number" step="0.01" min="0" className="pl-7" value={editingPosition.dividendAmount === 0 ? "" : editingPosition.dividendAmount} onChange={(e) => editNumber("dividendAmount", e.target.value)} /></div></label>
+              <label className="space-y-2 text-sm font-medium">Dividend NRA Withholding<div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">$</span><Input type="number" step="0.01" min="0" className="pl-7" value={editingPosition.dividendNraWithholding === 0 ? "" : editingPosition.dividendNraWithholding} onChange={(e) => editNumber("dividendNraWithholding", e.target.value)} /></div></label>
               <label className="space-y-2 text-sm font-medium">Last Dividend Date<Input type="date" value={dateInputValue(editingPosition.lastDividendDate)} onChange={(e) => setEditingPosition({ ...editingPosition, lastDividendDate: e.target.value })} /></label>
               <label className="space-y-2 text-sm font-medium sm:col-span-2">Comment<textarea rows={5} placeholder="-" value={editingPosition.comment} onChange={(e) => setEditingPosition({ ...editingPosition, comment: e.target.value })} className="flex min-h-28 w-full resize-y rounded-md border border-zinc-500/20 bg-transparent px-3 py-2 text-sm outline-none focus:border-emerald-500" /></label>
             </div>
-            <div className="mt-6 flex justify-end gap-2"><Button variant="outline" onClick={() => setEditingPosition(null)}>Cancel</Button><Button onClick={saveEditedPosition}>Save changes</Button></div>
+            <div className="mt-6 flex justify-end gap-2"><Button variant="outline" onClick={() => setEditingPosition(null)}>Cancel</Button><Button onClick={saveEditedPosition}>Save Changes</Button></div>
           </Card>
         </div>
       )}

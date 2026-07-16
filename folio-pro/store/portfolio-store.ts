@@ -175,13 +175,24 @@ export const usePortfolioStore = create<State>()(
         set((state) => {
           const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
           if (assetType === "stock") removeDcaPosition(target, symbol);
+          const removedHolding = state.holdingsByPortfolio[target].find(
+            (item) => holdingKey(item.symbol, item.assetType ?? "stock") === holdingKey(symbol, assetType),
+          );
           const updated = state.holdingsByPortfolio[target].filter(
             (item) => holdingKey(item.symbol, item.assetType ?? "stock") !== holdingKey(symbol, assetType),
           );
           const holdingsByPortfolio = { ...state.holdingsByPortfolio, [target]: updated };
+          const isShortOption = assetType === "option" && (removedHolding?.optionType === "sell-call" || removedHolding?.optionType === "sell-put");
+          const optionPremium = isShortOption && removedHolding
+            ? Math.abs(removedHolding.shares) * removedHolding.averageCost * 100
+            : 0;
+          const cashByPortfolio = optionPremium > 0
+            ? { ...state.cashByPortfolio, [target]: state.cashByPortfolio[target] + optionPremium }
+            : state.cashByPortfolio;
           return {
             holdingsByPortfolio,
-            ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, state.cashByPortfolio),
+            cashByPortfolio,
+            ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, cashByPortfolio),
           };
         }),
       addTransaction: (transaction) =>
@@ -266,7 +277,7 @@ export const usePortfolioStore = create<State>()(
           const realizedGain = closedQuantity > 0
             ? (assetType === "option"
                 ? (price - (existing?.averageCost ?? holding.averageCost)) * closedQuantity * multiplier * Math.sign(oldQuantityForRealized)
-                : realizedProceeds - realizedCostBasis) - fees
+                : realizedProceeds - realizedCostBasis)
             : undefined;
           let nextHoldings: Holding[];
           if (assetType === "option") {
