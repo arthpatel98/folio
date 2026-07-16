@@ -31,6 +31,7 @@ type RealizedPosition = {
   proceeds?: number;
   optionDetails?: string;
   sourceTransaction?: boolean;
+  sourceTransactionIds?: string[];
 };
 
 type ImportedRow = Record<string, unknown>;
@@ -53,6 +54,7 @@ type PositionGroup = {
   proceeds?: number;
   optionDetails?: string;
   sourceTransaction?: boolean;
+  sourceTransactionIds?: string[];
 };
 
 type SortKey = "symbol" | "mix" | "amount" | "fees" | "latestDate" | "patNeeded" | "dividendAmount" | "dividendNraWithholding" | "lastDividendDate";
@@ -337,28 +339,39 @@ export default function Page() {
     const portfolioIds: RealizedPortfolioId[] = activePortfolioId === "all"
       ? ["robinhood", "fidelity-401k", "fidelity-roth"]
       : [activePortfolioId];
-    const base = portfolioIds.flatMap((portfolioId) => positionsByPortfolio[portfolioId].map((position) => ({ ...position })));
-    const savedPositionIds = new Set(base.map((position) => position.id));
+    const base: RealizedPosition[] = portfolioIds.flatMap((portfolioId) => positionsByPortfolio[portfolioId].map((position) => ({ ...position, sourceTransactionIds: [...(position.sourceTransactionIds ?? [])] })));
+    const alreadyApplied = new Set(base.flatMap((position) => position.sourceTransactionIds ?? []));
+
     portfolioIds.forEach((portfolioId) => {
       transactionsByPortfolio[portfolioId].forEach((transaction) => {
-        if (transaction.realizedGain === undefined || !transaction.symbol) return;
-        const transactionPositionId = `sale-${portfolioId}-${transaction.id}`;
-        if (savedPositionIds.has(transactionPositionId)) return;
-        const optionDetails = transaction.assetType === "option"
-          ? `${transaction.symbol.toUpperCase()} ${transaction.optionStrike !== undefined ? `$${transaction.optionStrike}` : ""} ${transaction.optionType?.includes("put") ? "Put" : "Call"}${transaction.optionExpiry ? ` · ${normalizeDate(transaction.optionExpiry)}` : ""}`.replace(/\s+/g, " ").trim()
+        if (transaction.realizedGain === undefined || !transaction.symbol || alreadyApplied.has(transaction.id)) return;
+        const symbol = transaction.symbol.trim().toUpperCase();
+        const type: TradeType = transaction.assetType === "option" ? "option" : "stock";
+        const optionDetails = type === "option"
+          ? `${symbol} ${transaction.optionStrike !== undefined ? `$${transaction.optionStrike}` : ""} ${transaction.optionType?.includes("put") ? "Put" : "Call"}${transaction.optionExpiry ? ` · ${normalizeDate(transaction.optionExpiry)}` : ""}`.replace(/\s+/g, " ").trim()
           : undefined;
-        base.push({
-          ...makePosition(transaction.symbol + (transaction.assetType === "option" ? " Option" : ""), transaction.realizedGain, Number(transaction.fees) || 0, normalizeDate(transaction.date), transactionPositionId),
-          quantity: Math.abs(Number(transaction.quantity) || 0),
-          sellPrice: Number(transaction.price) || 0,
-          costBasis: transaction.realizedCostBasis,
-          proceeds: transaction.realizedProceeds,
-          optionDetails,
-          sourceTransaction: true,
-          comment: optionDetails ?? transaction.symbol.toUpperCase(),
-        });
+        const sellDate = normalizeDate(transaction.date);
+        const match = base.find((position) => position.symbol === symbol && position.type === type);
+        if (match) {
+          match.amount += transaction.realizedGain;
+          match.fees += Number(transaction.fees) || 0;
+          if (!match.lastSellDate || new Date(sellDate).getTime() >= new Date(match.lastSellDate).getTime()) match.lastSellDate = sellDate;
+          match.comment = optionDetails ?? symbol;
+          match.sourceTransaction = true;
+          match.sourceTransactionIds = [...(match.sourceTransactionIds ?? []), transaction.id];
+        } else {
+          base.push({
+            ...makePosition(symbol + (type === "option" ? " Option" : ""), transaction.realizedGain, Number(transaction.fees) || 0, sellDate, `sale-${portfolioId}-${transaction.id}`),
+            optionDetails,
+            sourceTransaction: true,
+            sourceTransactionIds: [transaction.id],
+            comment: optionDetails ?? symbol,
+          });
+        }
+        alreadyApplied.add(transaction.id);
       });
     });
+
     const feeTotals = new Map<string, number>();
     portfolioIds.forEach((portfolioId) => {
       transactionsByPortfolio[portfolioId].forEach((transaction) => {
@@ -383,7 +396,7 @@ export default function Page() {
   const totals = useMemo(() => ({
     realized: visiblePositions.reduce((sum, item) => sum + item.amount, 0),
     fees: visiblePositions.reduce((sum, item) => sum + item.fees, 0),
-    patNeeded: visiblePositions.reduce((sum, item) => sum + (derivedPatNeeded(item.pat, item.loss) ?? 0), 0),
+    patNeeded: 0,
     optionsPl: visiblePositions.filter((item) => item.type === "option").reduce((sum, item) => sum + item.amount, 0),
     stocksPl: visiblePositions.filter((item) => item.type === "stock").reduce((sum, item) => sum + item.amount, 0),
     dividendAmount: visiblePositions.reduce((sum, item) => sum + item.dividendAmount, 0),
@@ -398,7 +411,7 @@ export default function Page() {
       positions: [...items].sort((a, b) => b.amount - a.amount),
       amount: items.reduce((sum, item) => sum + item.amount, 0),
       fees: items.reduce((sum, item) => sum + item.fees, 0),
-      patNeeded: items.reduce((sum, item) => sum + (derivedPatNeeded(item.pat, item.loss) ?? 0), 0),
+      patNeeded: derivedPatNeeded(items.reduce((sum, item) => sum + (item.pat ?? 0), 0), items.reduce((sum, item) => sum + (item.loss ?? 0), 0)) ?? 0,
       latestDate: [...items].sort((a, b) => new Date(b.lastSellDate).getTime() - new Date(a.lastSellDate).getTime())[0]?.lastSellDate ?? "",
       stockCount: items.filter((item) => item.type === "stock").length,
       optionCount: items.filter((item) => item.type === "option").length,
@@ -407,6 +420,9 @@ export default function Page() {
       lastDividendDate: [...items].filter((item) => item.lastDividendDate).sort((a, b) => new Date(b.lastDividendDate).getTime() - new Date(a.lastDividendDate).getTime())[0]?.lastDividendDate ?? "",
     }));
   }, [visiblePositions]);
+
+  const totalPatNeeded = groups.reduce((sum, group) => sum + group.patNeeded, 0);
+  const lossRecoveryTickers = groups.filter((group) => group.patNeeded > 0).length;
 
   const filteredAndSortedGroups = useMemo(() => {
     const term = searchTerm.trim().toUpperCase();
@@ -472,7 +488,7 @@ export default function Page() {
     doc.setFontSize(18);
     doc.text("Realized P/L Report", 14, 16);
     doc.setFontSize(10);
-    doc.text(`Realized P/L: ${money(totals.realized)}   Fees: ${money(totals.fees)}   PAT Needed: ${money(totals.patNeeded)}   Dividends: ${money(totals.dividendAmount)}   NRA Withholding: ${money(totals.dividendNraWithholding)}`, 14, 23);
+    doc.text(`Realized P/L: ${money(totals.realized)}   Fees: ${money(totals.fees)}   PAT Needed: ${money(totalPatNeeded)}   Dividends: ${money(totals.dividendAmount)}   NRA Withholding: ${money(totals.dividendNraWithholding)}`, 14, 23);
     autoTable(doc, {
       startY: 29,
       head: [["Ticker", "Type", "Realized P/L", "Fees", "Sell Date", "PAT", "Loss", "PAT Needed", "Dividend", "NRA Withholding", "Dividend Date", "Comment"]],
@@ -602,22 +618,22 @@ export default function Page() {
 
       {message && <p className="mt-4 text-sm text-emerald-500">{message}</p>}
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard label="Net Realized P/L" value={money(totals.realized)} />
         <MetricCard label="Options P/L Total" value={money(totals.optionsPl)} />
         <MetricCard label="Net Stocks P/L" value={money(totals.stocksPl)} />
         <MetricCard label="Profitable Tickers" value={`${winners.length} of ${groups.length}`} />
+        <MetricCard label="Loss Recovery Tickers" value={lossRecoveryTickers.toLocaleString()} />
       </div>
 
       <Card className="mt-6 overflow-hidden p-5">
         <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="font-medium">Realized P/L By Ticker</h2>
-            <p className="mt-1 text-xs text-zinc-500">Select a Ticker Row to See Its Individual Stock and Option Entries.</p>
+            <p className="mt-1 text-xs text-zinc-500">Choose A Ticker Row To See Its Individual Stock And Option Entries.</p>
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="flex w-full flex-wrap justify-end gap-2">
-              {selectedPositionIds.size > 0 && <Button variant="outline" onClick={deleteSelectedPositions} className="border-red-500/30 text-red-500 hover:bg-red-500/10"><Trash2 className="mr-2 h-4 w-4" />Delete Selected ({selectedPositionIds.size})</Button>}
               <div className="relative w-full sm:w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
               <Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search Ticker..." className="pl-9" />
@@ -629,9 +645,8 @@ export default function Page() {
 
         <div className="-mx-5 overflow-x-auto overscroll-x-contain px-5 pb-1">
           <table className="w-full min-w-[1600px] text-center text-sm">
-            <thead className="border-y text-xs uppercase tracking-wide text-zinc-500">
+            <thead className="border-y text-xs tracking-wide text-zinc-500">
               <tr>
-                <th className="w-12 px-3 py-3">Select</th>
                 <th className="w-12 px-3 py-3" />
                 <th className="sticky left-0 z-20 bg-white px-3 py-3 dark:bg-zinc-950"><SortHeader label="Ticker" column="symbol" /></th>
                 <th className="px-3 py-3"><SortHeader label="Mix" column="mix" /></th>
@@ -650,7 +665,6 @@ export default function Page() {
                 return (
                   <FragmentGroup key={group.symbol}>
                     <tr className="cursor-pointer border-b align-middle transition hover:bg-zinc-500/5" onClick={() => toggleGroup(group.symbol)}>
-                      <td className="px-3 py-4" onClick={(event) => event.stopPropagation()}><input type="checkbox" checked={group.positions.length > 0 && group.positions.every((position) => selectedPositionIds.has(position.id))} onChange={() => toggleGroupSelection(group)} aria-label={`Select all ${group.symbol} entries`} /></td>
                       <td className="px-3 py-4">{expanded ? <ChevronDown className="mx-auto h-4 w-4" /> : <ChevronRight className="mx-auto h-4 w-4" />}</td>
                       <td className="sticky left-0 z-10 bg-white px-3 py-4 font-semibold group-hover:bg-zinc-50 dark:bg-zinc-950 dark:group-hover:bg-zinc-900">{group.symbol}</td>
                       <td className="px-3 py-4">
@@ -669,12 +683,12 @@ export default function Page() {
                     </tr>
                     {expanded && (
                       <tr className="border-b bg-zinc-500/[0.035]">
-                        <td colSpan={11} className="p-0">
+                        <td colSpan={10} className="p-0">
                           <div className="m-3 overflow-hidden rounded-lg border border-zinc-500/15">
                             <table className="w-full text-center text-xs">
-                              <thead className="bg-zinc-500/5 uppercase tracking-wide text-zinc-500">
+                              <thead className="bg-zinc-500/5 tracking-wide text-zinc-500">
                                 <tr>
-                                  <th className="px-3 py-3">Select</th><th className="px-3 py-3">Type</th><th className="px-3 py-3">Realized P/L</th><th className="px-3 py-3">Fees</th>
+                                  <th className="px-3 py-3">Type</th><th className="px-3 py-3">Realized P/L</th><th className="px-3 py-3">Fees</th>
                                   <th className="px-3 py-3">Sell Date</th><th className="px-3 py-3">PAT</th><th className="px-3 py-3">Loss</th>
                                   <th className="px-3 py-3">PAT Needed</th><th className="px-3 py-3">Dividend Amount</th><th className="px-3 py-3">Dividend NRA Withholding</th><th className="px-3 py-3">Last Dividend Date</th><th className="px-3 py-3">Comment</th><th className="px-3 py-3">Actions</th>
                                 </tr>
@@ -682,14 +696,13 @@ export default function Page() {
                               <tbody>
                                 {group.positions.map((position) => (
                                   <tr key={position.id} className="border-t border-zinc-500/10">
-                                    <td className="px-3 py-3"><input type="checkbox" checked={selectedPositionIds.has(position.id)} onChange={() => togglePositionSelection(position.id)} aria-label={`Select ${position.symbol} ${position.type} entry`} /></td>
                                     <td className="px-3 py-3"><span className={`rounded-md border px-2 py-1 font-medium ${position.type === "option" ? "border-violet-500/30 bg-violet-500/10 text-violet-400" : "border-blue-500/30 bg-blue-500/10 text-blue-400"}`}>{position.type === "option" ? "Option" : "Stock"}</span></td>
                                     <td className={`px-3 py-3 font-medium tabular-nums ${position.amount < 0 ? "text-red-500" : "text-emerald-500"}`}>{money(position.amount)}</td>
                                     <td className="px-3 py-3 tabular-nums text-zinc-500">{money(position.fees)}</td>
                                     <td className="whitespace-nowrap px-3 py-3 text-zinc-500">{position.lastSellDate || "—"}</td>
                                     <td className="px-3 py-3 tabular-nums text-emerald-500">{optionalMoney(position.pat)}</td>
                                     <td className="px-3 py-3 tabular-nums text-red-500">{optionalMoney(position.loss)}</td>
-                                    <td className="px-3 py-3 tabular-nums">{optionalMoney(derivedPatNeeded(position.pat, position.loss))}</td>
+                                    <td className="px-3 py-3 tabular-nums">-</td>
                                     <td className="px-3 py-3 tabular-nums text-emerald-500">{position.dividendAmount ? money(position.dividendAmount) : "-"}</td>
                                     <td className="px-3 py-3 tabular-nums text-red-500">{position.dividendNraWithholding ? money(position.dividendNraWithholding) : "-"}</td>
                                     <td className="whitespace-nowrap px-3 py-3 text-zinc-500">{position.lastDividendDate || "—"}</td>
@@ -714,11 +727,11 @@ export default function Page() {
             </tbody>
             <tfoot className="border-t-2 font-semibold">
               <tr>
-                <td /><td /><td className="px-3 py-4">Total</td><td />
+                <td /><td className="px-3 py-4">Total</td><td />
                 <td className={`px-3 py-4 tabular-nums ${totals.realized < 0 ? "text-red-500" : "text-emerald-500"}`}>{money(totals.realized)}</td>
                 <td className="px-3 py-4 tabular-nums text-zinc-500">{money(totals.fees)}</td>
                 <td />
-                <td className="px-3 py-4 tabular-nums">{totals.patNeeded > 0 ? money(totals.patNeeded) : "-"}</td>
+                <td className="px-3 py-4 tabular-nums">{totalPatNeeded > 0 ? money(totalPatNeeded) : "-"}</td>
                 <td className="px-3 py-4 tabular-nums text-emerald-500">{money(totals.dividendAmount)}</td>
                 <td className="px-3 py-4 tabular-nums text-red-500">{money(totals.dividendNraWithholding)}</td>
                 <td />

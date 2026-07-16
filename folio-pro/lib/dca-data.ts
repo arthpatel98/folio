@@ -15,6 +15,8 @@ export type DcaPosition = {
   lots: DcaLot[];
   custom?: boolean;
   portfolioId?: "robinhood" | "fidelity-401k" | "fidelity-roth";
+  addedDate?: string;
+  daysSinceAdded?: number;
 };
 
 export const builtInDcaPositions: DcaPosition[] = [

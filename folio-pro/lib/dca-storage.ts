@@ -2,6 +2,7 @@
 
 import { builtInDcaPositions, DcaPosition } from "@/lib/dca-data";
 import type { DataPortfolioId } from "@/store/portfolio-store";
+import type { AssetType } from "@/types/portfolio";
 
 export const DCA_STORAGE_KEY = "folio-dca-positions-v3";
 export const DCA_UPDATED_EVENT = "folio-dca-updated";
@@ -56,12 +57,14 @@ export function upsertDcaPosition(position: DcaPosition) {
   saveDcaPositions(next);
 }
 
-export function removeDcaPosition(portfolioId: DataPortfolioId, symbolInput: string) {
+export function removeDcaPosition(portfolioId: DataPortfolioId, symbolInput: string, assetType: AssetType = "stock") {
   if (typeof window === "undefined") return;
   const symbol = symbolInput.trim().toUpperCase();
-  const positions = loadDcaPositions().filter((position) =>
-    !(position.portfolioId === portfolioId && position.symbol.trim().toUpperCase() === symbol),
-  );
+  const positions = loadDcaPositions().filter((position) => {
+    if (position.portfolioId !== portfolioId || position.symbol.trim().toUpperCase() !== symbol) return true;
+    const isOptionPosition = position.id.includes("-option-") || /\b(?:call|put)\b/i.test(position.label ?? "");
+    return assetType === "option" ? !isOptionPosition : isOptionPosition;
+  });
   saveDcaPositions(positions);
 }
 

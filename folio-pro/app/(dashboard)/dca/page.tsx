@@ -86,11 +86,22 @@ export default function DcaPage() {
   const [newBuyDate, setNewBuyDate] = useState("");
   const [targetReturn, setTargetReturn] = useState<NumericValue>("");
   const [sharesToSell, setSharesToSell] = useState<NumericValue>("");
+  const [editingOptionDays, setEditingOptionDays] = useState(false);
+  const [optionDaysDraft, setOptionDaysDraft] = useState("");
 
   const mergeWithHeldPositions = (savedPositions: DcaPosition[]) => {
     const portfolioIds = activeId === "all" ? (["robinhood", "fidelity-401k", "fidelity-roth"] as const) : [activeId];
     const visibleSaved = savedPositions
       .filter((position) => activeId === "all" || position.portfolioId === activeId)
+      .filter((position) => {
+        const isOptionPosition = position.id.includes("-option-") || /\b(?:call|put)\b/i.test(position.label ?? "");
+        if (!isOptionPosition || !position.portfolioId) return true;
+        return holdingsByPortfolio[position.portfolioId].some((holding) => {
+          if (holding.assetType !== "option" || holding.shares === 0 || holding.symbol.trim().toUpperCase() !== position.symbol.trim().toUpperCase()) return false;
+          const label = position.label ?? "";
+          return (!holding.optionStrike || label.includes(`$${holding.optionStrike}`)) && (!holding.optionExpiry || label.includes(formatDate(holding.optionExpiry)));
+        });
+      })
       .map((position) => {
         const portfolioId = position.portfolioId;
         if (!portfolioId || position.id.includes("-option-") || position.lots.length > 0) return position;
@@ -241,6 +252,8 @@ export default function DcaPage() {
   const optionTargetPrice = toNumber(sellPrice) || selectedHolding?.currentPrice || 0;
   const optionPotentialProfit = isOption ? (optionTargetPrice - optionAverage) * optionContracts * 100 * optionDirection : 0;
   const optionPotentialPct = optionAverage && optionContracts ? optionPotentialProfit / (optionAverage * optionContracts * 100) * 100 : 0;
+  const calculatedOptionDays = selectedPosition?.addedDate ? Number(daysSinceAdded(selectedPosition.addedDate).replace(/,/g, "")) : Number.NaN;
+  const optionDays = selectedPosition?.daysSinceAdded ?? (Number.isFinite(calculatedOptionDays) ? calculatedOptionDays : null);
   const load = (id: string) => { applyPosition(positions.find((position) => position.id === id)); setSavedMessage(""); };
 
   useEffect(() => {
@@ -409,14 +422,15 @@ export default function DcaPage() {
 
     {isOption && selectedHolding && optionMetrics ? (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        {[
-          ["Contracts", formatShares(optionContracts)],
-          ["Average Premium", money(optionAverage)],
-          ["Current Premium", money(selectedHolding.currentPrice)],
-          ["Market Value", money(optionMetrics.marketValue)],
-          ["Potential P/L", signedMoney(optionPotentialProfit)],
-          ["Potential P/L %", pct(optionPotentialPct)],
-        ].map(([label, value], index) => <div key={label} className={cn("rounded-2xl border border-white/10 bg-zinc-950/35 p-5", index >= 4 && (optionPotentialProfit >= 0 ? "border-emerald-500/35 bg-emerald-500/[.06]" : "border-rose-500/35 bg-rose-500/[.06]"))}><p className="text-sm text-zinc-500">{label}</p><p className="mt-3 text-2xl font-semibold">{value}</p></div>)}
+        <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Average Premium</p><p className="mt-3 text-2xl font-semibold">{money(optionAverage)}</p><p className="mt-2 text-sm text-zinc-500">{formatShares(optionContracts)} {optionContracts === 1 ? "Contract" : "Contracts"}</p></div>
+        <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5">
+          <div className="flex items-center justify-between gap-2"><p className="text-sm text-zinc-500">Days Since Added</p><button onClick={() => { setOptionDaysDraft(optionDays === null ? "" : String(optionDays)); setEditingOptionDays(true); }} aria-label="Edit Days Since Added" title="Edit Days Since Added" className="rounded-lg p-1.5 text-zinc-500 hover:bg-emerald-500/10 hover:text-emerald-400"><Pencil size={15}/></button></div>
+          {editingOptionDays ? <div className="mt-3 flex items-center gap-2"><input autoFocus type="number" min="0" step="1" value={optionDaysDraft} onChange={(event) => setOptionDaysDraft(event.target.value)} className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 outline-none"/><button onClick={() => { if (selectedPosition) { const value = optionDaysDraft.trim() === "" ? undefined : Math.max(0, Math.floor(Number(optionDaysDraft))); upsertDcaPosition({ ...selectedPosition, daysSinceAdded: Number.isFinite(value) ? value : undefined, sellPrice: parseNumericInput(sellPrice), lots: sortLots(lots) }); loadAll(selectedPosition.id); } setEditingOptionDays(false); }} className="h-10 rounded-xl bg-emerald-400 px-3 text-sm font-semibold text-zinc-950">Save</button></div> : <p className="mt-3 text-2xl font-semibold">{optionDays === null ? "—" : `${optionDays.toLocaleString()} Days`}</p>}
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Current Premium</p><p className="mt-3 text-2xl font-semibold">{money(selectedHolding.currentPrice)}</p></div>
+        <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Market Value</p><p className="mt-3 text-2xl font-semibold">{money(optionMetrics.marketValue)}</p></div>
+        <div className={cn("rounded-2xl border p-5", optionPotentialProfit > 0 ? "border-emerald-500/35 bg-emerald-500/[.06]" : optionPotentialProfit < 0 ? "border-rose-500/35 bg-rose-500/[.06]" : "border-white/10 bg-zinc-950/35")}><p className="text-sm text-zinc-500">Potential P/L</p><p className={cn("mt-3 text-2xl font-semibold", optionPotentialProfit > 0 ? "text-emerald-400" : optionPotentialProfit < 0 ? "text-rose-400" : "text-zinc-100")}>{signedMoney(optionPotentialProfit)}</p></div>
+        <div className={cn("rounded-2xl border p-5", optionPotentialProfit > 0 ? "border-emerald-500/35 bg-emerald-500/[.06]" : optionPotentialProfit < 0 ? "border-rose-500/35 bg-rose-500/[.06]" : "border-white/10 bg-zinc-950/35")}><p className="text-sm text-zinc-500">Potential P/L %</p><p className={cn("mt-3 text-2xl font-semibold", optionPotentialProfit > 0 ? "text-emerald-400" : optionPotentialProfit < 0 ? "text-rose-400" : "text-zinc-100")}>{pct(optionPotentialPct)}</p></div>
       </div>
     ) : (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-6">

@@ -174,7 +174,7 @@ export const usePortfolioStore = create<State>()(
       removeHolding: (symbol, assetType) =>
         set((state) => {
           const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
-          if (assetType === "stock") removeDcaPosition(target, symbol);
+          removeDcaPosition(target, symbol, assetType);
           const removedHolding = state.holdingsByPortfolio[target].find(
             (item) => holdingKey(item.symbol, item.assetType ?? "stock") === holdingKey(symbol, assetType),
           );
