@@ -34,6 +34,7 @@ const lotDateValue = (value: string) => {
 };
 const sortLots = (lots: DcaLot[]) => lots.slice().sort((a, b) => lotDateValue(a.date) - lotDateValue(b.date));
 const clonePosition = (position: DcaPosition): DcaPosition => ({ ...position, lots: position.lots.map((lot) => ({ ...lot })) });
+const positionIdentity = (position: DcaPosition) => `${position.portfolioId ?? "all"}:${position.symbol.trim().toUpperCase()}:${(position.label ?? position.symbol).replace(/\s+/g, " ").trim().toUpperCase()}`;
 
 type LotDraft = { shares: NumericValue; price: NumericValue; cost: NumericValue; costOverridden: boolean; date: string; future: boolean };
 const emptyDraft = (future = false): LotDraft => ({ shares: "", price: "", cost: "", costOverridden: false, date: "", future });
@@ -126,6 +127,7 @@ export default function DcaPage() {
     const savedStockKeys = new Set(visibleSaved
       .filter((position) => !position.id.includes("-option-"))
       .map((position) => `${position.portfolioId}:${position.symbol.trim().toUpperCase()}`));
+    const savedPositionKeys = new Set(visibleSaved.map(positionIdentity));
     const placeholders: DcaPosition[] = [];
 
     portfolioIds.forEach((portfolioId) => {
@@ -138,7 +140,8 @@ export default function DcaPage() {
             ? `${symbol} ${holding.optionStrike !== undefined ? `$${holding.optionStrike}` : ""} ${holding.optionType?.includes("put") ? "Put" : "Call"}${holding.optionExpiry ? ` · ${formatDate(holding.optionExpiry)}` : ""}`.replace(/\s+/g, " ").trim()
             : symbol;
           const stockKey = `${portfolioId}:${symbol}`;
-          if (!isOptionHolding && savedStockKeys.has(stockKey)) return;
+          const candidateKey = `${portfolioId}:${symbol}:${optionLabel.replace(/\s+/g, " ").trim().toUpperCase()}`;
+          if ((!isOptionHolding && savedStockKeys.has(stockKey)) || savedPositionKeys.has(candidateKey)) return;
 
           placeholders.push({
             id: `PORTFOLIO-${portfolioId}-${holding.assetType ?? "stock"}-${holding.optionSymbol ?? optionLabel}`,
@@ -158,7 +161,12 @@ export default function DcaPage() {
         });
     });
 
-    return [...visibleSaved, ...placeholders].sort((a, b) => (a.label ?? a.symbol).localeCompare(b.label ?? b.symbol));
+    const unique = new Map<string, DcaPosition>();
+    [...visibleSaved, ...placeholders].forEach((position) => {
+      const key = positionIdentity(position);
+      if (!unique.has(key)) unique.set(key, position);
+    });
+    return [...unique.values()].sort((a, b) => (a.label ?? a.symbol).localeCompare(b.label ?? b.symbol));
   };
 
   const positions = useMemo(() => mergeWithHeldPositions(allPositions), [allPositions, activeId, holdingsByPortfolio]);
@@ -429,12 +437,12 @@ export default function DcaPage() {
         </div>
         <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Current Premium</p><p className="mt-3 text-2xl font-semibold">{money(selectedHolding.currentPrice)}</p></div>
         <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Market Value</p><p className="mt-3 text-2xl font-semibold">{money(optionMetrics.marketValue)}</p></div>
-        <div className={cn("rounded-2xl border p-5", optionPotentialProfit > 0 ? "border-emerald-500/35 bg-emerald-500/[.06]" : optionPotentialProfit < 0 ? "border-rose-500/35 bg-rose-500/[.06]" : "border-white/10 bg-zinc-950/35")}><p className="text-sm text-zinc-500">Potential P/L</p><p className={cn("mt-3 text-2xl font-semibold", optionPotentialProfit > 0 ? "text-emerald-400" : optionPotentialProfit < 0 ? "text-rose-400" : "text-zinc-100")}>{signedMoney(optionPotentialProfit)}</p></div>
-        <div className={cn("rounded-2xl border p-5", optionPotentialProfit > 0 ? "border-emerald-500/35 bg-emerald-500/[.06]" : optionPotentialProfit < 0 ? "border-rose-500/35 bg-rose-500/[.06]" : "border-white/10 bg-zinc-950/35")}><p className="text-sm text-zinc-500">Potential P/L %</p><p className={cn("mt-3 text-2xl font-semibold", optionPotentialProfit > 0 ? "text-emerald-400" : optionPotentialProfit < 0 ? "text-rose-400" : "text-zinc-100")}>{pct(optionPotentialPct)}</p></div>
+        <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Potential P/L</p><p className={cn("mt-3 text-2xl font-semibold", optionPotentialProfit > 0 ? "text-emerald-400" : optionPotentialProfit < 0 ? "text-rose-400" : "text-zinc-100")}>{signedMoney(optionPotentialProfit)}</p></div>
+        <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Potential P/L %</p><p className={cn("mt-3 text-2xl font-semibold", optionPotentialProfit > 0 ? "text-emerald-400" : optionPotentialProfit < 0 ? "text-rose-400" : "text-zinc-100")}>{pct(optionPotentialPct)}</p></div>
       </div>
     ) : (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        {[ ["Total Investment", totals.amount ? money(totals.amount) : "—"], ["Total Shares", totals.shares ? formatShares(totals.shares) : "—"], ["Average Price", totals.avg ? money(totals.avg) : "—"], ["Average Days Held", totals.avgDaysHeld ? `${totals.avgDaysHeld.toLocaleString()} Days` : "—"], ["Potential Return", totals.amount ? signedMoney(totals.profit) : "—"], ["Potential Return %", totals.amount ? pct(totals.roi) : "—"] ].map(([label, value], index) => <div key={label} className={cn("rounded-2xl border border-white/10 bg-zinc-950/35 p-5", index >= 4 && (totals.profit >= 0 ? "border-emerald-500/35 bg-emerald-500/[.06]" : "border-rose-500/35 bg-rose-500/[.06]"))}><p className="text-sm text-zinc-500">{label}</p><p className="mt-3 text-2xl font-semibold">{value}</p></div>)}
+        {[ ["Total Investment", totals.amount ? money(totals.amount) : "—"], ["Total Shares", totals.shares ? formatShares(totals.shares) : "—"], ["Average Price", totals.avg ? money(totals.avg) : "—"], ["Average Days Held", totals.avgDaysHeld ? `${totals.avgDaysHeld.toLocaleString()} Days` : "—"], ["Potential Return", totals.amount ? signedMoney(totals.profit) : "—"], ["Potential Return %", totals.amount ? pct(totals.roi) : "—"] ].map(([label, value], index) => <div key={label} className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">{label}</p><p className={cn("mt-3 text-2xl font-semibold", index >= 4 && (totals.profit > 0 ? "text-emerald-400" : totals.profit < 0 ? "text-rose-400" : "text-zinc-100"))}>{value}</p></div>)}
       </div>
     )}
 
@@ -497,6 +505,11 @@ export default function DcaPage() {
       <p className="mt-3 text-center text-sm text-emerald-400">Potential Sell Price: {money(sellPrice === "" ? baseAverage : targetPrice)}</p>
     </section>
 
+    {!isOption && <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5"><h2 className="font-semibold">Before DCA Vs. After DCA</h2><div className="mt-5 grid gap-4 md:grid-cols-2">
+      <div className="rounded-2xl border border-white/10 bg-black/15 p-5"><p className="text-sm text-zinc-500">Before DCA</p><p className="mt-1 text-xs text-zinc-600">Existing Average Price</p><p className="mt-4 text-3xl font-semibold">{totals.oldAvg ? money(totals.oldAvg) : "—"}</p></div>
+      <div className={cn("rounded-2xl border p-5", totals.avg < totals.oldAvg ? "border-emerald-500/30 bg-emerald-500/[.06]" : totals.avg > totals.oldAvg ? "border-rose-500/30 bg-rose-500/[.06]" : "border-white/10 bg-black/15")}><p className="text-sm text-zinc-500">After DCA</p><p className="mt-1 text-xs text-zinc-600">New Average Price</p><div className="mt-4 flex items-end justify-between gap-4"><p className="text-3xl font-semibold">{totals.avg ? money(totals.avg) : "—"}</p>{totals.oldAvg > 0 && totals.avg > 0 && (() => { const difference = totals.avg - totals.oldAvg; const percent = difference / totals.oldAvg * 100; const Icon = difference > 0 ? ArrowUp : difference < 0 ? ArrowDown : ArrowRight; return <div className={cn("flex items-center gap-1.5 text-sm font-semibold", difference < 0 ? "text-emerald-400" : difference > 0 ? "text-rose-400" : "text-zinc-400")}><Icon size={17}/><span>{signedMoney(difference)} · {Math.abs(percent).toFixed(2)}%</span></div>; })()}</div></div>
+    </div></section>}
+
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
         <h2 className="flex items-center gap-2 font-semibold">Target Return Calculator <InfoTip text="Enter a desired return percentage to calculate the selling price needed for this DCA position." /></h2>
@@ -517,10 +530,6 @@ export default function DcaPage() {
       </section>
     </div>
 
-    {!isOption && <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5"><h2 className="font-semibold">Before DCA Vs. After DCA</h2><div className="mt-5 grid gap-4 md:grid-cols-2">
-      <div className="rounded-2xl border border-white/10 bg-black/15 p-5"><p className="text-sm text-zinc-500">Before DCA</p><p className="mt-1 text-xs text-zinc-600">Existing Average Price</p><p className="mt-4 text-3xl font-semibold">{totals.oldAvg ? money(totals.oldAvg) : "—"}</p></div>
-      <div className={cn("rounded-2xl border p-5", totals.avg < totals.oldAvg ? "border-emerald-500/30 bg-emerald-500/[.06]" : totals.avg > totals.oldAvg ? "border-rose-500/30 bg-rose-500/[.06]" : "border-white/10 bg-black/15")}><p className="text-sm text-zinc-500">After DCA</p><p className="mt-1 text-xs text-zinc-600">New Average Price</p><div className="mt-4 flex items-end justify-between gap-4"><p className="text-3xl font-semibold">{totals.avg ? money(totals.avg) : "—"}</p>{totals.oldAvg > 0 && totals.avg > 0 && (() => { const difference = totals.avg - totals.oldAvg; const percent = difference / totals.oldAvg * 100; const Icon = difference > 0 ? ArrowUp : difference < 0 ? ArrowDown : ArrowRight; return <div className={cn("flex items-center gap-1.5 text-sm font-semibold", difference < 0 ? "text-emerald-400" : difference > 0 ? "text-rose-400" : "text-zinc-400")}><Icon size={17}/><span>{signedMoney(difference)} · {Math.abs(percent).toFixed(2)}%</span></div>; })()}</div></div>
-    </div></section>}
 
   </div>;
 }

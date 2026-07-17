@@ -62,6 +62,7 @@ type SortDirection = "asc" | "desc";
 
 const STORAGE_KEY = "folio-realized-positions-v4";
 const PREVIOUS_STORAGE_KEYS = ["folio-realized-positions-v3", "folio-realized-positions-v2"];
+const REALIZED_SORT_STORAGE_KEY = "folio-realized-sort-preference";
 type RealizedPortfolioId = "robinhood" | "fidelity-401k" | "fidelity-roth";
 type PositionsByPortfolio = Record<RealizedPortfolioId, RealizedPosition[]>;
 
@@ -310,6 +311,9 @@ export default function Page() {
             dividendAmount: Number(position.dividendAmount) || 0,
             dividendNraWithholding: Number(position.dividendNraWithholding) || 0,
             lastDividendDate: normalizeDate(position.lastDividendDate),
+            optionDetails: position.optionDetails,
+            sourceTransaction: Boolean(position.sourceTransaction),
+            sourceTransactionIds: Array.isArray(position.sourceTransactionIds) ? position.sourceTransactionIds.filter((id): id is string => typeof id === "string") : [],
           } satisfies RealizedPosition;
         }).filter((position) => !shouldRemoveByComment(position.comment));
         if (Array.isArray(parsed)) {
@@ -334,6 +338,18 @@ export default function Page() {
   useEffect(() => {
     if (hasHydrated) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(positionsByPortfolio));
   }, [hasHydrated, positionsByPortfolio]);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(REALIZED_SORT_STORAGE_KEY) ?? "null") as { key?: SortKey; direction?: SortDirection } | null;
+      if (saved?.key && ["symbol", "amount", "fees", "mix", "latestDate", "patNeeded", "dividendAmount", "dividendNraWithholding", "lastDividendDate"].includes(saved.key)) setSortKey(saved.key);
+      if (saved?.direction === "asc" || saved?.direction === "desc") setSortDirection(saved.direction);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(REALIZED_SORT_STORAGE_KEY, JSON.stringify({ key: sortKey, direction: sortDirection })); } catch {}
+  }, [sortDirection, sortKey]);
 
   const visiblePositions = useMemo(() => {
     const portfolioIds: RealizedPortfolioId[] = activePortfolioId === "all"
