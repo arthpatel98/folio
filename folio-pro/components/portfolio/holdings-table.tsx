@@ -277,7 +277,7 @@ export function HoldingsTable({
             <Dialog.Close asChild><Button type="button" variant="outline">Cancel</Button></Dialog.Close>
             <Button type="button" className="bg-red-500 text-white hover:bg-red-600" onClick={() => {
               if (!pendingDelete) return;
-              removeHolding(pendingDelete.symbol, assetType);
+              removeHolding(pendingDelete);
               toast.success("Position Removed Successfully");
               setPendingDelete(null);
             }}>Remove Position</Button>

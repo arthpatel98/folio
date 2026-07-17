@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePortfolioStore } from "@/store/portfolio-store";
 import { toast } from "sonner";
-import { AssetType, OptionType, Sector } from "@/types/portfolio";
+import { AssetType, Holding, OptionType, Sector } from "@/types/portfolio";
 
 const NEW_POSITION = "__new_position__";
+
+const optionContractKey = (holding: Holding) => holding.optionSymbol || [holding.symbol, holding.optionType ?? "option", holding.optionExpiry ?? "", holding.optionStrike ?? "", holding.company].join("|");
 
 const sectors: Sector[] = [
   "AI / Enterprise Software", "AI Data Centers", "Cloud / AI / Software", "Crypto / Bitcoin",
@@ -38,6 +40,7 @@ type FormState = {
   optionExpiry: string;
   tradeDate: string;
   platformFees: string;
+  selectedContractKey: string;
 };
 
 const todayInputValue = () => {
@@ -57,7 +60,7 @@ const formatTradeDate = (value: string) => {
 
 const createInitialForm = (action: "buy" | "sell" = "buy", assetType: AssetType = "stock"): FormState => ({
   action, assetType, symbol: "", company: "", quantity: "", tradePrice: "", sector: "",
-  optionType: "buy-call", optionExpiry: "", tradeDate: todayInputValue(), platformFees: "0.00",
+  optionType: "buy-call", optionExpiry: "", tradeDate: todayInputValue(), platformFees: "0.00", selectedContractKey: "",
 });
 
 export function AddHoldingDialog() {
@@ -77,9 +80,10 @@ export function AddHoldingDialog() {
 
   const matching = useMemo(() => {
     if (form.assetType === "option" && form.action === "buy") return undefined;
-    return holdings.find((holding) => (holding.assetType ?? "stock") === form.assetType
+    if (form.assetType === "option") return holdings.find((holding) => holding.assetType === "option" && optionContractKey(holding) === form.selectedContractKey);
+    return holdings.find((holding) => (holding.assetType ?? "stock") === "stock"
       && holding.symbol.toUpperCase() === form.symbol.trim().toUpperCase());
-  }, [form.action, form.assetType, form.symbol, holdings]);
+  }, [form.action, form.assetType, form.selectedContractKey, form.symbol, holdings]);
 
   const resetForSelection = (field: "action" | "assetType", value: string) => {
     setError("");
@@ -111,6 +115,19 @@ export function AddHoldingDialog() {
       }
       return next;
     });
+  };
+
+  const selectOptionContract = (value: string) => {
+    const found = ownedOptions.find((holding) => optionContractKey(holding) === value);
+    setForm((current) => found ? {
+      ...current,
+      selectedContractKey: value,
+      symbol: found.symbol,
+      company: found.company,
+      sector: found.sector,
+      optionType: found.optionType ?? current.optionType,
+      optionExpiry: found.optionExpiry ?? "",
+    } : { ...current, selectedContractKey: "", symbol: "", company: "", optionExpiry: "" });
   };
 
   const selectBuyStock = (value: string) => {
@@ -212,7 +229,7 @@ export function AddHoldingDialog() {
               <DateField label="Sell Date" value={form.tradeDate} onChange={(value) => update("tradeDate", value)} />
               <MoneyField label="Platform Fees" value={form.platformFees} onChange={(value) => update("platformFees", value)} />
             </> : isRemoveOption ? <>
-              <Field label="Contract Details"><select required value={form.symbol} onChange={(e) => update("symbol", e.target.value)} className="field-select" autoFocus><option value="">Select Contract</option>{ownedOptions.map((holding, index) => <option key={`${holding.symbol}-${holding.optionType}-${holding.optionExpiry}-${index}`} value={holding.symbol}>{holding.company}</option>)}</select></Field>
+              <Field label="Contract Details"><select required value={form.selectedContractKey} onChange={(e) => selectOptionContract(e.target.value)} className="field-select" autoFocus><option value="">Select Contract</option>{ownedOptions.map((holding) => <option key={optionContractKey(holding)} value={optionContractKey(holding)}>{holding.company}</option>)}</select></Field>
               <Field label="Contracts"><Input required type="number" min="1" step="1" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /></Field>
               <Field label="Sell Price"><Input required type="number" min="0.000001" step="any" value={form.tradePrice} onChange={(e) => update("tradePrice", e.target.value)} /></Field>
               <MoneyField label="Platform Fees" value={form.platformFees} onChange={(value) => update("platformFees", value)} />
@@ -230,7 +247,8 @@ export function AddHoldingDialog() {
               <Field label="Contracts"><Input required type="number" step="1" max={form.optionType === "sell-call" || form.optionType === "sell-put" ? -1 : undefined} min={form.optionType === "sell-call" || form.optionType === "sell-put" ? undefined : 1} value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /></Field>
               <Field label="Contract Cost"><Input required type="number" min="0.000001" step="any" value={form.tradePrice} onChange={(e) => update("tradePrice", e.target.value)} /></Field>
               <Field label="Option Type"><select required value={form.optionType} onChange={(e) => { const nextType = e.target.value as OptionType; update("optionType", nextType); const currentQuantity = Number(form.quantity); if (Number.isFinite(currentQuantity) && currentQuantity !== 0) update("quantity", String(nextType === "sell-call" || nextType === "sell-put" ? -Math.abs(currentQuantity) : Math.abs(currentQuantity))); }} className="field-select">{optionTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
-              <Field label="Option Expiry"><Input required type="date" value={form.optionExpiry} onChange={(e) => update("optionExpiry", e.target.value)} /></Field>
+              <DateField label="Option Expiry" value={form.optionExpiry} onChange={(value) => update("optionExpiry", value)} />
+              <DateField label="Buy Date" value={form.tradeDate} onChange={(value) => update("tradeDate", value)} />
               <MoneyField label="Platform Fees" value={form.platformFees} onChange={(value) => update("platformFees", value)} />
               <SectorField value={form.sector} onChange={(value) => update("sector", value)} />
             </>}

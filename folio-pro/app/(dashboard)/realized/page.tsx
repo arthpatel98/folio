@@ -32,6 +32,8 @@ type RealizedPosition = {
   optionDetails?: string;
   sourceTransaction?: boolean;
   sourceTransactionIds?: string[];
+  manualFees?: boolean;
+  feeTransactionSignature?: string;
 };
 
 type ImportedRow = Record<string, unknown>;
@@ -314,6 +316,8 @@ export default function Page() {
             optionDetails: position.optionDetails,
             sourceTransaction: Boolean(position.sourceTransaction),
             sourceTransactionIds: Array.isArray(position.sourceTransactionIds) ? position.sourceTransactionIds.filter((id): id is string => typeof id === "string") : [],
+            manualFees: Boolean(position.manualFees),
+            feeTransactionSignature: typeof position.feeTransactionSignature === "string" ? position.feeTransactionSignature : undefined,
           } satisfies RealizedPosition;
         }).filter((position) => !shouldRemoveByComment(position.comment));
         if (Array.isArray(parsed)) {
@@ -355,7 +359,19 @@ export default function Page() {
     const portfolioIds: RealizedPortfolioId[] = activePortfolioId === "all"
       ? ["robinhood", "fidelity-401k", "fidelity-roth"]
       : [activePortfolioId];
-    const base: RealizedPosition[] = portfolioIds.flatMap((portfolioId) => positionsByPortfolio[portfolioId].map((position) => ({ ...position, sourceTransactionIds: [...(position.sourceTransactionIds ?? [])] })));
+    const feeTransactionSignature = portfolioIds.flatMap((portfolioId) => transactionsByPortfolio[portfolioId])
+      .map((transaction) => `${transaction.id}:${transaction.fees}:${transaction.realizedGain ?? ""}`)
+      .sort().join("|");
+    const base: RealizedPosition[] = portfolioIds.flatMap((portfolioId) => positionsByPortfolio[portfolioId].map((position) => {
+      const keepManualFees = position.manualFees && position.feeTransactionSignature === feeTransactionSignature;
+      return {
+        ...position,
+        fees: position.manualFees && !keepManualFees ? 0 : position.fees,
+        manualFees: keepManualFees,
+        feeTransactionSignature: keepManualFees ? position.feeTransactionSignature : undefined,
+        sourceTransactionIds: [...(position.sourceTransactionIds ?? [])],
+      };
+    }));
     const alreadyApplied = new Set(base.flatMap((position) => position.sourceTransactionIds ?? []));
 
     portfolioIds.forEach((portfolioId) => {
@@ -370,7 +386,7 @@ export default function Page() {
         const match = base.find((position) => position.symbol === symbol && position.type === type);
         if (match) {
           match.amount += transaction.realizedGain;
-          match.fees += Number(transaction.fees) || 0;
+          if (!match.manualFees) match.fees += Number(transaction.fees) || 0;
           if (!match.lastSellDate || new Date(sellDate).getTime() >= new Date(match.lastSellDate).getTime()) match.lastSellDate = sellDate;
           match.comment = optionDetails ?? symbol;
           match.sourceTransaction = true;
@@ -403,7 +419,7 @@ export default function Page() {
       const symbol = key.slice(0, separator);
       const type = key.slice(separator + 1) as TradeType;
       const match = base.find((position) => position.symbol === symbol && position.type === type);
-      if (match) match.fees += fees;
+      if (match) { if (!match.manualFees) match.fees += fees; }
       else base.push(makePosition(symbol + (type === "option" ? " Option" : ""), 0, fees, "", `tracked-fee-${symbol}-${type}`));
     });
     return base;
@@ -564,6 +580,9 @@ export default function Page() {
     const fees = roundCurrency(editingPosition.fees);
     const pat = editingPosition.pat === null ? null : roundCurrency(editingPosition.pat);
     const loss = editingPosition.loss === null ? null : roundCurrency(editingPosition.loss);
+    const currentFeeTransactionSignature = transactionsByPortfolio[targetPortfolioId]
+      .map((transaction) => `${transaction.id}:${transaction.fees}:${transaction.realizedGain ?? ""}`)
+      .sort().join("|");
     const cleaned = {
       ...editingPosition,
       symbol: editingPosition.symbol.trim().toUpperCase(),
@@ -574,6 +593,8 @@ export default function Page() {
       lastSellDate: normalizeDate(editingPosition.lastSellDate),
       lastDividendDate: normalizeDate(editingPosition.lastDividendDate),
       patNeeded: derivedPatNeeded(pat, loss),
+      manualFees: true,
+      feeTransactionSignature: currentFeeTransactionSignature,
     };
     if (!cleaned.symbol) return;
     if (shouldRemoveByComment(cleaned.comment)) {

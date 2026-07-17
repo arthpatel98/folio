@@ -10,8 +10,19 @@ import { recordStockTrade, removeDcaPosition } from "@/lib/dca-storage";
 export type DataPortfolioId = "robinhood" | "fidelity-401k" | "fidelity-roth";
 export type ActivePortfolioId = DataPortfolioId | "all";
 
-const holdingKey = (symbol: string, assetType: AssetType = "stock") =>
-  `${assetType}:${symbol.trim().toUpperCase()}`;
+const holdingKey = (holding: Pick<Holding, "symbol" | "assetType" | "optionType" | "optionExpiry" | "optionStrike" | "optionSymbol" | "company">) => {
+  const assetType = holding.assetType ?? "stock";
+  const symbol = holding.symbol.trim().toUpperCase();
+  if (assetType !== "option") return `stock:${symbol}`;
+  const contract = holding.optionSymbol || buildOptionSymbol(holding) || [
+    symbol,
+    holding.optionType ?? "option",
+    holding.optionExpiry ?? "no-expiry",
+    holding.optionStrike ?? "no-strike",
+    holding.company.trim().toUpperCase(),
+  ].join(":");
+  return `option:${holding.optionType ?? "option"}:${contract}`;
+};
 
 const cloneHoldings = (items: Holding[]) => items.map((holding) => ({ ...holding }));
 const sampleHoldings = cloneHoldings(robinhoodHoldings.slice(0, 5));
@@ -39,7 +50,7 @@ function aggregateHoldings(groups: Holding[][]): Holding[] {
 
   groups.flat().forEach((holding) => {
     const assetType = holding.assetType ?? "stock";
-    const key = holdingKey(holding.symbol, assetType);
+    const key = holdingKey({ ...holding, assetType });
     const existing = result.get(key);
 
     if (!existing) {
@@ -96,8 +107,8 @@ type State = {
   setRange: (range: string) => void;
   setCash: (cash: number) => void;
   addHolding: (holding: Holding) => void;
-  updateHolding: (originalSymbol: string, originalAssetType: AssetType, holding: Holding) => void;
-  removeHolding: (symbol: string, assetType: AssetType) => void;
+  updateHolding: (originalHolding: Holding, holding: Holding) => void;
+  removeHolding: (holding: Holding) => void;
   addTransaction: (transaction: Transaction) => void;
   executeTrade: (trade: { action: "buy" | "sell"; holding: Holding; quantity: number; price: number; tradeDate?: string; fees?: number }) => { ok: boolean; message?: string };
   updateStockQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>, portfolioId?: DataPortfolioId) => void;
@@ -139,11 +150,11 @@ export const usePortfolioStore = create<State>()(
         set((state) => {
           const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
           const normalized = { ...holding, assetType: holding.assetType ?? "stock" };
-          const newKey = holdingKey(normalized.symbol, normalized.assetType);
+          const newKey = holdingKey(normalized);
           const updated = [
             normalized,
             ...state.holdingsByPortfolio[target].filter(
-              (item) => holdingKey(item.symbol, item.assetType ?? "stock") !== newKey,
+              (item) => holdingKey(item) !== newKey,
             ),
           ];
           const holdingsByPortfolio = { ...state.holdingsByPortfolio, [target]: updated };
@@ -152,16 +163,16 @@ export const usePortfolioStore = create<State>()(
             ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, state.cashByPortfolio),
           };
         }),
-      updateHolding: (originalSymbol, originalAssetType, holding) =>
+      updateHolding: (originalHolding, holding) =>
         set((state) => {
           const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
           const normalized = { ...holding, assetType: holding.assetType ?? "stock" };
-          const originalKey = holdingKey(originalSymbol, originalAssetType);
-          const newKey = holdingKey(normalized.symbol, normalized.assetType);
+          const originalKey = holdingKey(originalHolding);
+          const newKey = holdingKey(normalized);
           const updated = [
             normalized,
             ...state.holdingsByPortfolio[target].filter((item) => {
-              const key = holdingKey(item.symbol, item.assetType ?? "stock");
+              const key = holdingKey(item);
               return key !== originalKey && key !== newKey;
             }),
           ];
@@ -171,16 +182,14 @@ export const usePortfolioStore = create<State>()(
             ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, state.cashByPortfolio),
           };
         }),
-      removeHolding: (symbol, assetType) =>
+      removeHolding: (holding) =>
         set((state) => {
           const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
-          removeDcaPosition(target, symbol, assetType);
-          const removedHolding = state.holdingsByPortfolio[target].find(
-            (item) => holdingKey(item.symbol, item.assetType ?? "stock") === holdingKey(symbol, assetType),
-          );
-          const updated = state.holdingsByPortfolio[target].filter(
-            (item) => holdingKey(item.symbol, item.assetType ?? "stock") !== holdingKey(symbol, assetType),
-          );
+          const assetType = holding.assetType ?? "stock";
+          removeDcaPosition(target, holding.symbol, assetType);
+          const removedKey = holdingKey(holding);
+          const removedHolding = state.holdingsByPortfolio[target].find((item) => holdingKey(item) === removedKey);
+          const updated = state.holdingsByPortfolio[target].filter((item) => holdingKey(item) !== removedKey);
           const holdingsByPortfolio = { ...state.holdingsByPortfolio, [target]: updated };
           const isShortOption = assetType === "option" && (removedHolding?.optionType === "sell-call" || removedHolding?.optionType === "sell-put");
           const optionPremium = isShortOption && removedHolding
@@ -252,8 +261,8 @@ export const usePortfolioStore = create<State>()(
         const state = get();
         const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
         const assetType = holding.assetType ?? "stock";
-        const key = holdingKey(holding.symbol, assetType);
-        const current = state.holdingsByPortfolio[target].find((item) => holdingKey(item.symbol, item.assetType ?? "stock") === key);
+        const key = holdingKey({ ...holding, assetType });
+        const current = state.holdingsByPortfolio[target].find((item) => holdingKey(item) === key);
         const multiplier = assetType === "option" ? 100 : 1;
         const signedDelta = assetType === "option" ? quantity : (action === "buy" ? quantity : -quantity);
         const tradeValue = Math.abs(quantity) * price * multiplier;
@@ -267,7 +276,7 @@ export const usePortfolioStore = create<State>()(
         }
 
         set((latest) => {
-          const existing = latest.holdingsByPortfolio[target].find((item) => holdingKey(item.symbol, item.assetType ?? "stock") === key);
+          const existing = latest.holdingsByPortfolio[target].find((item) => holdingKey(item) === key);
           const oldQuantityForRealized = existing?.shares ?? 0;
           const closesStock = assetType === "stock" && action === "sell";
           const closesOption = assetType === "option" && oldQuantityForRealized !== 0 && Math.sign(oldQuantityForRealized) !== Math.sign(signedDelta);
@@ -288,7 +297,7 @@ export const usePortfolioStore = create<State>()(
               ? (((existing?.averageCost ?? 0) * Math.abs(oldQuantity)) + price * Math.abs(signedDelta)) / Math.abs(nextQuantity)
               : (Math.sign(oldQuantity) !== Math.sign(nextQuantity) && nextQuantity !== 0 ? price : (existing?.averageCost ?? price));
             if (nextQuantity === 0) {
-              nextHoldings = latest.holdingsByPortfolio[target].filter((item) => holdingKey(item.symbol, item.assetType ?? "stock") !== key);
+              nextHoldings = latest.holdingsByPortfolio[target].filter((item) => holdingKey(item) !== key);
             } else {
               const merged: Holding = {
                 ...(existing ?? holding),
@@ -299,7 +308,7 @@ export const usePortfolioStore = create<State>()(
                 previousClose: existing?.previousClose ?? price,
                 updatedAt: "Just now",
               };
-              nextHoldings = [merged, ...latest.holdingsByPortfolio[target].filter((item) => holdingKey(item.symbol, item.assetType ?? "stock") !== key)];
+              nextHoldings = [merged, ...latest.holdingsByPortfolio[target].filter((item) => holdingKey(item) !== key)];
             }
           } else if (action === "buy") {
             const oldQuantity = existing?.shares ?? 0;
@@ -314,12 +323,12 @@ export const usePortfolioStore = create<State>()(
               previousClose: existing?.previousClose ?? price,
               updatedAt: "Just now",
             };
-            nextHoldings = [merged, ...latest.holdingsByPortfolio[target].filter((item) => holdingKey(item.symbol, item.assetType ?? "stock") !== key)];
+            nextHoldings = [merged, ...latest.holdingsByPortfolio[target].filter((item) => holdingKey(item) !== key)];
           } else {
             const remaining = (existing?.shares ?? 0) - quantity;
             nextHoldings = remaining > 0
-              ? [{ ...existing!, shares: remaining, updatedAt: "Just now" }, ...latest.holdingsByPortfolio[target].filter((item) => holdingKey(item.symbol, item.assetType ?? "stock") !== key)]
-              : latest.holdingsByPortfolio[target].filter((item) => holdingKey(item.symbol, item.assetType ?? "stock") !== key);
+              ? [{ ...existing!, shares: remaining, updatedAt: "Just now" }, ...latest.holdingsByPortfolio[target].filter((item) => holdingKey(item) !== key)]
+              : latest.holdingsByPortfolio[target].filter((item) => holdingKey(item) !== key);
           }
 
           const holdingsByPortfolio = { ...latest.holdingsByPortfolio, [target]: nextHoldings };

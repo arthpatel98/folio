@@ -113,7 +113,7 @@ export function EditHoldingDialog({ holding }: { holding: Holding }) {
       return;
     }
 
-    updateHolding(holding.symbol, holding.assetType ?? "stock", {
+    updateHolding(holding, {
       assetType: form.assetType,
       symbol,
       company,
