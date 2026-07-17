@@ -7,21 +7,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePortfolioStore } from "@/store/portfolio-store";
 import { toast } from "sonner";
+import { optionCollateral } from "@/lib/calculations/portfolio";
 
 export function EditCashDialog() {
   const cash = usePortfolioStore((state) => state.cash);
+  const holdings = usePortfolioStore((state) => state.holdings);
+  const collateral = optionCollateral(holdings);
+  const availableCash = cash - collateral;
   const setCash = usePortfolioStore((state) => state.setCash);
   const [open, setOpen] = useState(false);
-  const [value, setValue] = useState(cash.toFixed(2));
+  const [value, setValue] = useState(availableCash.toFixed(2));
   const [error, setError] = useState("");
 
-  useEffect(() => { if (!open) setValue(cash.toFixed(2)); }, [cash, open]);
+  useEffect(() => { if (!open) setValue(availableCash.toFixed(2)); }, [availableCash, open]);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const next = Number(value);
     if (!Number.isFinite(next) || next < 0) { setError("Enter a valid cash amount of zero or more."); return; }
-    setCash(Number(next.toFixed(2)));
+    setCash(Number((next + collateral).toFixed(2)));
     toast.success("Cash Balance Updated Successfully");
     setError("");
     setOpen(false);

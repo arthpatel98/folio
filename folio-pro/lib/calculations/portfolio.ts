@@ -19,6 +19,26 @@ export function holdingMetrics(h: Holding) {
   };
 }
 
+
+export function optionCollateral(holdings: Holding[], asOf = new Date()) {
+  const localToday = new Date(asOf.getTime() - asOf.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+
+  return holdings.reduce((total, holding) => {
+    if (holding.assetType !== "option" || holding.optionType !== "sell-put" || holding.shares === 0) return total;
+    if (holding.optionExpiry && holding.optionExpiry < localToday) return total;
+
+    const strikeFromName = holding.company.match(/\$(\d+(?:\.\d+)?)\s+Put\b/i);
+    const strike = Number.isFinite(holding.optionStrike) && (holding.optionStrike ?? 0) > 0
+      ? holding.optionStrike!
+      : strikeFromName
+        ? Number(strikeFromName[1])
+        : 0;
+
+    if (!Number.isFinite(strike) || strike <= 0) return total;
+    return total + Math.abs(holding.shares) * strike * 100;
+  }, 0);
+}
+
 export function portfolioSummary(holdings: Holding[], cash = 14820.55) {
   const values = holdings.map(holdingMetrics);
   const invested = values.reduce((s, x) => s + x.marketValue, 0);

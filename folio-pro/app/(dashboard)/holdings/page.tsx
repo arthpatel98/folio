@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Banknote, BriefcaseBusiness, Download, Layers3, Search, WalletCards } from "lucide-react";
+import { Banknote, BriefcaseBusiness, Download, Layers3, LockKeyhole, Search, WalletCards } from "lucide-react";
 import { HoldingsTable } from "@/components/portfolio/holdings-table";
 import { AddHoldingDialog } from "@/components/portfolio/add-holding-dialog";
 import { EditCashDialog } from "@/components/portfolio/edit-cash-dialog";
 import { Input } from "@/components/ui/input";
-import { holdingMetrics, portfolioSummary } from "@/lib/calculations/portfolio";
+import { holdingMetrics, optionCollateral, portfolioSummary } from "@/lib/calculations/portfolio";
 import { cn, money } from "@/lib/utils";
 import { buildOptionSymbol } from "@/lib/options";
 import { isUsMarketDay, isUsMarketOpen } from "@/lib/market-hours";
@@ -41,6 +41,8 @@ export default function Page() {
   const stocks = filtered.filter((holding) => (holding.assetType ?? "stock") === "stock");
   const isFidelity401k = activePortfolioId === "fidelity-roth";
   const options = isFidelity401k ? [] : filtered.filter((holding) => holding.assetType === "option");
+  const collateral = useMemo(() => optionCollateral(holdings), [holdings]);
+  const availableCash = cash - collateral;
   const summary = useMemo(() => portfolioSummary(holdings, cash), [holdings, cash]);
   const positionValue = summary.invested;
   const stockValue = holdings.filter((holding) => (holding.assetType ?? "stock") === "stock").reduce((sum, holding) => sum + holdingMetrics(holding).marketValue, 0);
@@ -197,7 +199,7 @@ export default function Page() {
         <MetricBlock label="Holdings Value" value={money(positionValue)} subvalue={`${holdings.length} Open Positions`} icon={BriefcaseBusiness} tone="blue"/>
         <MetricBlock label="Total Stocks Value" value={money(stockValue)} subvalue={`${stockHoldings.length} Open Positions\n( ${profitableStocks} Profitable Positions )`} icon={Layers3} tone="green"/>
         <MetricBlock label="Total Options Value" value={money(optionValue)} subvalue={`${optionHoldings.length} Open Positions\n( ${profitableOptions} Profitable Positions )`} icon={Layers3} tone="purple"/>
-        <MetricBlock label="Cash" value={money(cash)} subvalue={`${summary.value ? ((cash / summary.value) * 100).toFixed(2) : "0.00"}% of Portfolio`} icon={Banknote} tone="purple"/>
+        <MetricBlock label="Cash" value={money(availableCash)} subvalue={`${summary.value ? ((availableCash / summary.value) * 100).toFixed(2) : "0.00"}% of Portfolio`} icon={Banknote} tone="purple"/>
       </div>
 
       <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-950/30">
@@ -221,10 +223,14 @@ export default function Page() {
           </div>
           {!isFidelity401k && <div className="grid min-h-[88px] grid-cols-[1fr_auto] items-center gap-6 px-6 py-4">
             <div className="flex items-center gap-3"><div className="rounded-xl bg-emerald-500/10 p-2 text-emerald-500"><Banknote size={18} /></div><div><p className="font-semibold">Cash</p><p className="text-sm text-zinc-500">Available Cash Balance</p></div></div>
-            <div className="flex items-center gap-3"><div className="text-right"><p className="font-semibold">{money(cash)}</p><p className="text-sm text-zinc-500">{summary.value ? ((cash / summary.value) * 100).toFixed(2) : "0.00"}%</p></div><EditCashDialog /></div>
+            <div className="flex items-center gap-3"><div className="text-right"><p className="font-semibold">{money(availableCash)}</p><p className="text-sm text-zinc-500">{summary.value ? ((availableCash / summary.value) * 100).toFixed(2) : "0.00"}%</p></div><EditCashDialog /></div>
+          </div>}
+          {!isFidelity401k && <div className="grid min-h-[88px] grid-cols-[1fr_auto] items-center gap-6 px-6 py-4">
+            <div className="flex items-center gap-3"><div className="rounded-xl bg-violet-500/10 p-2 text-violet-500"><LockKeyhole size={18} /></div><div><p className="font-semibold">Options Collateral</p><p className="text-sm text-zinc-500">Cash Reserved for Sell Puts</p></div></div>
+            <div className="text-right"><p className="font-semibold">{money(collateral)}</p><p className="text-sm text-zinc-500">{summary.value ? ((collateral / summary.value) * 100).toFixed(2) : "0.00"}%</p></div>
           </div>}
           <div className="grid min-h-[92px] grid-cols-[1fr_auto] items-center gap-6 bg-emerald-500/[.04] px-6 py-4">
-            <div><p className="text-lg font-semibold">Total</p><p className="text-sm text-zinc-500">Holdings Plus Cash</p></div>
+            <div><p className="text-lg font-semibold">Total</p><p className="text-sm text-zinc-500">Holdings Plus Cash And Options Collateral</p></div>
             <div className="text-right"><p className="text-xl font-semibold">{money(summary.value)}</p><p className="text-sm text-zinc-500">100.00%</p></div>
           </div>
         </div>
