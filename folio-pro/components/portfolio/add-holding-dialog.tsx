@@ -136,7 +136,13 @@ export function AddHoldingDialog() {
     if (isRemoveStock && !matching) return setError("Select A Stock You Currently Own.");
     if (isRemoveOption && !matching) return setError("Select An Option Contract You Currently Own.");
     if (!isRemoveStock && !company) return setError(isOption ? "Contract Details Are Required." : "Company Name Is Required.");
-    if (!Number.isFinite(quantity) || quantity <= 0) return setError(isOption ? "Enter A Valid Contract Quantity." : "Enter A Valid Share Quantity.");
+    if (!Number.isFinite(quantity) || quantity === 0) return setError(isOption ? "Enter A Valid Contract Quantity." : "Enter A Valid Share Quantity.");
+    if (!isOption && quantity < 0) return setError("Enter A Valid Share Quantity.");
+    if (isOption && form.action === "buy") {
+      const isShortOption = form.optionType === "sell-call" || form.optionType === "sell-put";
+      if (isShortOption && quantity > 0) return setError("Sell Call And Sell Put Contracts Must Be Negative.");
+      if (!isShortOption && quantity < 0) return setError("Buy Call And Buy Put Contracts Must Be Positive.");
+    }
     if (!Number.isFinite(platformFees) || platformFees < 0) return setError("Enter A Valid Platform Fee.");
     if (!form.tradeDate) return setError("Trade Date Is Required.");
     if (!Number.isFinite(tradePrice) || tradePrice <= 0) return setError(isOption ? (isRemoveOption ? "Sell Price Is Required." : "Contract Cost Is Required.") : (isRemoveStock ? "Sell Price Is Required." : "Share Price Is Required."));
@@ -221,9 +227,9 @@ export function AddHoldingDialog() {
             </> : <>
               <Field label="Underlying Ticker"><Input required value={form.symbol} onChange={(e) => update("symbol", e.target.value)} autoFocus className="uppercase" /></Field>
               <Field label="Contract Details"><Input required value={form.company} onChange={(e) => update("company", e.target.value)} /></Field>
-              <Field label="Contracts"><Input required type="number" min="1" step="1" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /></Field>
+              <Field label="Contracts"><Input required type="number" step="1" max={form.optionType === "sell-call" || form.optionType === "sell-put" ? -1 : undefined} min={form.optionType === "sell-call" || form.optionType === "sell-put" ? undefined : 1} value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /></Field>
               <Field label="Contract Cost"><Input required type="number" min="0.000001" step="any" value={form.tradePrice} onChange={(e) => update("tradePrice", e.target.value)} /></Field>
-              <Field label="Option Type"><select required value={form.optionType} onChange={(e) => update("optionType", e.target.value)} className="field-select">{optionTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
+              <Field label="Option Type"><select required value={form.optionType} onChange={(e) => { const nextType = e.target.value as OptionType; update("optionType", nextType); const currentQuantity = Number(form.quantity); if (Number.isFinite(currentQuantity) && currentQuantity !== 0) update("quantity", String(nextType === "sell-call" || nextType === "sell-put" ? -Math.abs(currentQuantity) : Math.abs(currentQuantity))); }} className="field-select">{optionTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
               <Field label="Option Expiry"><Input required type="date" value={form.optionExpiry} onChange={(e) => update("optionExpiry", e.target.value)} /></Field>
               <MoneyField label="Platform Fees" value={form.platformFees} onChange={(value) => update("platformFees", value)} />
               <SectorField value={form.sector} onChange={(value) => update("sector", value)} />

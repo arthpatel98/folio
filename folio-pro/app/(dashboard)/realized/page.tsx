@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, ChevronDown, ChevronRight, Download, FileDown, Pencil, Search, Trash2, Upload, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Download, FileDown, Pencil, Search, Trash2, Upload, X } from "lucide-react";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -559,12 +559,21 @@ export default function Page() {
 
   function saveEditedPosition() {
     if (!editingPosition) return;
+    const roundCurrency = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+    const amount = roundCurrency(editingPosition.amount);
+    const fees = roundCurrency(editingPosition.fees);
+    const pat = editingPosition.pat === null ? null : roundCurrency(editingPosition.pat);
+    const loss = editingPosition.loss === null ? null : roundCurrency(editingPosition.loss);
     const cleaned = {
       ...editingPosition,
       symbol: editingPosition.symbol.trim().toUpperCase(),
+      amount,
+      fees,
+      pat,
+      loss,
       lastSellDate: normalizeDate(editingPosition.lastSellDate),
       lastDividendDate: normalizeDate(editingPosition.lastDividendDate),
-      patNeeded: derivedPatNeeded(editingPosition.pat, editingPosition.loss),
+      patNeeded: derivedPatNeeded(pat, loss),
     };
     if (!cleaned.symbol) return;
     if (shouldRemoveByComment(cleaned.comment)) {
@@ -612,7 +621,11 @@ export default function Page() {
   }
 
   function SortHeader({ label, column }: { label: string; column: SortKey }) {
-    return <button type="button" onClick={() => changeSort(column)} className="inline-flex items-center justify-center gap-1 hover:text-zinc-200">{label}<ArrowUpDown className="h-3.5 w-3.5" /></button>;
+    const isActive = sortKey === column;
+    const SortIcon = !isActive ? ArrowUpDown : sortDirection === "asc" ? ArrowUp : ArrowDown;
+    return <button type="button" onClick={() => changeSort(column)} className={`inline-flex items-center justify-center gap-1 hover:text-zinc-200 ${isActive ? "text-emerald-500" : ""}`} aria-label={`Sort By ${label} ${isActive ? (sortDirection === "asc" ? "Ascending" : "Descending") : ""}`} title={isActive ? `${label}: ${sortDirection === "asc" ? "Ascending" : "Descending"}` : `Sort By ${label}`}>
+      {label}<SortIcon className="h-3.5 w-3.5" />
+    </button>;
   }
 
   return (
@@ -772,8 +785,8 @@ export default function Page() {
                 </select>
               </label>
               <label className="space-y-2 text-sm font-medium">Last Sell Date<Input type="date" value={dateInputValue(editingPosition.lastSellDate)} onChange={(e) => setEditingPosition({ ...editingPosition, lastSellDate: e.target.value })} /></label>
-              <label className="space-y-2 text-sm font-medium">Realized P/L<Input inputMode="decimal" value={editingPosition.amount === 0 ? "" : editingPosition.amount} onChange={(e) => editNumber("amount", e.target.value)} /></label>
-              <label className="space-y-2 text-sm font-medium">Fees<Input type="number" inputMode="decimal" step="any" value={editingPosition.fees === 0 ? "" : editingPosition.fees} onChange={(e) => editNumber("fees", e.target.value)} /></label>
+              <label className="space-y-2 text-sm font-medium">Realized P/L<Input type="number" inputMode="decimal" step="0.01" value={editingPosition.amount === 0 ? "" : editingPosition.amount} onChange={(e) => editNumber("amount", e.target.value)} /></label>
+              <label className="space-y-2 text-sm font-medium">Fees<Input type="number" inputMode="decimal" step="0.01" value={editingPosition.fees === 0 ? "" : editingPosition.fees} onChange={(e) => editNumber("fees", e.target.value)} /></label>
               <label className="space-y-2 text-sm font-medium">PAT<Input type="number" step="0.01" placeholder="-" value={editingPosition.pat ?? ""} onChange={(e) => editOptionalMoney("pat", e.target.value)} /></label>
               <label className="space-y-2 text-sm font-medium">Loss<Input type="number" step="0.01" placeholder="-" value={editingPosition.loss ?? ""} onChange={(e) => editOptionalMoney("loss", e.target.value)} /></label>
               <label className="space-y-2 text-sm font-medium">PAT Needed<Input readOnly placeholder="-" value={derivedPatNeeded(editingPosition.pat, editingPosition.loss) === null ? "" : money(derivedPatNeeded(editingPosition.pat, editingPosition.loss) ?? 0)} className="cursor-not-allowed bg-zinc-500/5 text-zinc-500" /></label>
