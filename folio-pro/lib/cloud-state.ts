@@ -1,4 +1,11 @@
 import { createClient } from "@/lib/supabase/client";
+import type { Holding, Transaction } from "@/types/portfolio";
+import {
+  mergeKnownRothRecovery,
+  mergeKnownRothTransactions,
+  RECOVERY_VERSION,
+  restoreKnownRobinhoodIfEmpty,
+} from "@/lib/recovery-data";
 
 export const CLOUD_KEYS = [
   "folio-pro-portfolio",
@@ -9,67 +16,193 @@ export const CLOUD_KEYS = [
 ] as const;
 
 export type CloudPayload = Record<string, string>;
+const PORTFOLIO_IDS = ["robinhood", "fidelity-401k", "fidelity-roth"] as const;
 
-const ROTH_RECOVERY_IDS = new Set([
-  "trade-1783994932453-yencvh",
-  "trade-1783805777721-y8parg",
-]);
+type PortfolioId = (typeof PORTFOLIO_IDS)[number];
+type PortfolioState = {
+  holdingsByPortfolio?: Record<string, Holding[]>;
+  transactionsByPortfolio?: Record<string, Transaction[]>;
+  cashByPortfolio?: Record<string, number>;
+  [key: string]: unknown;
+};
 
-function repairKnownRothRecovery(serializedPortfolio: string): string {
+function parsePortfolio(serialized?: string): { root: any; state: PortfolioState } | null {
+  if (!serialized) return null;
   try {
-    const parsed = JSON.parse(serializedPortfolio);
-    const state = parsed?.state;
-    const holdings = state?.holdingsByPortfolio?.["fidelity-401k"];
-    const transactions = state?.transactionsByPortfolio?.["fidelity-401k"];
-    if (!Array.isArray(holdings) || holdings.length > 0 || !Array.isArray(transactions)) return serializedPortfolio;
-
-    const recovered = transactions
-      .filter((transaction: any) => ROTH_RECOVERY_IDS.has(transaction?.id))
-      .map((transaction: any) => {
-        const symbol = String(transaction.symbol ?? "").toUpperCase();
-        const optionType = transaction.optionType;
-        const label = optionType === "sell-call" ? "Sell Call"
-          : optionType === "buy-call" ? "Call"
-          : optionType === "sell-put" ? "Sell Put"
-          : "Put";
-        let expiryLabel = transaction.optionExpiry ?? "";
-        if (transaction.optionExpiry) {
-          const expiry = new Date(`${transaction.optionExpiry}T12:00:00`);
-          if (!Number.isNaN(expiry.getTime())) {
-            expiryLabel = expiry.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-          }
-        }
-        return {
-          assetType: "option",
-          symbol,
-          company: `${symbol} ${label}${expiryLabel ? ` Exp ${expiryLabel}` : ""}`,
-          shares: transaction.quantity ?? 0,
-          averageCost: transaction.price ?? 0,
-          currentPrice: transaction.price ?? 0,
-          previousClose: transaction.price ?? 0,
-          dividendYield: 0,
-          sector: "Other",
-          optionType,
-          optionExpiry: transaction.optionExpiry,
-          optionStrike: transaction.optionStrike,
-          optionSymbol: transaction.optionSymbol,
-          updatedAt: "Recovered From Transaction History",
-        };
-      })
-      .filter((holding: any) => holding.symbol && holding.shares !== 0);
-
-    if (recovered.length === 0) return serializedPortfolio;
-    state.holdingsByPortfolio["fidelity-401k"] = recovered;
-    return JSON.stringify(parsed);
+    const root = JSON.parse(serialized);
+    const state = (root?.state ?? root) as PortfolioState;
+    if (!state || typeof state !== "object") return null;
+    return { root, state };
   } catch {
-    return serializedPortfolio;
+    return null;
   }
 }
 
-type PortfolioSnapshot = {
-  holdingsByPortfolio?: Record<string, unknown[]>;
-  transactionsByPortfolio?: Record<string, Array<{ id?: string }>>;
-};
+function serializePortfolio(parsed: { root: any; state: PortfolioState }) {
+  if (parsed.root?.state) parsed.root.state = parsed.state;
+  else parsed.root = parsed.state;
+  return JSON.stringify(parsed.root);
+}
+
+function unionTransactions(primary: Transaction[] = [], secondary: Transaction[] = []) {
+  const seen = new Set<string>();
+  return [...primary, ...secondary].filter((transaction) => {
+    const id = transaction?.id;
+    if (!id) return true;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+/**
+ * Applies only explicit recovery data supplied by the user. It never replaces a non-empty
+ * Robinhood bucket. Roth recovery is additive by exact transaction IDs, so future holdings
+ * are preserved and duplicate recovered positions are not added.
+ */
+function applyKnownRecovery(serialized: string): string {
+  const parsed = parsePortfolio(serialized);
+  if (!parsed) return serialized;
+
+  if (parsed.state.recoveryVersion === RECOVERY_VERSION) return serialized;
+
+  const holdings = parsed.state.holdingsByPortfolio ?? {};
+  const transactions = parsed.state.transactionsByPortfolio ?? {};
+
+  const robinhood = Array.isArray(holdings.robinhood) ? holdings.robinhood : [];
+  holdings.robinhood = restoreKnownRobinhoodIfEmpty(robinhood);
+
+  const rothTransactions = mergeKnownRothTransactions(
+    Array.isArray(transactions["fidelity-401k"]) ? transactions["fidelity-401k"] : [],
+  );
+  transactions["fidelity-401k"] = rothTransactions;
+  holdings["fidelity-401k"] = mergeKnownRothRecovery(
+    Array.isArray(holdings["fidelity-401k"]) ? holdings["fidelity-401k"] : [],
+    rothTransactions,
+  );
+
+  if (!Array.isArray(holdings["fidelity-roth"])) holdings["fidelity-roth"] = [];
+  if (!Array.isArray(transactions.robinhood)) transactions.robinhood = [];
+  if (!Array.isArray(transactions["fidelity-roth"])) transactions["fidelity-roth"] = [];
+
+  parsed.state.holdingsByPortfolio = holdings;
+  parsed.state.transactionsByPortfolio = transactions;
+  parsed.state.recoveryVersion = RECOVERY_VERSION;
+  return serializePortfolio(parsed);
+}
+
+/**
+ * Safe startup merge. Cloud remains the source of truth when it contains holdings, but an
+ * empty cloud bucket is never allowed to erase a non-empty local bucket. Transactions are
+ * unioned by ID per portfolio so one account cannot overwrite another account's history.
+ */
+export function mergeCloudIntoLocalPayload(cloudPayload: CloudPayload, localPayload: CloudPayload): CloudPayload {
+  const merged: CloudPayload = { ...localPayload, ...cloudPayload };
+  const cloudPortfolio = parsePortfolio(cloudPayload["folio-pro-portfolio"]);
+  const localPortfolio = parsePortfolio(localPayload["folio-pro-portfolio"]);
+
+  if (!cloudPortfolio && !localPortfolio) return merged;
+  if (!cloudPortfolio && localPortfolio) {
+    merged["folio-pro-portfolio"] = applyKnownRecovery(localPayload["folio-pro-portfolio"]);
+    return merged;
+  }
+  if (cloudPortfolio && !localPortfolio) {
+    merged["folio-pro-portfolio"] = applyKnownRecovery(cloudPayload["folio-pro-portfolio"]);
+    return merged;
+  }
+
+  const result = cloudPortfolio!;
+  result.state.holdingsByPortfolio = { ...(cloudPortfolio!.state.holdingsByPortfolio ?? {}) };
+  result.state.transactionsByPortfolio = { ...(cloudPortfolio!.state.transactionsByPortfolio ?? {}) };
+  result.state.cashByPortfolio = { ...(cloudPortfolio!.state.cashByPortfolio ?? {}) };
+
+  for (const portfolioId of PORTFOLIO_IDS) {
+    const cloudHoldings = cloudPortfolio!.state.holdingsByPortfolio?.[portfolioId];
+    const localHoldings = localPortfolio!.state.holdingsByPortfolio?.[portfolioId];
+    result.state.holdingsByPortfolio[portfolioId] = Array.isArray(cloudHoldings) && cloudHoldings.length > 0
+      ? cloudHoldings
+      : Array.isArray(localHoldings)
+        ? localHoldings
+        : [];
+
+    result.state.transactionsByPortfolio[portfolioId] = unionTransactions(
+      cloudPortfolio!.state.transactionsByPortfolio?.[portfolioId],
+      localPortfolio!.state.transactionsByPortfolio?.[portfolioId],
+    );
+
+    const cloudCash = cloudPortfolio!.state.cashByPortfolio?.[portfolioId];
+    const localCash = localPortfolio!.state.cashByPortfolio?.[portfolioId];
+    result.state.cashByPortfolio[portfolioId] = typeof cloudCash === "number"
+      ? cloudCash
+      : typeof localCash === "number"
+        ? localCash
+        : 0;
+  }
+
+  merged["folio-pro-portfolio"] = applyKnownRecovery(serializePortfolio(result));
+  return merged;
+}
+
+/**
+ * Safe upload merge. Local edits win per portfolio, except an unexplained empty local bucket
+ * cannot wipe a non-empty cloud bucket. A genuinely intentional final removal is recognized by
+ * a new local transaction in that same portfolio. Other portfolios are merged independently.
+ */
+export function mergeLocalIntoCloudPayload(cloudPayload: CloudPayload | null, localPayload: CloudPayload): CloudPayload {
+  if (!cloudPayload) {
+    return {
+      ...localPayload,
+      ...(localPayload["folio-pro-portfolio"]
+        ? { "folio-pro-portfolio": applyKnownRecovery(localPayload["folio-pro-portfolio"]) }
+        : {}),
+    };
+  }
+
+  const merged: CloudPayload = { ...cloudPayload, ...localPayload };
+  const cloudPortfolio = parsePortfolio(cloudPayload["folio-pro-portfolio"]);
+  const localPortfolio = parsePortfolio(localPayload["folio-pro-portfolio"]);
+  if (!cloudPortfolio || !localPortfolio) {
+    if (localPayload["folio-pro-portfolio"]) {
+      merged["folio-pro-portfolio"] = applyKnownRecovery(localPayload["folio-pro-portfolio"]);
+    }
+    return merged;
+  }
+
+  const result = localPortfolio;
+  result.state.holdingsByPortfolio = { ...(localPortfolio.state.holdingsByPortfolio ?? {}) };
+  result.state.transactionsByPortfolio = { ...(localPortfolio.state.transactionsByPortfolio ?? {}) };
+  result.state.cashByPortfolio = { ...(localPortfolio.state.cashByPortfolio ?? {}) };
+
+  for (const portfolioId of PORTFOLIO_IDS) {
+    const cloudHoldings = cloudPortfolio.state.holdingsByPortfolio?.[portfolioId];
+    const localHoldings = localPortfolio.state.holdingsByPortfolio?.[portfolioId];
+    const cloudTransactions = cloudPortfolio.state.transactionsByPortfolio?.[portfolioId] ?? [];
+    const localTransactions = localPortfolio.state.transactionsByPortfolio?.[portfolioId] ?? [];
+    const cloudIds = new Set(cloudTransactions.map((transaction) => transaction.id).filter(Boolean));
+    const hasNewLocalTransaction = localTransactions.some((transaction) => transaction.id && !cloudIds.has(transaction.id));
+
+    if (Array.isArray(localHoldings) && localHoldings.length > 0) {
+      result.state.holdingsByPortfolio[portfolioId] = localHoldings;
+    } else if (Array.isArray(cloudHoldings) && cloudHoldings.length > 0 && !hasNewLocalTransaction) {
+      result.state.holdingsByPortfolio[portfolioId] = cloudHoldings;
+    } else {
+      result.state.holdingsByPortfolio[portfolioId] = Array.isArray(localHoldings) ? localHoldings : (cloudHoldings ?? []);
+    }
+
+    result.state.transactionsByPortfolio[portfolioId] = unionTransactions(localTransactions, cloudTransactions);
+
+    const localCash = localPortfolio.state.cashByPortfolio?.[portfolioId];
+    const cloudCash = cloudPortfolio.state.cashByPortfolio?.[portfolioId];
+    result.state.cashByPortfolio[portfolioId] = typeof localCash === "number"
+      ? localCash
+      : typeof cloudCash === "number"
+        ? cloudCash
+        : 0;
+  }
+
+  merged["folio-pro-portfolio"] = applyKnownRecovery(serializePortfolio(result));
+  return merged;
+}
 
 export function readLocalFolioState(): CloudPayload {
   const payload: CloudPayload = {};
@@ -83,51 +216,10 @@ export function readLocalFolioState(): CloudPayload {
 export function writeLocalFolioState(payload: CloudPayload) {
   for (const key of CLOUD_KEYS) {
     if (Object.prototype.hasOwnProperty.call(payload, key)) {
-      const value = key === "folio-pro-portfolio" ? repairKnownRothRecovery(payload[key]) : payload[key];
+      const value = key === "folio-pro-portfolio" ? applyKnownRecovery(payload[key]) : payload[key];
       window.localStorage.setItem(key, value);
     }
   }
-}
-
-function readPortfolioSnapshot(payload: CloudPayload | null): PortfolioSnapshot | null {
-  if (!payload?.["folio-pro-portfolio"]) return null;
-  try {
-    const parsed = JSON.parse(payload["folio-pro-portfolio"]);
-    return (parsed?.state ?? parsed) as PortfolioSnapshot;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Prevent the exact failure mode that erased retirement holdings: a hydrated/non-empty cloud
- * portfolio being replaced by an empty browser fallback with no accompanying user transaction.
- * Legitimate removals made through Holdings create a new transaction and are allowed.
- */
-export function findUnsafeEmptyPortfolioOverwrite(
-  cloudPayload: CloudPayload | null,
-  localPayload: CloudPayload,
-): string | null {
-  const cloud = readPortfolioSnapshot(cloudPayload);
-  const local = readPortfolioSnapshot(localPayload);
-  if (!cloud || !local) return null;
-
-  const portfolioIds = ["robinhood", "fidelity-401k", "fidelity-roth"];
-  for (const portfolioId of portfolioIds) {
-    const cloudHoldings = cloud.holdingsByPortfolio?.[portfolioId];
-    const localHoldings = local.holdingsByPortfolio?.[portfolioId];
-    if (!Array.isArray(cloudHoldings) || cloudHoldings.length === 0 || !Array.isArray(localHoldings) || localHoldings.length !== 0) {
-      continue;
-    }
-
-    const cloudIds = new Set((cloud.transactionsByPortfolio?.[portfolioId] ?? []).map((item) => item?.id).filter(Boolean));
-    const localTransactions = local.transactionsByPortfolio?.[portfolioId] ?? [];
-    const hasNewLocalTransaction = localTransactions.some((item) => item?.id && !cloudIds.has(item.id));
-
-    if (!hasNewLocalTransaction) return portfolioId;
-  }
-
-  return null;
 }
 
 export async function getCloudState() {
@@ -150,14 +242,11 @@ export async function uploadLocalState(options?: { force?: boolean }) {
   if (userError) throw userError;
   if (!user) throw new Error("Sign in before uploading portfolio data to the cloud.");
 
-  const payload = readLocalFolioState();
-  if (!options?.force) {
-    const currentCloud = await getCloudState();
-    const unsafePortfolio = findUnsafeEmptyPortfolioOverwrite(currentCloud.payload, payload);
-    if (unsafePortfolio) {
-      throw new Error(`Cloud sync blocked a suspicious empty overwrite for ${unsafePortfolio}. Your existing cloud holdings were preserved.`);
-    }
-  }
+  const localPayload = readLocalFolioState();
+  const currentCloud = await getCloudState();
+  const payload = options?.force
+    ? localPayload
+    : mergeLocalIntoCloudPayload(currentCloud.payload, localPayload);
 
   const { error } = await supabase.from("user_app_state").upsert({
     user_id: user.id,
@@ -165,6 +254,9 @@ export async function uploadLocalState(options?: { force?: boolean }) {
     updated_at: new Date().toISOString(),
   }, { onConflict: "user_id" });
   if (error) throw error;
+
+  // Keep browser state aligned with any cloud holdings that were protected from an accidental wipe.
+  if (!options?.force) writeLocalFolioState(payload);
   return payload;
 }
 
@@ -172,6 +264,7 @@ export async function downloadCloudState() {
   const state = await getCloudState();
   if (!state.user) throw new Error("Sign in before downloading cloud data.");
   if (!state.payload) throw new Error("No cloud portfolio backup exists yet.");
-  writeLocalFolioState(state.payload);
-  return state.payload;
+  const merged = mergeCloudIntoLocalPayload(state.payload, readLocalFolioState());
+  writeLocalFolioState(merged);
+  return merged;
 }

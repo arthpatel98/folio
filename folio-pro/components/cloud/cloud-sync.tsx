@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { getCloudState, readLocalFolioState, uploadLocalState, writeLocalFolioState } from "@/lib/cloud-state";
+import { getCloudState, mergeCloudIntoLocalPayload, readLocalFolioState, uploadLocalState, writeLocalFolioState } from "@/lib/cloud-state";
 
 const RESTORE_MARKER = "folio-cloud-restored-session";
 
@@ -20,7 +20,10 @@ export function CloudSync() {
         if (cancelled || !cloud.user) return;
 
         if (cloud.payload && sessionStorage.getItem(RESTORE_MARKER) !== cloud.user.id) {
-          writeLocalFolioState(cloud.payload);
+          // Merge each portfolio independently. A valid non-empty cloud portfolio wins, but an
+          // empty cloud bucket can never erase non-empty browser data during startup.
+          const safeHydratedPayload = mergeCloudIntoLocalPayload(cloud.payload, readLocalFolioState());
+          writeLocalFolioState(safeHydratedPayload);
           sessionStorage.setItem(RESTORE_MARKER, cloud.user.id);
           location.reload();
           return;

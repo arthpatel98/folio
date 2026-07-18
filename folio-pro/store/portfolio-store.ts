@@ -6,68 +6,12 @@ import { AssetType, Holding, Transaction } from "@/types/portfolio";
 import { holdings as robinhoodHoldings, transactions as robinhoodTransactions } from "@/lib/data/mock";
 import { buildOptionSymbol } from "@/lib/options";
 import { recordStockTrade, removeDcaPosition } from "@/lib/dca-storage";
+import { mergeKnownRothRecovery, mergeKnownRothTransactions, RECOVERY_VERSION, restoreKnownRobinhoodIfEmpty } from "@/lib/recovery-data";
 
 export type DataPortfolioId = "robinhood" | "fidelity-401k" | "fidelity-roth";
 export type ActivePortfolioId = DataPortfolioId | "all";
 
 const dataPortfolioIds: DataPortfolioId[] = ["robinhood", "fidelity-401k", "fidelity-roth"];
-
-const ROTH_RECOVERY_TRANSACTION_IDS = new Set([
-  "trade-1783994932453-yencvh", // QCOM Buy Call, Jul 14 2026
-  "trade-1783805777721-y8parg", // ONDS Sell Call, Jul 11 2026
-]);
-
-function formatOptionRecoveryCompany(transaction: Transaction): string {
-  const symbol = (transaction.symbol ?? "Option").toUpperCase();
-  const label = transaction.optionType === "sell-call" ? "Sell Call"
-    : transaction.optionType === "buy-call" ? "Call"
-    : transaction.optionType === "sell-put" ? "Sell Put"
-    : "Put";
-  if (!transaction.optionExpiry) return `${symbol} ${label}`;
-  const expiry = new Date(`${transaction.optionExpiry}T12:00:00`);
-  const formatted = Number.isNaN(expiry.getTime())
-    ? transaction.optionExpiry
-    : expiry.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  return `${symbol} ${label} Exp ${formatted}`;
-}
-
-/**
- * One-time, non-destructive recovery for the two Roth IRA option positions supplied by the user.
- * We only recover when the Roth holdings array is empty and the exact historical transactions
- * are present. Existing holdings always win and are never replaced.
- *
- * Strike data was not present in the surviving transactions, so we intentionally leave
- * optionStrike/optionSymbol unset rather than inventing contract details. The positions remain
- * editable in Holdings if the user later wants to add the strike.
- */
-function recoverKnownRothHoldings(
-  holdings: Holding[],
-  transactions: Transaction[] | undefined,
-): Holding[] {
-  if (holdings.length > 0 || !Array.isArray(transactions)) return holdings;
-
-  const recovered = transactions
-    .filter((transaction) => ROTH_RECOVERY_TRANSACTION_IDS.has(transaction.id))
-    .map<Holding>((transaction) => ({
-      assetType: "option",
-      symbol: (transaction.symbol ?? "").toUpperCase(),
-      company: formatOptionRecoveryCompany(transaction),
-      shares: transaction.quantity ?? 0,
-      averageCost: transaction.price ?? 0,
-      currentPrice: transaction.price ?? 0,
-      previousClose: transaction.price ?? 0,
-      dividendYield: 0,
-      sector: "Other",
-      optionType: transaction.optionType,
-      optionExpiry: transaction.optionExpiry,
-      optionStrike: transaction.optionStrike,
-      optionSymbol: transaction.optionSymbol,
-      updatedAt: "Recovered From Transaction History",
-    }))
-    .filter((holding) => holding.symbol && holding.shares !== 0);
-
-  return recovered.length > 0 ? recovered : holdings;
-}
 
 function normalizeHoldingsByPortfolio(value?: Partial<Record<DataPortfolioId, Holding[]>>): Record<DataPortfolioId, Holding[]> {
   return {
@@ -190,6 +134,7 @@ type State = {
   transactions: Transaction[];
   cash: number;
   range: string;
+  recoveryVersion: string;
   setActivePortfolio: (portfolioId: ActivePortfolioId) => void;
   setRange: (range: string) => void;
   setCash: (cash: number) => void;
@@ -213,6 +158,7 @@ export const usePortfolioStore = create<State>()(
       transactions: initialTransactionsByPortfolio.robinhood,
       cash: initialCashByPortfolio.robinhood,
       range: "1Y",
+      recoveryVersion: "",
       setActivePortfolio: (activePortfolioId) =>
         set((state) => ({
           activePortfolioId,
@@ -466,6 +412,7 @@ export const usePortfolioStore = create<State>()(
         transactionsByPortfolio: state.transactionsByPortfolio,
         cashByPortfolio: state.cashByPortfolio,
         range: state.range,
+        recoveryVersion: state.recoveryVersion,
       }),
       merge: (persisted, current) => {
         const saved = persisted as Partial<State> & {
@@ -485,12 +432,19 @@ export const usePortfolioStore = create<State>()(
 
         const transactionsByPortfolio = normalizeTransactionsByPortfolio(saved.transactionsByPortfolio ?? legacyTransactions);
         const holdingsByPortfolio = normalizeHoldingsByPortfolio(saved.holdingsByPortfolio ?? legacyHoldings);
-        // Fidelity Roth IRA is historically stored under the legacy `fidelity-401k` key in this app.
-        // Recover only the two exact surviving transactions when that holdings bucket is empty.
-        holdingsByPortfolio["fidelity-401k"] = recoverKnownRothHoldings(
-          holdingsByPortfolio["fidelity-401k"],
-          transactionsByPortfolio["fidelity-401k"],
-        );
+        let recoveryVersion = saved.recoveryVersion ?? "";
+
+        // One-time recovery only. After the marker is persisted, normal user removals remain
+        // removed and are never resurrected by this migration on future reloads.
+        if (recoveryVersion !== RECOVERY_VERSION) {
+          transactionsByPortfolio["fidelity-401k"] = mergeKnownRothTransactions(transactionsByPortfolio["fidelity-401k"]);
+          holdingsByPortfolio.robinhood = restoreKnownRobinhoodIfEmpty(holdingsByPortfolio.robinhood);
+          holdingsByPortfolio["fidelity-401k"] = mergeKnownRothRecovery(
+            holdingsByPortfolio["fidelity-401k"],
+            transactionsByPortfolio["fidelity-401k"],
+          );
+          recoveryVersion = RECOVERY_VERSION;
+        }
         const cashByPortfolio = normalizeCashByPortfolio(saved.cashByPortfolio ?? legacyCash);
         const activePortfolioId = current.activePortfolioId;
 
@@ -501,6 +455,7 @@ export const usePortfolioStore = create<State>()(
           holdingsByPortfolio,
           transactionsByPortfolio,
           cashByPortfolio,
+          recoveryVersion,
           ...visibleState(activePortfolioId, holdingsByPortfolio, transactionsByPortfolio, cashByPortfolio),
         };
       },
