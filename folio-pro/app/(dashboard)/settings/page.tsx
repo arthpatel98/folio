@@ -29,7 +29,7 @@ export default function Page() {
     if (!confirm("Upload this browser's Folio data to Supabase? This will replace the current cloud copy.")) return;
     setBusy(true);
     try {
-      await uploadLocalState();
+      await uploadLocalState({ force: true });
       await refreshStatus();
       toast.success("This browser's portfolio data is now in Supabase. Future changes will sync automatically.");
     } catch (error) { toast.error(error instanceof Error ? error.message : "Cloud upload failed."); }

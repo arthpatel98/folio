@@ -10,6 +10,89 @@ import { recordStockTrade, removeDcaPosition } from "@/lib/dca-storage";
 export type DataPortfolioId = "robinhood" | "fidelity-401k" | "fidelity-roth";
 export type ActivePortfolioId = DataPortfolioId | "all";
 
+const dataPortfolioIds: DataPortfolioId[] = ["robinhood", "fidelity-401k", "fidelity-roth"];
+
+const ROTH_RECOVERY_TRANSACTION_IDS = new Set([
+  "trade-1783994932453-yencvh", // QCOM Buy Call, Jul 14 2026
+  "trade-1783805777721-y8parg", // ONDS Sell Call, Jul 11 2026
+]);
+
+function formatOptionRecoveryCompany(transaction: Transaction): string {
+  const symbol = (transaction.symbol ?? "Option").toUpperCase();
+  const label = transaction.optionType === "sell-call" ? "Sell Call"
+    : transaction.optionType === "buy-call" ? "Call"
+    : transaction.optionType === "sell-put" ? "Sell Put"
+    : "Put";
+  if (!transaction.optionExpiry) return `${symbol} ${label}`;
+  const expiry = new Date(`${transaction.optionExpiry}T12:00:00`);
+  const formatted = Number.isNaN(expiry.getTime())
+    ? transaction.optionExpiry
+    : expiry.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return `${symbol} ${label} Exp ${formatted}`;
+}
+
+/**
+ * One-time, non-destructive recovery for the two Roth IRA option positions supplied by the user.
+ * We only recover when the Roth holdings array is empty and the exact historical transactions
+ * are present. Existing holdings always win and are never replaced.
+ *
+ * Strike data was not present in the surviving transactions, so we intentionally leave
+ * optionStrike/optionSymbol unset rather than inventing contract details. The positions remain
+ * editable in Holdings if the user later wants to add the strike.
+ */
+function recoverKnownRothHoldings(
+  holdings: Holding[],
+  transactions: Transaction[] | undefined,
+): Holding[] {
+  if (holdings.length > 0 || !Array.isArray(transactions)) return holdings;
+
+  const recovered = transactions
+    .filter((transaction) => ROTH_RECOVERY_TRANSACTION_IDS.has(transaction.id))
+    .map<Holding>((transaction) => ({
+      assetType: "option",
+      symbol: (transaction.symbol ?? "").toUpperCase(),
+      company: formatOptionRecoveryCompany(transaction),
+      shares: transaction.quantity ?? 0,
+      averageCost: transaction.price ?? 0,
+      currentPrice: transaction.price ?? 0,
+      previousClose: transaction.price ?? 0,
+      dividendYield: 0,
+      sector: "Other",
+      optionType: transaction.optionType,
+      optionExpiry: transaction.optionExpiry,
+      optionStrike: transaction.optionStrike,
+      optionSymbol: transaction.optionSymbol,
+      updatedAt: "Recovered From Transaction History",
+    }))
+    .filter((holding) => holding.symbol && holding.shares !== 0);
+
+  return recovered.length > 0 ? recovered : holdings;
+}
+
+function normalizeHoldingsByPortfolio(value?: Partial<Record<DataPortfolioId, Holding[]>>): Record<DataPortfolioId, Holding[]> {
+  return {
+    robinhood: Array.isArray(value?.robinhood) ? value.robinhood : cloneHoldings(initialHoldingsByPortfolio.robinhood),
+    "fidelity-401k": Array.isArray(value?.["fidelity-401k"]) ? value["fidelity-401k"] : cloneHoldings(initialHoldingsByPortfolio["fidelity-401k"]),
+    "fidelity-roth": Array.isArray(value?.["fidelity-roth"]) ? value["fidelity-roth"] : cloneHoldings(initialHoldingsByPortfolio["fidelity-roth"]),
+  };
+}
+
+function normalizeTransactionsByPortfolio(value?: Partial<Record<DataPortfolioId, Transaction[]>>): Record<DataPortfolioId, Transaction[]> {
+  return {
+    robinhood: Array.isArray(value?.robinhood) ? value.robinhood : [...initialTransactionsByPortfolio.robinhood],
+    "fidelity-401k": Array.isArray(value?.["fidelity-401k"]) ? value["fidelity-401k"] : [...initialTransactionsByPortfolio["fidelity-401k"]],
+    "fidelity-roth": Array.isArray(value?.["fidelity-roth"]) ? value["fidelity-roth"] : [...initialTransactionsByPortfolio["fidelity-roth"]],
+  };
+}
+
+function normalizeCashByPortfolio(value?: Partial<Record<DataPortfolioId, number>>): Record<DataPortfolioId, number> {
+  return {
+    robinhood: typeof value?.robinhood === "number" && Number.isFinite(value.robinhood) ? value.robinhood : initialCashByPortfolio.robinhood,
+    "fidelity-401k": typeof value?.["fidelity-401k"] === "number" && Number.isFinite(value["fidelity-401k"]) ? value["fidelity-401k"] : initialCashByPortfolio["fidelity-401k"],
+    "fidelity-roth": typeof value?.["fidelity-roth"] === "number" && Number.isFinite(value["fidelity-roth"]) ? value["fidelity-roth"] : initialCashByPortfolio["fidelity-roth"],
+  };
+}
+
 const holdingKey = (holding: Pick<Holding, "symbol" | "assetType" | "optionType" | "optionExpiry" | "optionStrike" | "optionSymbol" | "company">) => {
   const assetType = holding.assetType ?? "stock";
   const symbol = holding.symbol.trim().toUpperCase();
@@ -29,8 +112,8 @@ const sampleHoldings = cloneHoldings(robinhoodHoldings.slice(0, 5));
 
 const initialHoldingsByPortfolio: Record<DataPortfolioId, Holding[]> = {
   robinhood: cloneHoldings(robinhoodHoldings),
-  "fidelity-401k": cloneHoldings(sampleHoldings),
-  "fidelity-roth": cloneHoldings(sampleHoldings),
+  "fidelity-401k": [],
+  "fidelity-roth": [],
 };
 
 const initialTransactionsByPortfolio: Record<DataPortfolioId, Transaction[]> = {
@@ -79,18 +162,22 @@ function visibleState(
   transactionsByPortfolio: Record<DataPortfolioId, Transaction[]>,
   cashByPortfolio: Record<DataPortfolioId, number>,
 ) {
+  const safeHoldings = normalizeHoldingsByPortfolio(holdingsByPortfolio);
+  const safeTransactions = normalizeTransactionsByPortfolio(transactionsByPortfolio);
+  const safeCash = normalizeCashByPortfolio(cashByPortfolio);
+
   if (activePortfolioId === "all") {
     return {
-      holdings: aggregateHoldings(Object.values(holdingsByPortfolio)),
-      transactions: Object.values(transactionsByPortfolio).flat(),
-      cash: Object.values(cashByPortfolio).reduce((sum, value) => sum + value, 0),
+      holdings: aggregateHoldings(dataPortfolioIds.map((id) => safeHoldings[id])),
+      transactions: dataPortfolioIds.flatMap((id) => safeTransactions[id]),
+      cash: dataPortfolioIds.reduce((sum, id) => sum + safeCash[id], 0),
     };
   }
 
   return {
-    holdings: holdingsByPortfolio[activePortfolioId],
-    transactions: transactionsByPortfolio[activePortfolioId],
-    cash: cashByPortfolio[activePortfolioId],
+    holdings: safeHoldings[activePortfolioId],
+    transactions: safeTransactions[activePortfolioId],
+    cash: safeCash[activePortfolioId],
   };
 }
 
@@ -387,22 +474,24 @@ export const usePortfolioStore = create<State>()(
           cash?: number;
         };
 
-        // Migrate users from the original single-portfolio storage without losing Robinhood edits.
-        const holdingsByPortfolio = saved.holdingsByPortfolio ?? {
-          ...initialHoldingsByPortfolio,
-          robinhood: (saved.holdings ?? initialHoldingsByPortfolio.robinhood).map((holding) => ({
-            ...holding,
-            assetType: holding.assetType ?? "stock",
-          })),
-        };
-        const transactionsByPortfolio = saved.transactionsByPortfolio ?? {
-          ...initialTransactionsByPortfolio,
-          robinhood: saved.transactions ?? initialTransactionsByPortfolio.robinhood,
-        };
-        const cashByPortfolio = saved.cashByPortfolio ?? {
-          ...initialCashByPortfolio,
-          robinhood: typeof saved.cash === "number" ? saved.cash : initialCashByPortfolio.robinhood,
-        };
+        // Preserve every existing saved value exactly, while safely backfilling only missing
+        // portfolio containers. This avoids crashes with older partial persisted/cloud state
+        // without clearing, remapping, or overwriting any user's portfolio data.
+        const legacyHoldings = saved.holdings
+          ? { robinhood: saved.holdings.map((holding) => ({ ...holding, assetType: holding.assetType ?? "stock" })) }
+          : undefined;
+        const legacyTransactions = saved.transactions ? { robinhood: saved.transactions } : undefined;
+        const legacyCash = typeof saved.cash === "number" ? { robinhood: saved.cash } : undefined;
+
+        const transactionsByPortfolio = normalizeTransactionsByPortfolio(saved.transactionsByPortfolio ?? legacyTransactions);
+        const holdingsByPortfolio = normalizeHoldingsByPortfolio(saved.holdingsByPortfolio ?? legacyHoldings);
+        // Fidelity Roth IRA is historically stored under the legacy `fidelity-401k` key in this app.
+        // Recover only the two exact surviving transactions when that holdings bucket is empty.
+        holdingsByPortfolio["fidelity-401k"] = recoverKnownRothHoldings(
+          holdingsByPortfolio["fidelity-401k"],
+          transactionsByPortfolio["fidelity-401k"],
+        );
+        const cashByPortfolio = normalizeCashByPortfolio(saved.cashByPortfolio ?? legacyCash);
         const activePortfolioId = current.activePortfolioId;
 
         return {

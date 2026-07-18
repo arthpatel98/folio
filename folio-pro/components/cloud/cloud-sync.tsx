@@ -26,6 +26,17 @@ export function CloudSync() {
           return;
         }
 
+        const localState = readLocalFolioState();
+        // After hydration/recovery, reconcile a safe local repair back to the cloud immediately.
+        // The upload function itself blocks unexplained non-empty -> empty portfolio overwrites.
+        if (cloud.payload && JSON.stringify(localState) !== JSON.stringify(cloud.payload)) {
+          try {
+            await uploadLocalState();
+          } catch (error) {
+            console.error("Folio initial cloud reconciliation was blocked or failed", error);
+          }
+        }
+
         lastSnapshot.current = JSON.stringify(readLocalFolioState());
         ready.current = Boolean(cloud.payload);
         timer = setInterval(async () => {
