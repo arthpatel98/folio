@@ -14,25 +14,25 @@ const dataPortfolioIds: DataPortfolioId[] = ["robinhood", "fidelity-401k", "fide
 
 function normalizeHoldingsByPortfolio(value?: Partial<Record<DataPortfolioId, Holding[]>>): Record<DataPortfolioId, Holding[]> {
   return {
-    robinhood: Array.isArray(value?.robinhood) ? value.robinhood : [],
-    "fidelity-401k": Array.isArray(value?.["fidelity-401k"]) ? value["fidelity-401k"] : [],
-    "fidelity-roth": Array.isArray(value?.["fidelity-roth"]) ? value["fidelity-roth"] : [],
+    robinhood: Array.isArray(value?.robinhood) ? value.robinhood : cloneHoldings(initialHoldingsByPortfolio.robinhood),
+    "fidelity-401k": Array.isArray(value?.["fidelity-401k"]) ? value["fidelity-401k"] : cloneHoldings(initialHoldingsByPortfolio["fidelity-401k"]),
+    "fidelity-roth": Array.isArray(value?.["fidelity-roth"]) ? value["fidelity-roth"] : cloneHoldings(initialHoldingsByPortfolio["fidelity-roth"]),
   };
 }
 
 function normalizeTransactionsByPortfolio(value?: Partial<Record<DataPortfolioId, Transaction[]>>): Record<DataPortfolioId, Transaction[]> {
   return {
-    robinhood: Array.isArray(value?.robinhood) ? value.robinhood : [],
-    "fidelity-401k": Array.isArray(value?.["fidelity-401k"]) ? value["fidelity-401k"] : [],
-    "fidelity-roth": Array.isArray(value?.["fidelity-roth"]) ? value["fidelity-roth"] : [],
+    robinhood: Array.isArray(value?.robinhood) ? value.robinhood : [...initialTransactionsByPortfolio.robinhood],
+    "fidelity-401k": Array.isArray(value?.["fidelity-401k"]) ? value["fidelity-401k"] : [...initialTransactionsByPortfolio["fidelity-401k"]],
+    "fidelity-roth": Array.isArray(value?.["fidelity-roth"]) ? value["fidelity-roth"] : [...initialTransactionsByPortfolio["fidelity-roth"]],
   };
 }
 
 function normalizeCashByPortfolio(value?: Partial<Record<DataPortfolioId, number>>): Record<DataPortfolioId, number> {
   return {
-    robinhood: typeof value?.robinhood === "number" && Number.isFinite(value.robinhood) ? value.robinhood : 0,
-    "fidelity-401k": typeof value?.["fidelity-401k"] === "number" && Number.isFinite(value["fidelity-401k"]) ? value["fidelity-401k"] : 0,
-    "fidelity-roth": typeof value?.["fidelity-roth"] === "number" && Number.isFinite(value["fidelity-roth"]) ? value["fidelity-roth"] : 0,
+    robinhood: typeof value?.robinhood === "number" && Number.isFinite(value.robinhood) ? value.robinhood : initialCashByPortfolio.robinhood,
+    "fidelity-401k": typeof value?.["fidelity-401k"] === "number" && Number.isFinite(value["fidelity-401k"]) ? value["fidelity-401k"] : initialCashByPortfolio["fidelity-401k"],
+    "fidelity-roth": typeof value?.["fidelity-roth"] === "number" && Number.isFinite(value["fidelity-roth"]) ? value["fidelity-roth"] : initialCashByPortfolio["fidelity-roth"],
   };
 }
 
