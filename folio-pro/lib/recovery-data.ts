@@ -1,6 +1,6 @@
 import type { Holding, Transaction } from "@/types/portfolio";
 
-export const RECOVERY_VERSION = "2026-07-18-robinhood-roth-v1";
+export const RECOVERY_VERSION = "2026-07-18-robinhood-roth-v2";
 
 export const KNOWN_ROBINHOOD_HOLDINGS: Holding[] = [
   {
