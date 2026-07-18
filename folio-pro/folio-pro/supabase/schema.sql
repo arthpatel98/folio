@@ -1,0 +1,34 @@
+create extension if not exists "uuid-ossp";
+create type transaction_type as enum ('buy','sell','dividend','split','deposit','withdrawal','transfer');
+create table profiles (id uuid primary key references auth.users on delete cascade, full_name text, base_currency text not null default 'USD', created_at timestamptz not null default now());
+create table portfolios (id uuid primary key default uuid_generate_v4(), user_id uuid not null references profiles(id) on delete cascade, name text not null, cash numeric(18,4) not null default 0, benchmark text not null default 'SPY', created_at timestamptz not null default now());
+create table securities (id uuid primary key default uuid_generate_v4(), symbol text not null unique, company_name text not null, asset_type text not null, sector text, exchange text, currency text not null default 'USD');
+create table transactions (id uuid primary key default uuid_generate_v4(), portfolio_id uuid not null references portfolios(id) on delete cascade, security_id uuid references securities(id), type transaction_type not null, trade_date date not null, quantity numeric(24,8), price numeric(18,6), amount numeric(18,4) not null, fees numeric(18,4) not null default 0, notes text, created_at timestamptz not null default now());
+create table price_history (security_id uuid not null references securities(id) on delete cascade, price_date date not null, open numeric(18,6), high numeric(18,6), low numeric(18,6), close numeric(18,6) not null, volume bigint, primary key(security_id,price_date));
+create table portfolio_snapshots (portfolio_id uuid not null references portfolios(id) on delete cascade, snapshot_date date not null, total_value numeric(18,4) not null, cash numeric(18,4) not null, daily_return numeric(12,6), primary key(portfolio_id,snapshot_date));
+create table watchlists (id uuid primary key default uuid_generate_v4(), user_id uuid not null references profiles(id) on delete cascade, name text not null default 'Main');
+create table watchlist_items (watchlist_id uuid references watchlists(id) on delete cascade, security_id uuid references securities(id) on delete cascade, created_at timestamptz default now(), primary key(watchlist_id,security_id));
+create table goals (id uuid primary key default uuid_generate_v4(), user_id uuid not null references profiles(id) on delete cascade, name text not null, target_amount numeric(18,4) not null, target_date date, created_at timestamptz default now());
+create table alerts (id uuid primary key default uuid_generate_v4(), user_id uuid not null references profiles(id) on delete cascade, security_id uuid references securities(id), type text not null, threshold numeric(18,6), enabled boolean default true, created_at timestamptz default now());
+alter table profiles enable row level security; alter table portfolios enable row level security; alter table transactions enable row level security; alter table watchlists enable row level security; alter table watchlist_items enable row level security; alter table goals enable row level security; alter table alerts enable row level security;
+create policy "own profile" on profiles for all using (auth.uid()=id) with check (auth.uid()=id);
+create policy "own portfolios" on portfolios for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+create policy "own transactions" on transactions for all using (exists(select 1 from portfolios p where p.id=portfolio_id and p.user_id=auth.uid())) with check (exists(select 1 from portfolios p where p.id=portfolio_id and p.user_id=auth.uid()));
+create policy "own watchlists" on watchlists for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+create policy "own watchlist items" on watchlist_items for all using (exists(select 1 from watchlists w where w.id=watchlist_id and w.user_id=auth.uid())) with check (exists(select 1 from watchlists w where w.id=watchlist_id and w.user_id=auth.uid()));
+create policy "own goals" on goals for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+create policy "own alerts" on alerts for all using (auth.uid()=user_id) with check (auth.uid()=user_id);
+create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path=public as $$ begin insert into profiles(id,full_name) values(new.id,new.raw_user_meta_data->>'full_name'); insert into portfolios(user_id,name) values(new.id,'My Portfolio'); return new; end; $$;
+create trigger on_auth_user_created after insert on auth.users for each row execute procedure public.handle_new_user();
+
+-- Folio Pro browser-state sync. One JSON snapshot per authenticated user.
+create table if not exists public.user_app_state (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.user_app_state enable row level security;
+drop policy if exists "own app state" on public.user_app_state;
+create policy "own app state" on public.user_app_state
+  for all using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);

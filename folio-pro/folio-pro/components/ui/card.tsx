@@ -1,0 +1,2 @@
+import { cn } from "@/lib/utils"; import React from "react";
+export function Card({className,...p}:React.HTMLAttributes<HTMLDivElement>){return <div className={cn("glass rounded-2xl",className)} {...p}/>} export function CardHeader({className,...p}:React.HTMLAttributes<HTMLDivElement>){return <div className={cn("p-5 pb-2",className)} {...p}/>} export function CardContent({className,...p}:React.HTMLAttributes<HTMLDivElement>){return <div className={cn("p-5 pt-3",className)} {...p}/>} 
