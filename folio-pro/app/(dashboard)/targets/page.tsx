@@ -39,8 +39,10 @@ export default function TargetPlannerPage(){
   const [cashError,setCashError]=useState<string | null>(null);
   const [targetPriceInputs,setTargetPriceInputs]=useState<Record<string,string>>({});
   const [reinvestmentSteps,setReinvestmentSteps]=useState<ReinvestmentStep[]>([]);
+  const [selectedPathPositions,setSelectedPathPositions]=useState<Record<string,boolean>>({});
   const storageKey=`folio-target-scenarios:${activeId}`;
   const pathwayStorageKey=`folio-target-pathway:${activeId}`;
+  const pathwaySelectionStorageKey=`folio-target-pathway-selection:${activeId}`;
   useEffect(()=>{const raw=localStorage.getItem(storageKey);setScenarios(raw?JSON.parse(raw):{});setSelectedDate(rows[1].date)},[storageKey,rows]);
   useEffect(()=>{localStorage.setItem(storageKey,JSON.stringify(scenarios))},[storageKey,scenarios]);
   useEffect(()=>{
@@ -51,6 +53,12 @@ export default function TargetPlannerPage(){
     setReinvestmentSteps([{id:`step-${Date.now()}`,ticker:"",returnPct:7,date:""}]);
   },[pathwayStorageKey]);
   useEffect(()=>{localStorage.setItem(pathwayStorageKey,JSON.stringify(reinvestmentSteps))},[pathwayStorageKey,reinvestmentSteps]);
+  useEffect(()=>{
+    const raw=localStorage.getItem(pathwaySelectionStorageKey);
+    if(raw){try{setSelectedPathPositions(JSON.parse(raw));return;}catch{}}
+    setSelectedPathPositions({});
+  },[pathwaySelectionStorageKey]);
+  useEffect(()=>{localStorage.setItem(pathwaySelectionStorageKey,JSON.stringify(selectedPathPositions))},[pathwaySelectionStorageKey,selectedPathPositions]);
   const availableCash=Math.max(0,selectedCash-optionCollateral(selectedHoldings));
   const currentValue=portfolioValue(selectedHoldings,selectedCash);
   const selectedTarget=rows.find(r=>r.date===selectedDate)??rows[0];
@@ -77,7 +85,7 @@ export default function TargetPlannerPage(){
   const projectedValue=currentValue+scenarioProfit;
   const remainingGap=Math.max(0,selectedTarget.target-projectedValue);
   const totalInvestment=details.reduce((s,d)=>s+d.investment,0);
-  const sellSelections=details.filter(d=>d.s.targetPrice>0).map(d=>({
+  const sellSelections=details.filter(d=>d.s.targetPrice>0&&selectedPathPositions[d.k]).map(d=>({
     ...d,
     saleProceeds:d.s.targetPrice*d.ownedQty*d.multiplier,
   }));
@@ -95,6 +103,7 @@ export default function TargetPlannerPage(){
   const addReinvestmentStep=()=>setReinvestmentSteps(prev=>[...prev,{id:`step-${Date.now()}-${prev.length}`,ticker:"",returnPct:7,date:""}]);
   const updateReinvestmentStep=(id:string,patch:Partial<ReinvestmentStep>)=>setReinvestmentSteps(prev=>prev.map(step=>step.id===id?{...step,...patch}:step));
   const removeReinvestmentStep=(id:string)=>setReinvestmentSteps(prev=>prev.filter(step=>step.id!==id));
+  const togglePathPosition=(key:string)=>setSelectedPathPositions(prev=>({...prev,[key]:!prev[key]}));
   const updateAdditionalQty=(detail:typeof details[number],value:number)=>{
     const nextQty=Math.max(0,Number.isFinite(value)?value:0);
     const nextInvestment=nextQty*detail.h.currentPrice*detail.multiplier;
@@ -135,7 +144,7 @@ export default function TargetPlannerPage(){
           </label>
         </div>
       </div>
-      <div className="-mx-px overflow-x-auto overscroll-x-contain pb-1"><table className="w-full min-w-[1320px] text-sm"><thead className="bg-white/[.035] text-left text-xs tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Position</th><th className="px-4 py-3">Owned</th><th className="px-4 py-3">Average Cost</th><th className="px-4 py-3">Current Price</th><th className="px-4 py-3">Your Target Price</th><th className="px-4 py-3">Expected Return</th><th className="px-4 py-3">Buy More</th><th className="px-4 py-3">New Investment</th><th className="px-4 py-3">Profit At Target</th><th className="px-4 py-3">Target Gap Covered</th></tr></thead><tbody>{details.map(d=><tr key={d.k} className="border-t border-white/[.06]"><td className="px-4 py-3"><div className="font-medium">{positionLabel(d.h)}</div></td><td className="px-4 py-3">{d.ownedQty.toLocaleString()} {d.h.assetType==="option"?"Contracts":"Shares"}</td><td className="px-4 py-3">{money2(d.h.averageCost)}</td><td className="px-4 py-3">{money2(d.h.currentPrice)}</td><td className="px-4 py-3"><input type="text" inputMode="decimal" value={targetPriceInputs[d.k] ?? ((scenarios[d.k]?.targetPrice ?? 0) === 0 ? "" : String(scenarios[d.k]?.targetPrice))} onChange={e=>{const value=e.target.value;if(/^\d*(?:\.\d{0,2})?$/.test(value)){setTargetPriceInputs(prev=>({...prev,[d.k]:value}));update(d.k,{targetPrice:value===""?0:Number(value)},d.h);}}} onBlur={()=>setTargetPriceInputs(prev=>{const next={...prev};const value=next[d.k];if(value!==undefined&&value!==""){next[d.k]=Number(value).toFixed(2);}return next;})} className="h-9 w-28 rounded-lg border border-blue-400/20 bg-blue-400/[.06] px-3 text-blue-200 outline-none"/></td><td className={cn("px-4 py-3 font-medium",d.expectedReturn>=0?"text-emerald-400":"text-red-400")}>{d.expectedReturn>=0?"+":""}{pct(d.expectedReturn)}</td><td className="px-4 py-3"><input type="number" min="0" step="1" value={scenarios[d.k]?.additionalQty || ""} onChange={e=>updateAdditionalQty(d,e.target.value===""?0:Number(e.target.value))} className="h-9 w-24 rounded-lg border border-white/10 bg-zinc-950 px-3 outline-none"/></td><td className="px-4 py-3">{money2(d.investment)}</td><td className={cn("px-4 py-3 font-medium",d.totalProfit>=0?"text-emerald-400":"text-red-400")}>{d.totalProfit>=0?"+":""}{money2(d.totalProfit)}</td><td className="px-4 py-3">{pct(d.gapCovered)}</td></tr>)}</tbody></table></div>
+      <div className="-mx-px overflow-x-auto overscroll-x-contain pb-1"><table className="w-full min-w-[1450px] text-sm"><thead className="bg-white/[.035] text-left text-xs tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Use In Target Path</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Owned</th><th className="px-4 py-3">Average Cost</th><th className="px-4 py-3">Current Price</th><th className="px-4 py-3">Your Target Price</th><th className="px-4 py-3">Expected Return</th><th className="px-4 py-3">Buy More</th><th className="px-4 py-3">New Investment</th><th className="px-4 py-3">Profit At Target</th><th className="px-4 py-3">Target Gap Covered</th></tr></thead><tbody>{details.map(d=><tr key={d.k} className="border-t border-white/[.06]"><td className="px-4 py-3"><label className="inline-flex cursor-pointer items-center gap-2"><input type="checkbox" checked={Boolean(selectedPathPositions[d.k])} onChange={()=>togglePathPosition(d.k)} className="size-4 rounded border-white/20 bg-zinc-950 accent-emerald-500"/><span className={cn("text-xs font-medium",selectedPathPositions[d.k]?"text-emerald-300":"text-zinc-500")}>{selectedPathPositions[d.k]?"Selected":"Select"}</span></label></td><td className="px-4 py-3"><div className="font-medium">{positionLabel(d.h)}</div></td><td className="px-4 py-3">{d.ownedQty.toLocaleString()} {d.h.assetType==="option"?"Contracts":"Shares"}</td><td className="px-4 py-3">{money2(d.h.averageCost)}</td><td className="px-4 py-3">{money2(d.h.currentPrice)}</td><td className="px-4 py-3"><input type="text" inputMode="decimal" value={targetPriceInputs[d.k] ?? ((scenarios[d.k]?.targetPrice ?? 0) === 0 ? "" : String(scenarios[d.k]?.targetPrice))} onChange={e=>{const value=e.target.value;if(/^\d*(?:\.\d{0,2})?$/.test(value)){setTargetPriceInputs(prev=>({...prev,[d.k]:value}));update(d.k,{targetPrice:value===""?0:Number(value)},d.h);}}} onBlur={()=>setTargetPriceInputs(prev=>{const next={...prev};const value=next[d.k];if(value!==undefined&&value!==""){next[d.k]=Number(value).toFixed(2);}return next;})} className="h-9 w-28 rounded-lg border border-blue-400/20 bg-blue-400/[.06] px-3 text-blue-200 outline-none"/></td><td className={cn("px-4 py-3 font-medium",d.expectedReturn>=0?"text-emerald-400":"text-red-400")}>{d.expectedReturn>=0?"+":""}{pct(d.expectedReturn)}</td><td className="px-4 py-3"><input type="number" min="0" step="1" value={scenarios[d.k]?.additionalQty || ""} onChange={e=>updateAdditionalQty(d,e.target.value===""?0:Number(e.target.value))} className="h-9 w-24 rounded-lg border border-white/10 bg-zinc-950 px-3 outline-none"/></td><td className="px-4 py-3">{money2(d.investment)}</td><td className={cn("px-4 py-3 font-medium",d.totalProfit>=0?"text-emerald-400":"text-red-400")}>{d.totalProfit>=0?"+":""}{money2(d.totalProfit)}</td><td className="px-4 py-3">{pct(d.gapCovered)}</td></tr>)}</tbody></table></div>
     </Card>
 
     <Card className="overflow-hidden">
@@ -143,7 +152,7 @@ export default function TargetPlannerPage(){
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold">Your Path To The Target</h2>
-            <p className="mt-1 text-sm text-zinc-500">Every Position With A Your Target Price Is Included. Their Estimated Sale Proceeds Are Combined Into One Cash Pool, Then Reinvested Step By Step Before The Target Date.</p>
+            <p className="mt-1 text-sm text-zinc-500">Only Positions You Select In Build Your Price-Target Scenarios Are Included. Selected Positions With A Your Target Price Are Combined Into One Cash Pool, Then Reinvested Step By Step Before The Target Date.</p>
           </div>
           <button onClick={addReinvestmentStep} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-medium text-emerald-300 transition hover:bg-emerald-400/15"><Plus size={16}/>Add Reinvestment Step</button>
         </div>
@@ -157,7 +166,7 @@ export default function TargetPlannerPage(){
           <PathMetric label="Gap To Target" value={money2(pathwayGap)} />
         </div>
 
-        {sellSelections.length===0?<div className="rounded-2xl border border-dashed border-white/10 bg-white/[.02] p-8 text-center"><div className="text-sm font-medium text-zinc-300">Enter A Value In Your Target Price To Start Building The Pathway</div><div className="mt-2 text-xs text-zinc-500">You Can Enter Target Prices For Multiple Stocks Or Options. All Estimated Sale Proceeds Will Be Added Together.</div></div>:<>
+        {sellSelections.length===0?<div className="rounded-2xl border border-dashed border-white/10 bg-white/[.02] p-8 text-center"><div className="text-sm font-medium text-zinc-300">Select At Least One Position And Enter Its Your Target Price To Start Building The Pathway</div><div className="mt-2 text-xs text-zinc-500">You Can Keep Target Prices Filled For Every Position, Then Choose Only The Positions You Want Included In This Target Path.</div></div>:<>
           <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[.04] p-4">
             <div className="mb-4 flex items-center justify-between gap-3"><div><div className="text-xs font-semibold tracking-wider text-amber-300">STEP 1 · SELL SELECTED POSITIONS</div><div className="mt-1 text-sm text-zinc-400">Estimated Cash Available After Selling Every Selected Position At Your Target Price</div></div><div className="text-right"><div className="text-xs text-zinc-500">Combined Cash</div><div className="text-xl font-semibold text-amber-300">{money2(totalSaleProceeds)}</div></div></div>
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{sellSelections.map(d=><div key={d.k} className="rounded-xl border border-white/[.07] bg-zinc-950/50 p-3"><div className="flex items-start justify-between gap-3"><div><div className="font-medium">{positionLabel(d.h)}</div><div className="mt-1 text-xs text-zinc-500">Sell {d.ownedQty.toLocaleString()} {d.h.assetType==="option"?"Contracts":"Shares"} At {money2(d.s.targetPrice)}</div></div><div className="text-right text-sm font-semibold text-amber-200">{money2(d.saleProceeds)}</div></div></div>)}</div>
@@ -190,7 +199,7 @@ export default function TargetPlannerPage(){
             </div>
           </div>
 
-          <div className="rounded-2xl border border-blue-400/15 bg-blue-400/[.04] p-4 text-sm text-zinc-400"><span className="font-medium text-blue-200">How This Path Works:</span> The First Step assumes every position with a target price is fully sold at that price. The proceeds are summed, then each reinvestment step compounds the entire cash pool using the return you enter. Reinvestment dates are limited to the selected Target Date. This is a planning scenario, not a market prediction.</div>
+          <div className="rounded-2xl border border-blue-400/15 bg-blue-400/[.04] p-4 text-sm text-zinc-400"><span className="font-medium text-blue-200">How This Path Works:</span> The First Step assumes every position you selected for the target path, with a target price entered, is fully sold at that price. The proceeds are summed, then each reinvestment step compounds the entire cash pool using the return you enter. Reinvestment dates are limited to the selected Target Date. This is a planning scenario, not a market prediction.</div>
         </>}
       </div>
     </Card>
