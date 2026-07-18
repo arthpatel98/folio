@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Banknote, BriefcaseBusiness, Download, Layers3, LockKeyhole, RefreshCw, Search, WalletCards } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Banknote, BriefcaseBusiness, Download, Layers3, LockKeyhole, RefreshCw, Search, Upload, WalletCards } from "lucide-react";
 import { HoldingsTable } from "@/components/portfolio/holdings-table";
 import { AddHoldingDialog } from "@/components/portfolio/add-holding-dialog";
 import { EditCashDialog } from "@/components/portfolio/edit-cash-dialog";
@@ -11,6 +11,7 @@ import { cn, money } from "@/lib/utils";
 import { buildOptionSymbol } from "@/lib/options";
 import { isUsMarketDay, isUsMarketOpen } from "@/lib/market-hours";
 import { usePortfolioStore } from "@/store/portfolio-store";
+import type { Holding, OptionType } from "@/types/portfolio";
 import * as XLSX from "xlsx";
 
 function MetricBlock({ label, value, subvalue, positive, icon: Icon, tone = "green", valueExtra }: { label: string; value: string; subvalue?: React.ReactNode; positive?: boolean; icon: typeof BriefcaseBusiness; tone?: "green" | "red" | "blue" | "purple"; valueExtra?: React.ReactNode }) {
@@ -24,10 +25,13 @@ export default function Page() {
   const activePortfolioId = usePortfolioStore((state) => state.activePortfolioId);
   const updateStockQuotes = usePortfolioStore((state) => state.updateStockQuotes);
   const updateOptionQuotes = usePortfolioStore((state) => state.updateOptionQuotes);
+  const replaceHoldings = usePortfolioStore((state) => state.replaceHoldings);
   const [query, setQuery] = useState("");
   const [pricesLoading, setPricesLoading] = useState(false);
   const [pricesError, setPricesError] = useState<string | null>(null);
   const [pricesUpdatedAt, setPricesUpdatedAt] = useState<Date | null>(null);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = useMemo(() => {
@@ -158,6 +162,82 @@ export default function Page() {
     return () => window.clearInterval(timer);
   }, [activePortfolioId, hasRefreshableSymbols, missingOptionDetails.join(","), optionSymbolsKey, refreshPrices, stockSymbolsKey]);
 
+  function parseCsvDate(value: unknown) {
+    const text = String(value ?? "").trim();
+    if (!text) return undefined;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    const parsed = new Date(text);
+    if (Number.isNaN(parsed.getTime())) return undefined;
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function parseOptionType(value: unknown): OptionType | undefined {
+    const text = String(value ?? "").trim().toLowerCase().replace(/[ _]+/g, "-");
+    if (text === "buy-call" || text === "sell-call" || text === "buy-put" || text === "sell-put") return text;
+    return undefined;
+  }
+
+  function numberFrom(value: unknown, fallback = 0) {
+    const parsed = Number(String(value ?? "").replace(/[$,%]/g, "").trim());
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+
+  async function importHoldingsCsv(file: File) {
+    setImportMessage(null);
+    try {
+      if (activePortfolioId === "all") {
+        setImportMessage("Select A Single Portfolio Before Importing Holdings");
+        return;
+      }
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: "" });
+      const imported: Holding[] = rows.map((row) => {
+        const assetText = String(row["Asset"] ?? row["Asset Type"] ?? row["assetType"] ?? "Stock").trim().toLowerCase();
+        const assetType: Holding["assetType"] = assetText === "option" ? "option" : "stock";
+        const symbol = String(row["Symbol"] ?? row["Ticker"] ?? row["symbol"] ?? "").trim().toUpperCase();
+        const company = String(row["Description"] ?? row["Company"] ?? row["company"] ?? symbol).trim() || symbol;
+        const optionType = assetType === "option" ? parseOptionType(row["Option Type"] ?? row["optionType"]) : undefined;
+        const optionExpiry = assetType === "option" ? parseCsvDate(row["Expiry Date"] ?? row["Option Expiry"] ?? row["optionExpiry"]) : undefined;
+        const strikeMatch = company.match(/\$([0-9]+(?:\.[0-9]+)?)\s+(?:Call|Put)/i);
+        const optionStrike = assetType === "option" ? numberFrom(row["Strike"] ?? row["Option Strike"] ?? row["optionStrike"], strikeMatch ? Number(strikeMatch[1]) : 0) : undefined;
+        return {
+          assetType,
+          symbol,
+          company,
+          shares: numberFrom(row["Shares / Contracts"] ?? row["Shares"] ?? row["Contracts"] ?? row["shares"]),
+          averageCost: numberFrom(row["Average Cost / Contract Cost"] ?? row["Average Cost"] ?? row["averageCost"]),
+          currentPrice: numberFrom(row["Current Price"] ?? row["currentPrice"]),
+          previousClose: numberFrom(row["Previous Close"] ?? row["previousClose"], numberFrom(row["Current Price"] ?? row["currentPrice"])),
+          dividendYield: numberFrom(row["Dividend Yield"] ?? row["dividendYield"]),
+          sector: String(row["Sector"] ?? row["sector"] ?? "Other").trim() as Holding["sector"],
+          optionType,
+          optionExpiry,
+          optionStrike: optionStrike && optionStrike > 0 ? optionStrike : undefined,
+          optionSymbol: String(row["Option Symbol"] ?? row["optionSymbol"] ?? "").trim() || undefined,
+          updatedAt: "Just now",
+        };
+      }).filter((holding) => Boolean(holding.symbol));
+
+      if (!imported.length) {
+        setImportMessage("No Valid Holdings Found In CSV");
+        return;
+      }
+      const confirmed = window.confirm(`Replace ${holdings.length} Current Holdings With ${imported.length} Imported Holdings?`);
+      if (!confirmed) return;
+      replaceHoldings(imported, activePortfolioId);
+      setImportMessage(`${imported.length} Holdings Imported And Saved`);
+    } catch (error) {
+      setImportMessage(error instanceof Error ? `Import Failed: ${error.message}` : "Import Failed");
+    } finally {
+      if (csvInputRef.current) csvInputRef.current.value = "";
+    }
+  }
+
   function portfolioRows() {
     return holdings.map((holding) => {
       const metrics = holdingMetrics(holding);
@@ -192,7 +272,7 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Portfolio Overview</h1><p className="mt-1 text-sm text-zinc-500">Portfolio Performance and Open Positions at a Glance.</p>{pricesUpdatedAt && <p className="mt-1 text-xs text-zinc-500">Prices Updated {pricesUpdatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}{pricesError && <p className="mt-1 text-xs text-amber-500">{pricesError}</p>}</div><div className="flex items-center gap-2"><button type="button" onClick={() => refreshPrices(false, true)} disabled={pricesLoading || !hasRefreshableSymbols} aria-label="Refresh Prices" title="Refresh Prices" className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><RefreshCw size={17} className={pricesLoading ? "animate-spin" : ""}/><span className="hidden sm:inline">Refresh Prices</span></button><button onClick={downloadExcel} aria-label="Download Portfolio" title="Download Portfolio" className="inline-flex size-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><Download size={17}/></button><AddHoldingDialog /></div></div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Portfolio Overview</h1><p className="mt-1 text-sm text-zinc-500">Portfolio Performance and Open Positions at a Glance.</p>{pricesUpdatedAt && <p className="mt-1 text-xs text-zinc-500">Prices Updated {pricesUpdatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}{pricesError && <p className="mt-1 text-xs text-amber-500">{pricesError}</p>}{importMessage && <p className="mt-1 text-xs font-medium text-emerald-500">{importMessage}</p>}</div><div className="flex items-center gap-2"><input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) importHoldingsCsv(file); }} /><button type="button" onClick={() => csvInputRef.current?.click()} disabled={activePortfolioId === "all"} aria-label="Import Holdings CSV" title={activePortfolioId === "all" ? "Select A Single Portfolio To Import CSV" : "Import Holdings CSV"} className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><Upload size={17}/><span className="hidden sm:inline">Import CSV</span></button><button type="button" onClick={() => refreshPrices(false, true)} disabled={pricesLoading || !hasRefreshableSymbols} aria-label="Refresh Prices" title="Refresh Prices" className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><RefreshCw size={17} className={pricesLoading ? "animate-spin" : ""}/><span className="hidden sm:inline">Refresh Prices</span></button><button onClick={downloadExcel} aria-label="Download Portfolio" title="Download Portfolio" className="inline-flex size-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><Download size={17}/></button><AddHoldingDialog /></div></div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <MetricBlock label="Portfolio Value" value={money(summary.value)} subvalue={<>Day Return: {summary.today >= 0 ? "↑ +" : "↓ -"}{money(Math.abs(summary.today))}<br />( {summary.todayPct >= 0 ? "+" : ""}{summary.todayPct.toFixed(2)}% )</>} positive={summary.today >= 0} icon={WalletCards}/>

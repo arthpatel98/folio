@@ -139,6 +139,7 @@ type State = {
   setRange: (range: string) => void;
   setCash: (cash: number) => void;
   addHolding: (holding: Holding) => void;
+  replaceHoldings: (holdings: Holding[], portfolioId?: DataPortfolioId) => void;
   updateHolding: (originalHolding: Holding, holding: Holding) => void;
   removeHolding: (holding: Holding) => void;
   addTransaction: (transaction: Transaction) => void;
@@ -177,6 +178,16 @@ export const usePortfolioStore = create<State>()(
           return {
             cashByPortfolio,
             ...visibleState(state.activePortfolioId, state.holdingsByPortfolio, state.transactionsByPortfolio, cashByPortfolio),
+          };
+        }),
+      replaceHoldings: (holdings, portfolioId) =>
+        set((state) => {
+          const target = portfolioId ?? (state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId);
+          const normalized = holdings.map((holding) => ({ ...holding, assetType: holding.assetType ?? "stock" }));
+          const holdingsByPortfolio = { ...state.holdingsByPortfolio, [target]: normalized };
+          return {
+            holdingsByPortfolio,
+            ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, state.cashByPortfolio),
           };
         }),
       addHolding: (holding) =>
