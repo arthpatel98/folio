@@ -17,6 +17,7 @@ export type Sector =
   | "Healthcare"
   | "Memory Semiconductors"
   | "Mobility / Delivery"
+  | "Physical AI"
   | "Other"
   | "Semiconductors"
   | "Utilities / Energy";

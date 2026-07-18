@@ -18,7 +18,7 @@ const sectors: Sector[] = [
   "Digital Advertising / AI", "Drones", "Space", "Defense", "BioTech", "E-Commerce & Cloud",
   "Education Technology", "Electrical Equipment / Power Infrastructure", "ETF",
   "Ethereum / Crypto Treasury", "Financials", "Healthcare", "Memory Semiconductors",
-  "Mobility / Delivery", "Other", "Semiconductors", "Utilities / Energy",
+  "Mobility / Delivery", "Physical AI", "Other", "Semiconductors", "Utilities / Energy",
 ];
 
 const optionTypes: { value: OptionType; label: string }[] = [
@@ -162,7 +162,7 @@ export function AddHoldingDialog() {
     }
     if (!Number.isFinite(platformFees) || platformFees < 0) return setError("Enter A Valid Platform Fee.");
     if (!form.tradeDate) return setError("Trade Date Is Required.");
-    if (!Number.isFinite(tradePrice) || tradePrice <= 0) return setError(isOption ? (isRemoveOption ? "Sell Price Is Required." : "Contract Cost Is Required.") : (isRemoveStock ? "Sell Price Is Required." : "Share Price Is Required."));
+    if (!Number.isFinite(tradePrice) || tradePrice < 0 || (!isRemoveOption && tradePrice === 0)) return setError(isOption ? (isRemoveOption ? "Enter A Valid Sell Price." : "Contract Cost Is Required.") : (isRemoveStock ? "Sell Price Is Required." : "Share Price Is Required."));
     if (!matching && !sector) return setError("Select Sector Is Required.");
     if (isOption && form.action === "buy" && !form.optionExpiry) return setError("Option Expiry Is Required.");
 
@@ -231,7 +231,7 @@ export function AddHoldingDialog() {
             </> : isRemoveOption ? <>
               <Field label="Contract Details"><select required value={form.selectedContractKey} onChange={(e) => selectOptionContract(e.target.value)} className="field-select" autoFocus><option value="">Select Contract</option>{ownedOptions.map((holding) => <option key={optionContractKey(holding)} value={optionContractKey(holding)}>{holding.company}</option>)}</select></Field>
               <Field label="Contracts"><Input required type="number" min="1" step="1" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /></Field>
-              <Field label="Sell Price"><Input required type="number" min="0.000001" step="any" value={form.tradePrice} onChange={(e) => update("tradePrice", e.target.value)} /></Field>
+              <Field label="Sell Price"><Input required type="number" min="0" step="any" value={form.tradePrice} onChange={(e) => update("tradePrice", e.target.value)} /></Field>
               <MoneyField label="Platform Fees" value={form.platformFees} onChange={(value) => update("platformFees", value)} />
             </> : form.assetType === "stock" ? <>
               <Field label="Select Position"><select required value={stockSelection} onChange={(e) => selectBuyStock(e.target.value)} className="field-select" autoFocus><option value={NEW_POSITION}>New Position</option>{ownedStocks.map((holding) => <option key={holding.symbol} value={holding.symbol}>{holding.symbol}</option>)}</select></Field>

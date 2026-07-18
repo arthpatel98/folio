@@ -191,13 +191,10 @@ export const usePortfolioStore = create<State>()(
           const removedHolding = state.holdingsByPortfolio[target].find((item) => holdingKey(item) === removedKey);
           const updated = state.holdingsByPortfolio[target].filter((item) => holdingKey(item) !== removedKey);
           const holdingsByPortfolio = { ...state.holdingsByPortfolio, [target]: updated };
-          const isShortOption = assetType === "option" && (removedHolding?.optionType === "sell-call" || removedHolding?.optionType === "sell-put");
-          const optionPremium = isShortOption && removedHolding
-            ? Math.abs(removedHolding.shares) * removedHolding.averageCost * 100
-            : 0;
-          const cashByPortfolio = optionPremium > 0
-            ? { ...state.cashByPortfolio, [target]: state.cashByPortfolio[target] + optionPremium }
-            : state.cashByPortfolio;
+          // Options collateral is derived from active Sell Put positions. Removing a Sell Put
+          // automatically releases its collateral into available cash without mutating stored cash.
+          // Removing a Sell Call must not change cash.
+          const cashByPortfolio = state.cashByPortfolio;
           return {
             holdingsByPortfolio,
             cashByPortfolio,
@@ -266,7 +263,16 @@ export const usePortfolioStore = create<State>()(
         const multiplier = assetType === "option" ? 100 : 1;
         const signedDelta = assetType === "option" ? quantity : (action === "buy" ? quantity : -quantity);
         const tradeValue = Math.abs(quantity) * price * multiplier;
-        const cashChange = assetType === "option" ? -signedDelta * price * multiplier : (action === "sell" ? tradeValue : -tradeValue);
+        const safeFees = Number.isFinite(fees) ? Math.max(0, fees) : 0;
+        const isRemovingShortOption = assetType === "option" && action === "sell" &&
+          (holding.optionType === "sell-call" || holding.optionType === "sell-put");
+        const baseCashChange = isRemovingShortOption
+          ? 0
+          : assetType === "option"
+            ? -signedDelta * price * multiplier
+            : (action === "sell" ? tradeValue : -tradeValue);
+        // Platform fees always reduce cash, regardless of asset type or trade direction.
+        const cashChange = baseCashChange - safeFees;
 
         if (assetType === "stock" && action === "sell" && (!current || quantity > current.shares)) {
           return { ok: false, message: current ? `Only ${current.shares} shares are available.` : "No matching open position was found." };
@@ -341,7 +347,7 @@ export const usePortfolioStore = create<State>()(
             price,
             amount: tradeValue,
             date: tradeDate || new Date().toISOString().slice(0, 10),
-            fees: Number.isFinite(fees) ? Math.max(0, fees) : 0,
+            fees: safeFees,
             assetType,
             optionType: holding.optionType,
             optionExpiry: holding.optionExpiry,
