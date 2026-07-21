@@ -1,8 +1,15 @@
-Verified changes in this version:
-1. Position Simulator only displays positions that still exist in Holdings.
-2. Target Planner includes a New Buy Price column.
-3. New Investment = New Buy Price x Buy More (x 100 for options).
-4. Available Cash is reduced by total New Investment.
-5. Starting Cash Pool includes remaining Available Cash plus selected sale proceeds.
+Target Planner Updates
 
-Important: Upload the CONTENTS of this ZIP directly into the GitHub repository root.
+- New Investment defaults safely to $0.00 instead of NaN.
+- Projected Profit equals the sum of all Profit At Target values.
+- Projected Portfolio equals Current Portfolio plus Projected Profit.
+- Remaining Gap equals Selected Target minus Projected Portfolio, floored at $0.00.
+- New Capital Required equals the sum of the New Investment column.
+- Available Cash equals Holdings cash minus options collateral.
+- Your Target Price and New Buy Price fields display a dollar-sign prefix and retain two-decimal formatting.
+- Buy More now matches the New Buy Price field style while retaining its prior numeric format.
+- All affected currency summaries safely display $0.00 instead of NaN.
+- Your Path To The Target Starting Cash Pool equals Available Cash when no position is selected, and adds selected-position sale proceeds when positions are selected.
+
+Validation
+- TypeScript check passed with npx tsc --noEmit.

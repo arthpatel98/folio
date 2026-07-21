@@ -18,9 +18,10 @@ const ROTH_TARGETS = [
 
 type Scenario = { targetPrice: number; newBuyPrice: number; additionalQty: number; gapShare: number };
 type ReinvestmentStep = { id: string; ticker: string; returnPct: number | null; date: string };
-const money=(v:number)=>v.toLocaleString("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0});
-const money2=(v:number)=>v.toLocaleString("en-US",{style:"currency",currency:"USD",minimumFractionDigits:2,maximumFractionDigits:2});
-const pct=(v:number)=>`${v.toFixed(2)}%`;
+const finite=(v:number)=>Number.isFinite(v)?v:0;
+const money=(v:number)=>finite(v).toLocaleString("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0});
+const money2=(v:number)=>finite(v).toLocaleString("en-US",{style:"currency",currency:"USD",minimumFractionDigits:2,maximumFractionDigits:2});
+const pct=(v:number)=>`${finite(v).toFixed(2)}%`;
 const keyFor=(h:Holding)=>`${h.assetType??"stock"}:${h.symbol}:${h.optionExpiry??""}:${h.optionStrike??""}`;
 function portfolioValue(holdings:Holding[],cash:number){return holdings.reduce((s,h)=>s+h.currentPrice*h.shares*(h.assetType==="option"?100:1),0)+cash;}
 function positionLabel(h:Holding){if(h.assetType!=="option")return h.symbol;const type=h.optionType?h.optionType.split("-").map(word=>word.charAt(0).toUpperCase()+word.slice(1).toLowerCase()).join(" "):"Option";const expiry=h.optionExpiry?new Date(`${h.optionExpiry}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):"No Expiry";return `${h.symbol} $${h.optionStrike??0} ${type} · ${expiry}`;}
@@ -82,17 +83,17 @@ export default function TargetPlannerPage(){
     const extraForGoal=Math.max(0,qtyForGoal-ownedQty);
     return {h,k,s,multiplier,ownedQty,totalQty,existingProfit,addedProfit,totalProfit,investment,expectedReturn,gapCovered,desiredProfit,qtyForGoal,extraForGoal};
   });
-  const scenarioProfit=details.reduce((s,d)=>s+d.totalProfit,0);
-  const scenarioProjectedValue=currentValue+scenarioProfit;
-  const remainingGapBeforeSteps=Math.max(0,selectedTarget.target-scenarioProjectedValue);
-  const totalInvestment=details.reduce((s,d)=>s+d.investment,0);
-  const remainingAvailableCash=Math.max(0,availableCash-totalInvestment);
+  const scenarioProfit=finite(details.reduce((s,d)=>s+finite(d.totalProfit),0));
+  const scenarioProjectedValue=finite(currentValue+scenarioProfit);
+  const scenarioRemainingGap=Math.max(0,finite(selectedTarget.target-scenarioProjectedValue));
+  const remainingGapBeforeSteps=scenarioRemainingGap;
+  const totalInvestment=finite(details.reduce((s,d)=>s+finite(d.investment),0));
   const sellSelections=details.filter(d=>d.s.targetPrice>0&&selectedPathPositions[d.k]).map(d=>({
     ...d,
     saleProceeds:d.s.targetPrice*d.ownedQty*d.multiplier,
   }));
   const totalSaleProceeds=sellSelections.reduce((sum,d)=>sum+d.saleProceeds,0);
-  const startingCashPool=totalSaleProceeds+remainingAvailableCash;
+  const startingCashPool=finite(totalSaleProceeds+availableCash);
   const pathwayValues=reinvestmentSteps.reduce<Array<ReinvestmentStep & {startValue:number;endValue:number}>>((steps,step)=>{
     const startValue=steps.length?steps[steps.length-1].endValue:startingCashPool;
     const returnPct=typeof step.returnPct==="number"&&Number.isFinite(step.returnPct)?step.returnPct:0;
@@ -102,10 +103,10 @@ export default function TargetPlannerPage(){
   },[]);
   const pathwayFinalValue=pathwayValues.length?pathwayValues[pathwayValues.length-1].endValue:startingCashPool;
   const pathwayProfit=pathwayFinalValue-startingCashPool;
-  const totalProjectedProfit=scenarioProfit+pathwayProfit;
-  const projectedValue=currentValue+totalProjectedProfit;
-  const remainingGap=Math.max(0,remainingGapBeforeSteps-pathwayProfit);
-  const pathwayGap=remainingGap;
+  const totalProjectedProfit=scenarioProfit;
+  const projectedValue=scenarioProjectedValue;
+  const remainingGap=scenarioRemainingGap;
+  const pathwayGap=Math.max(0,finite(remainingGapBeforeSteps-pathwayProfit));
   const targetDateValue=new Date(selectedTarget.date);
   const update=(k:string,patch:Partial<Scenario>,h:Holding)=>setScenarios(prev=>{ const base=prev[k] ?? { targetPrice:0, newBuyPrice:0, additionalQty:0, gapShare:25 }; return {...prev,[k]:{...base,...patch}}; });
   const addReinvestmentStep=()=>setReinvestmentSteps(prev=>[...prev,{id:`step-${Date.now()}-${prev.length}`,ticker:"",returnPct:null,date:""}]);
@@ -139,7 +140,7 @@ export default function TargetPlannerPage(){
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="font-semibold">Build Your Price-Target Scenarios</h2>
-            <p className="mt-2 text-xs text-zinc-500">Available Cash: <span className="font-medium text-white">{money2(remainingAvailableCash)}</span></p>
+            <p className="mt-2 text-xs text-zinc-500">Available Cash: <span className="font-medium text-white">{money2(availableCash)}</span></p>
             {cashError&&<p className="mt-2 text-sm font-medium text-red-400">{cashError}</p>}
           </div>
           <label className="w-full lg:w-auto lg:min-w-56">
@@ -152,7 +153,7 @@ export default function TargetPlannerPage(){
           </label>
         </div>
       </div>
-      <div className="-mx-px overflow-x-auto overscroll-x-contain pb-1"><table className="w-full min-w-[1580px] text-sm"><thead className="bg-white/[.035] text-left text-xs tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Use In Target Path</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Owned</th><th className="px-4 py-3">Average Cost</th><th className="px-4 py-3">Current Price</th><th className="px-4 py-3">Your Target Price</th><th className="px-4 py-3">Expected Return</th><th className="px-4 py-3">New Buy Price</th><th className="px-4 py-3">Buy More</th><th className="px-4 py-3">New Investment</th><th className="px-4 py-3">Profit At Target</th><th className="px-4 py-3">Target Gap Covered</th></tr></thead><tbody>{details.map(d=><tr key={d.k} className="border-t border-white/[.06]"><td className="px-4 py-3"><label className="inline-flex cursor-pointer items-center gap-2"><input type="checkbox" checked={Boolean(selectedPathPositions[d.k])} onChange={()=>togglePathPosition(d.k)} className="size-4 rounded border-white/20 bg-zinc-950 accent-emerald-500"/><span className={cn("text-xs font-medium",selectedPathPositions[d.k]?"text-emerald-300":"text-zinc-500")}>{selectedPathPositions[d.k]?"Selected":"Select"}</span></label></td><td className="px-4 py-3"><div className="font-medium">{positionLabel(d.h)}</div></td><td className="px-4 py-3">{d.ownedQty.toLocaleString()} {d.h.assetType==="option"?"Contracts":"Shares"}</td><td className="px-4 py-3">{money2(d.h.averageCost)}</td><td className="px-4 py-3">{money2(d.h.currentPrice)}</td><td className="px-4 py-3"><input type="text" inputMode="decimal" value={targetPriceInputs[d.k] ?? ((scenarios[d.k]?.targetPrice ?? 0) === 0 ? "" : String(scenarios[d.k]?.targetPrice))} onChange={e=>{const value=e.target.value;if(/^\d*(?:\.\d{0,2})?$/.test(value)){setTargetPriceInputs(prev=>({...prev,[d.k]:value}));update(d.k,{targetPrice:value===""?0:Number(value)},d.h);}}} onBlur={()=>setTargetPriceInputs(prev=>{const next={...prev};const value=next[d.k];if(value!==undefined&&value!==""){next[d.k]=Number(value).toFixed(2);}return next;})} className="h-9 w-28 rounded-lg border border-blue-400/20 bg-blue-400/[.06] px-3 text-blue-200 outline-none"/></td><td className={cn("px-4 py-3 font-medium",d.expectedReturn>=0?"text-emerald-400":"text-red-400")}>{d.expectedReturn>=0?"+":""}{pct(d.expectedReturn)}</td><td className="px-4 py-3"><input type="text" inputMode="decimal" value={newBuyPriceInputs[d.k] ?? ((scenarios[d.k]?.newBuyPrice ?? 0) === 0 ? "" : String(scenarios[d.k]?.newBuyPrice))} onChange={e=>{const value=e.target.value;if(/^\d*(?:\.\d{0,2})?$/.test(value)){const nextPrice=value===""?0:Number(value);const nextInvestment=Math.max(0,d.s.additionalQty)*nextPrice*d.multiplier;const otherInvestment=totalInvestment-d.investment;if(otherInvestment+nextInvestment>availableCash+0.005){setCashError("Not Enough Cash");return;}setCashError(null);setNewBuyPriceInputs(prev=>({...prev,[d.k]:value}));update(d.k,{newBuyPrice:nextPrice},d.h);}}} onBlur={()=>setNewBuyPriceInputs(prev=>{const next={...prev};const value=next[d.k];if(value!==undefined&&value!==""){next[d.k]=Number(value).toFixed(2);}return next;})} className="h-9 w-28 rounded-lg border border-blue-400/20 bg-blue-400/[.06] px-3 text-blue-200 outline-none"/></td><td className="px-4 py-3"><input type="number" min="0" step="1" value={scenarios[d.k]?.additionalQty || ""} onChange={e=>updateAdditionalQty(d,e.target.value===""?0:Number(e.target.value))} className="h-9 w-24 rounded-lg border border-white/10 bg-zinc-950 px-3 outline-none"/></td><td className="px-4 py-3">{money2(d.investment)}</td><td className={cn("px-4 py-3 font-medium",d.totalProfit>=0?"text-emerald-400":"text-red-400")}>{d.totalProfit>=0?"+":""}{money2(d.totalProfit)}</td><td className="px-4 py-3">{pct(d.gapCovered)}</td></tr>)}</tbody></table></div>
+      <div className="-mx-px overflow-x-auto overscroll-x-contain pb-1"><table className="w-full min-w-[1580px] text-sm"><thead className="bg-white/[.035] text-left text-xs tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Use In Target Path</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Owned</th><th className="px-4 py-3">Average Cost</th><th className="px-4 py-3">Current Price</th><th className="px-4 py-3">Your Target Price</th><th className="px-4 py-3">Expected Return</th><th className="px-4 py-3">New Buy Price</th><th className="px-4 py-3">Buy More</th><th className="px-4 py-3">New Investment</th><th className="px-4 py-3">Profit At Target</th><th className="px-4 py-3">Target Gap Covered</th></tr></thead><tbody>{details.map(d=><tr key={d.k} className="border-t border-white/[.06]"><td className="px-4 py-3"><label className="inline-flex cursor-pointer items-center gap-2"><input type="checkbox" checked={Boolean(selectedPathPositions[d.k])} onChange={()=>togglePathPosition(d.k)} className="size-4 rounded border-white/20 bg-zinc-950 accent-emerald-500"/><span className={cn("text-xs font-medium",selectedPathPositions[d.k]?"text-emerald-300":"text-zinc-500")}>{selectedPathPositions[d.k]?"Selected":"Select"}</span></label></td><td className="px-4 py-3"><div className="font-medium">{positionLabel(d.h)}</div></td><td className="px-4 py-3">{d.ownedQty.toLocaleString()} {d.h.assetType==="option"?"Contracts":"Shares"}</td><td className="px-4 py-3">{money2(d.h.averageCost)}</td><td className="px-4 py-3">{money2(d.h.currentPrice)}</td><td className="px-4 py-3"><div className="relative w-28"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-blue-300">$</span><input type="text" inputMode="decimal" value={targetPriceInputs[d.k] ?? ((scenarios[d.k]?.targetPrice ?? 0) === 0 ? "" : Number(scenarios[d.k]?.targetPrice).toFixed(2))} onChange={e=>{const value=e.target.value;if(/^\d*(?:\.\d{0,2})?$/.test(value)){setTargetPriceInputs(prev=>({...prev,[d.k]:value}));update(d.k,{targetPrice:value===""?0:Number(value)},d.h);}}} onBlur={()=>setTargetPriceInputs(prev=>{const next={...prev};const value=next[d.k];if(value!==undefined&&value!==""){next[d.k]=Number(value).toFixed(2);}return next;})} className="h-9 w-full rounded-lg border border-blue-400/20 bg-blue-400/[.06] pl-7 pr-3 text-blue-200 outline-none"/></div></td><td className={cn("px-4 py-3 font-medium",d.expectedReturn>=0?"text-emerald-400":"text-red-400")}>{d.expectedReturn>=0?"+":""}{pct(d.expectedReturn)}</td><td className="px-4 py-3"><div className="relative w-28"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-blue-300">$</span><input type="text" inputMode="decimal" value={newBuyPriceInputs[d.k] ?? ((scenarios[d.k]?.newBuyPrice ?? 0) === 0 ? "" : Number(scenarios[d.k]?.newBuyPrice).toFixed(2))} onChange={e=>{const value=e.target.value;if(/^\d*(?:\.\d{0,2})?$/.test(value)){const nextPrice=value===""?0:Number(value);const nextInvestment=Math.max(0,d.s.additionalQty)*nextPrice*d.multiplier;const otherInvestment=totalInvestment-d.investment;if(otherInvestment+nextInvestment>availableCash+0.005){setCashError("Not Enough Cash");return;}setCashError(null);setNewBuyPriceInputs(prev=>({...prev,[d.k]:value}));update(d.k,{newBuyPrice:nextPrice},d.h);}}} onBlur={()=>setNewBuyPriceInputs(prev=>{const next={...prev};const value=next[d.k];if(value!==undefined&&value!==""){next[d.k]=Number(value).toFixed(2);}return next;})} className="h-9 w-full rounded-lg border border-blue-400/20 bg-blue-400/[.06] pl-7 pr-3 text-blue-200 outline-none"/></div></td><td className="px-4 py-3"><input type="number" min="0" step="1" value={scenarios[d.k]?.additionalQty || ""} onChange={e=>updateAdditionalQty(d,e.target.value===""?0:Number(e.target.value))} className="h-9 w-28 rounded-lg border border-blue-400/20 bg-blue-400/[.06] px-3 text-blue-200 outline-none"/></td><td className="px-4 py-3">{money2(d.investment)}</td><td className={cn("px-4 py-3 font-medium",d.totalProfit>=0?"text-emerald-400":"text-red-400")}>{d.totalProfit>=0?"+":""}{money2(d.totalProfit)}</td><td className="px-4 py-3">{pct(d.gapCovered)}</td></tr>)}</tbody></table></div>
     </Card>
 
     <Card className="overflow-hidden">
@@ -176,14 +177,14 @@ export default function TargetPlannerPage(){
 
         {sellSelections.length===0?<div className="rounded-2xl border border-dashed border-white/10 bg-white/[.02] p-8 text-center"><div className="text-sm font-medium text-zinc-300">Select At Least One Position And Enter Its Your Target Price To Start Building The Pathway</div><div className="mt-2 text-xs text-zinc-500">You Can Keep Target Prices Filled For Every Position, Then Choose Only The Positions You Want Included In This Target Path.</div></div>:<>
           <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[.04] p-4">
-            <div className="mb-4 flex items-center justify-between gap-3"><div><div className="text-xs font-semibold tracking-wider text-amber-300">STEP 1 · SELL SELECTED POSITIONS</div><div className="mt-1 text-sm text-zinc-400">Estimated Cash Available From Your Remaining Available Cash And Selling Every Selected Position At Your Target Price</div></div><div className="text-right"><div className="text-xs text-zinc-500">Combined Cash</div><div className="text-xl font-semibold text-amber-300">{money2(startingCashPool)}</div></div></div>
+            <div className="mb-4 flex items-center justify-between gap-3"><div><div className="text-xs font-semibold tracking-wider text-amber-300">STEP 1 · SELL SELECTED POSITIONS</div><div className="mt-1 text-sm text-zinc-400">Estimated Cash Available From Your Available Cash And Selling Every Selected Position At Your Target Price</div></div><div className="text-right"><div className="text-xs text-zinc-500">Combined Cash</div><div className="text-xl font-semibold text-amber-300">{money2(startingCashPool)}</div></div></div>
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{sellSelections.map(d=><div key={d.k} className="rounded-xl border border-white/[.07] bg-zinc-950/50 p-3"><div className="flex items-start justify-between gap-3"><div><div className="font-medium">{positionLabel(d.h)}</div><div className="mt-1 text-xs text-zinc-500">Sell {d.ownedQty.toLocaleString()} {d.h.assetType==="option"?"Contracts":"Shares"} At {money2(d.s.targetPrice)}</div></div><div className="text-right text-sm font-semibold text-amber-200">{money2(d.saleProceeds)}</div></div></div>)}</div>
           </div>
 
           <div className="overflow-x-auto pb-2">
             <div className="flex min-w-max items-stretch gap-3">
               <div className="flex w-72 shrink-0 flex-col justify-between rounded-2xl border border-amber-400/25 bg-gradient-to-b from-amber-400/[.08] to-transparent p-4 shadow-[0_0_28px_rgba(251,191,36,0.05)]">
-                <div><div className="text-xs font-semibold tracking-wider text-amber-300">STARTING CASH POOL</div><div className="mt-3 text-2xl font-semibold">{money2(startingCashPool)}</div><div className="mt-2 text-xs leading-5 text-zinc-500">{money2(remainingAvailableCash)} Available Cash + {money2(totalSaleProceeds)} From {sellSelections.length} Selected Position{sellSelections.length===1?"":"s"}</div></div>
+                <div><div className="text-xs font-semibold tracking-wider text-amber-300">STARTING CASH POOL</div><div className="mt-3 text-2xl font-semibold">{money2(startingCashPool)}</div><div className="mt-2 text-xs leading-5 text-zinc-500">{money2(availableCash)} Available Cash + {money2(totalSaleProceeds)} From {sellSelections.length} Selected Position{sellSelections.length===1?"":"s"}</div></div>
                 <div className="mt-5 text-xs text-zinc-500">Target Completion: <span className="text-zinc-300">{selectedTarget.date}</span></div>
               </div>
 
@@ -201,7 +202,7 @@ export default function TargetPlannerPage(){
                 <ArrowRight className="size-5 shrink-0 text-violet-400"/>
                 <div className={cn("flex w-72 shrink-0 flex-col justify-between rounded-2xl border p-4",pathwayFinalValue>=selectedTarget.target?"border-emerald-400/30 bg-emerald-400/[.06]":"border-violet-400/25 bg-violet-400/[.06]")}>
                   <div><div className="text-xs font-semibold tracking-wider text-violet-300">FINAL TARGET</div><div className="mt-3 text-sm text-zinc-400">Remaining Gap Before Steps · Required By {selectedTarget.date}</div><div className="mt-1 text-2xl font-semibold text-violet-200">{money2(remainingGapBeforeSteps)}</div></div>
-                  <div className="mt-5"><div className="text-xs text-zinc-500">Profit From All Steps</div><div className={cn("mt-1 text-lg font-semibold",pathwayProfit>=0?"text-emerald-300":"text-red-300")}>{pathwayProfit>=0?"+":""}{money2(pathwayProfit)}</div><div className="mt-3 text-xs text-zinc-500">Remaining After Steps</div><div className={cn("mt-1 text-base font-semibold",remainingGap===0?"text-emerald-300":"text-white")}>{money2(remainingGap)}</div><div className="mt-1 text-xs text-zinc-500">{remainingGap===0?"Target Reached In This Scenario":`${money2(remainingGap)} Still Needed`}</div></div>
+                  <div className="mt-5"><div className="text-xs text-zinc-500">Profit From All Steps</div><div className={cn("mt-1 text-lg font-semibold",pathwayProfit>=0?"text-emerald-300":"text-red-300")}>{pathwayProfit>=0?"+":""}{money2(pathwayProfit)}</div><div className="mt-3 text-xs text-zinc-500">Remaining After Steps</div><div className={cn("mt-1 text-base font-semibold",pathwayGap===0?"text-emerald-300":"text-white")}>{money2(pathwayGap)}</div><div className="mt-1 text-xs text-zinc-500">{pathwayGap===0?"Target Reached In This Scenario":`${money2(pathwayGap)} Still Needed`}</div></div>
                 </div>
               </div>
             </div>
