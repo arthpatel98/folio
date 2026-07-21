@@ -5,7 +5,7 @@ import { persist } from "zustand/middleware";
 import { AssetType, Holding, Transaction } from "@/types/portfolio";
 import { holdings as robinhoodHoldings, transactions as robinhoodTransactions } from "@/lib/data/mock";
 import { buildOptionSymbol } from "@/lib/options";
-import { recordStockTrade, removeDcaPosition } from "@/lib/dca-storage";
+import { consumeStockLots, recordStockTrade, removeDcaPosition } from "@/lib/dca-storage";
 import { mergeKnownRothRecovery, mergeKnownRothTransactions, RECOVERY_VERSION, restoreKnownRobinhoodIfEmpty } from "@/lib/recovery-data";
 
 export type DataPortfolioId = "robinhood" | "fidelity-401k" | "fidelity-roth";
@@ -325,13 +325,19 @@ export const usePortfolioStore = create<State>()(
           return { ok: false, message: `Insufficient cash. This purchase requires $${Math.abs(cashChange).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.` };
         }
 
+        const fifoSale = assetType === "stock" && action === "sell"
+          ? consumeStockLots(target, holding.symbol, quantity)
+          : null;
+
         set((latest) => {
           const existing = latest.holdingsByPortfolio[target].find((item) => holdingKey(item) === key);
           const oldQuantityForRealized = existing?.shares ?? 0;
           const closesStock = assetType === "stock" && action === "sell";
           const closesOption = assetType === "option" && oldQuantityForRealized !== 0 && Math.sign(oldQuantityForRealized) !== Math.sign(signedDelta);
           const closedQuantity = closesStock ? Math.min(quantity, Math.abs(oldQuantityForRealized)) : closesOption ? Math.min(Math.abs(signedDelta), Math.abs(oldQuantityForRealized)) : 0;
-          const realizedCostBasis = closedQuantity * (existing?.averageCost ?? holding.averageCost) * multiplier;
+          const realizedCostBasis = closesStock && fifoSale
+            ? fifoSale.costBasis
+            : closedQuantity * (existing?.averageCost ?? holding.averageCost) * multiplier;
           const realizedProceeds = closedQuantity * price * multiplier;
           const realizedGain = closedQuantity > 0
             ? (assetType === "option"
@@ -377,7 +383,12 @@ export const usePortfolioStore = create<State>()(
           } else {
             const remaining = (existing?.shares ?? 0) - quantity;
             nextHoldings = remaining > 0
-              ? [{ ...existing!, shares: remaining, updatedAt: "Just now" }, ...latest.holdingsByPortfolio[target].filter((item) => holdingKey(item) !== key)]
+              ? [{
+                  ...existing!,
+                  shares: remaining,
+                  averageCost: fifoSale && fifoSale.remainingShares > 0 ? fifoSale.remainingAverageCost : existing!.averageCost,
+                  updatedAt: "Just now",
+                }, ...latest.holdingsByPortfolio[target].filter((item) => holdingKey(item) !== key)]
               : latest.holdingsByPortfolio[target].filter((item) => holdingKey(item) !== key);
           }
 
@@ -410,7 +421,7 @@ export const usePortfolioStore = create<State>()(
             ...visibleState(latest.activePortfolioId, holdingsByPortfolio, transactionsByPortfolio, cashByPortfolio),
           };
         });
-        if (assetType === "stock") {
+        if (assetType === "stock" && action === "buy") {
           recordStockTrade(target, holding.symbol, action, quantity, price, tradeDate || new Date().toISOString().slice(0, 10));
         }
         return { ok: true };

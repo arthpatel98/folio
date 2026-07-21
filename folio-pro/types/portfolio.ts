@@ -18,6 +18,7 @@ export type Sector =
   | "Memory Semiconductors"
   | "Mobility / Delivery"
   | "Physical AI"
+  | "Inverse ETF/ Hedge"
   | "Other"
   | "Semiconductors"
   | "Utilities / Energy";

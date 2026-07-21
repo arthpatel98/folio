@@ -103,7 +103,7 @@ export function HoldingsTable({
       {
         accessorKey: "sector",
         header: "Sector",
-        cell: ({ getValue }: any) => <span className="inline-block max-w-[210px] whitespace-normal text-left text-sm leading-5 text-zinc-600 dark:text-zinc-300">{getValue() as string || "—"}</span>,
+        cell: ({ getValue }: any) => { const sector = getValue() as string; return <span className={cn("inline-block max-w-[210px] whitespace-normal text-left text-sm leading-5", sector === "Inverse ETF/ Hedge" ? "font-semibold text-red-500" : "text-zinc-600 dark:text-zinc-300")}>{sector || "—"}</span>; },
       },
       {
         accessorKey: "optionExpiry",
@@ -129,7 +129,7 @@ export function HoldingsTable({
     ...(assetType === "stock" ? [{
       accessorKey: "sector",
       header: "Sector",
-      cell: ({ getValue }: any) => <span className="inline-block max-w-[210px] whitespace-normal text-left text-sm leading-5 text-zinc-600 dark:text-zinc-300">{getValue() as string || "—"}</span>,
+      cell: ({ getValue }: any) => { const sector = getValue() as string; return <span className={cn("inline-block max-w-[210px] whitespace-normal text-left text-sm leading-5", sector === "Inverse ETF/ Hedge" ? "font-semibold text-red-500" : "text-zinc-600 dark:text-zinc-300")}>{sector || "—"}</span>; },
     }] as ColumnDef<Holding>[] : []),
     {
       accessorKey: "currentPrice",

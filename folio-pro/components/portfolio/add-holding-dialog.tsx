@@ -18,7 +18,7 @@ const sectors: Sector[] = [
   "Digital Advertising / AI", "Drones", "Space", "Defense", "BioTech", "E-Commerce & Cloud",
   "Education Technology", "Electrical Equipment / Power Infrastructure", "ETF",
   "Ethereum / Crypto Treasury", "Financials", "Healthcare", "Memory Semiconductors",
-  "Mobility / Delivery", "Physical AI", "Other", "Semiconductors", "Utilities / Energy",
+  "Mobility / Delivery", "Physical AI", "Inverse ETF/ Hedge", "Other", "Semiconductors", "Utilities / Energy",
 ];
 
 const optionTypes: { value: OptionType; label: string }[] = [
