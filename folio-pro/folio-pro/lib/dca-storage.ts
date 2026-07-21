@@ -73,6 +73,56 @@ function dateValue(value: string) {
   return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
 }
 
+
+export type FifoStockSale = {
+  costBasis: number;
+  remainingShares: number;
+  remainingAverageCost: number;
+};
+
+export function consumeStockLots(portfolioId: DataPortfolioId, symbolInput: string, quantity: number): FifoStockSale | null {
+  if (typeof window === "undefined" || quantity <= 0) return null;
+  const symbol = symbolInput.trim().toUpperCase();
+  const positions = loadDcaPositions();
+  const candidates = positions
+    .map((position, positionIndex) => ({ position, positionIndex }))
+    .filter(({ position }) => {
+      if (position.portfolioId !== portfolioId || position.symbol.trim().toUpperCase() !== symbol) return false;
+      return !(position.id.includes("-option-") || /\b(?:call|put)\b/i.test(position.label ?? ""));
+    });
+  const available = candidates.reduce((sum, { position }) => sum + position.lots.reduce((lotSum, lot) => lotSum + (!lot.future ? Number(lot.shares) || 0 : 0), 0), 0);
+  if (available + 1e-9 < quantity || candidates.length === 0) return null;
+
+  let remainingToSell = quantity;
+  let costBasis = 0;
+  const orderedLots = candidates.flatMap(({ position, positionIndex }) =>
+    position.lots.map((lot, lotIndex) => ({ lot, positionIndex, lotIndex }))
+  ).filter(({ lot }) => !lot.future && (Number(lot.shares) || 0) > 0)
+    .sort((a, b) => dateValue(a.lot.date) - dateValue(b.lot.date));
+
+  for (const { positionIndex, lotIndex } of orderedLots) {
+    if (remainingToSell <= 1e-9) break;
+    const position = positions[positionIndex];
+    const lot = position.lots[lotIndex];
+    const shares = Number(lot.shares) || 0;
+    const price = Number(lot.price) || (shares > 0 ? Number(lot.amount) / shares : 0);
+    const removed = Math.min(shares, remainingToSell);
+    costBasis += removed * price;
+    remainingToSell -= removed;
+    const nextShares = shares - removed;
+    position.lots[lotIndex] = { ...lot, shares: nextShares, amount: nextShares * price };
+  }
+
+  candidates.forEach(({ positionIndex }) => {
+    positions[positionIndex].lots = positions[positionIndex].lots.filter((lot) => lot.future || (Number(lot.shares) || 0) > 1e-9);
+  });
+  const remainingLots = candidates.flatMap(({ positionIndex }) => positions[positionIndex].lots).filter((lot) => !lot.future);
+  const remainingShares = remainingLots.reduce((sum, lot) => sum + (Number(lot.shares) || 0), 0);
+  const remainingCost = remainingLots.reduce((sum, lot) => sum + (Number(lot.amount) || ((Number(lot.shares) || 0) * (Number(lot.price) || 0))), 0);
+  saveDcaPositions(positions);
+  return { costBasis, remainingShares, remainingAverageCost: remainingShares > 0 ? remainingCost / remainingShares : 0 };
+}
+
 export function recordStockTrade(portfolioId: DataPortfolioId, symbolInput: string, action: "buy" | "sell", quantity: number, price: number, date: string) {
   if (typeof window === "undefined" || quantity <= 0 || price <= 0) return;
   const symbol = symbolInput.trim().toUpperCase();

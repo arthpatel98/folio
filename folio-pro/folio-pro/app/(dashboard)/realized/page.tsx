@@ -388,7 +388,7 @@ export default function Page() {
           match.amount += transaction.realizedGain;
           if (!match.manualFees) match.fees += Number(transaction.fees) || 0;
           if (!match.lastSellDate || new Date(sellDate).getTime() >= new Date(match.lastSellDate).getTime()) match.lastSellDate = sellDate;
-          match.comment = optionDetails ?? symbol;
+          match.comment = optionDetails ?? "";
           match.sourceTransaction = true;
           match.sourceTransactionIds = [...(match.sourceTransactionIds ?? []), transaction.id];
         } else {
@@ -397,7 +397,7 @@ export default function Page() {
             optionDetails,
             sourceTransaction: true,
             sourceTransactionIds: [transaction.id],
-            comment: optionDetails ?? symbol,
+            comment: optionDetails ?? "",
           });
         }
         alreadyApplied.add(transaction.id);
