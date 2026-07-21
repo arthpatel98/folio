@@ -1,0 +1,8 @@
+Verified changes in this version:
+1. Position Simulator only displays positions that still exist in Holdings.
+2. Target Planner includes a New Buy Price column.
+3. New Investment = New Buy Price x Buy More (x 100 for options).
+4. Available Cash is reduced by total New Investment.
+5. Starting Cash Pool includes remaining Available Cash plus selected sale proceeds.
+
+Important: Upload the CONTENTS of this ZIP directly into the GitHub repository root.

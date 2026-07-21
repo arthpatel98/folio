@@ -95,13 +95,17 @@ export default function DcaPage() {
     const visibleSaved = savedPositions
       .filter((position) => activeId === "all" || position.portfolioId === activeId)
       .filter((position) => {
+        const candidatePortfolioIds = position.portfolioId
+          ? [position.portfolioId]
+          : portfolioIds;
         const isOptionPosition = position.id.includes("-option-") || /\b(?:call|put)\b/i.test(position.label ?? "");
-        if (!isOptionPosition || !position.portfolioId) return true;
-        return holdingsByPortfolio[position.portfolioId].some((holding) => {
-          if (holding.assetType !== "option" || holding.shares === 0 || holding.symbol.trim().toUpperCase() !== position.symbol.trim().toUpperCase()) return false;
+        return candidatePortfolioIds.some((portfolioId) => holdingsByPortfolio[portfolioId].some((holding) => {
+          if (holding.shares === 0 || holding.symbol.trim().toUpperCase() !== position.symbol.trim().toUpperCase()) return false;
+          if (!isOptionPosition) return (holding.assetType ?? "stock") === "stock";
+          if (holding.assetType !== "option") return false;
           const label = position.label ?? "";
           return (!holding.optionStrike || label.includes(`$${holding.optionStrike}`)) && (!holding.optionExpiry || label.includes(formatDate(holding.optionExpiry)));
-        });
+        }));
       })
       .map((position) => {
         const portfolioId = position.portfolioId;
