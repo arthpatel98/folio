@@ -72,7 +72,8 @@ export default function TargetPlannerPage(){
     const direction=h.assetType==="option"?(Math.sign(h.shares)||1):1;
     const ownedQty=Math.abs(h.shares); const totalQty=ownedQty+Math.max(0,s.additionalQty);
     const existingProfit=(s.targetPrice-h.currentPrice)*ownedQty*multiplier*direction;
-    const addedProfit=(s.targetPrice-s.newBuyPrice)*Math.max(0,s.additionalQty)*multiplier*direction;
+    const hasNewPurchase=s.newBuyPrice>0&&s.additionalQty>0;
+    const addedProfit=hasNewPurchase?(s.targetPrice-s.newBuyPrice)*Math.max(0,s.additionalQty)*multiplier*direction:0;
     const totalProfit=existingProfit+addedProfit;
     const investment=Math.max(0,s.additionalQty)*Math.max(0,s.newBuyPrice)*multiplier;
     const expectedReturn=h.currentPrice>0?((s.targetPrice-h.currentPrice)/h.currentPrice)*100*direction:0;

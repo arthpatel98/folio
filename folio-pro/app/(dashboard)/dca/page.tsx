@@ -69,6 +69,7 @@ export default function DcaPage() {
   const activeCash = usePortfolioStore((state) => state.cash);
   const [allPositions, setAllPositions] = useState<DcaPosition[]>([]);
   const [positionId, setPositionId] = useState("");
+  const positionIdRef = useRef("");
   const [lots, setLots] = useState<DcaLot[]>([]);
   const [sellPrice, setSellPrice] = useState("");
   const [sellPriceFocused, setSellPriceFocused] = useState(false);
@@ -88,7 +89,7 @@ export default function DcaPage() {
   const [targetReturn, setTargetReturn] = useState<NumericValue>("");
   const [sharesToSell, setSharesToSell] = useState<NumericValue>("");
   const [editingOptionDays, setEditingOptionDays] = useState(false);
-  const [optionDaysDraft, setOptionDaysDraft] = useState("");
+  const [optionBuyDateDraft, setOptionBuyDateDraft] = useState("");
 
   const mergeWithHeldPositions = (savedPositions: DcaPosition[]) => {
     const portfolioIds = activeId === "all" ? (["robinhood", "fidelity-401k", "fidelity-roth"] as const) : [activeId];
@@ -190,8 +191,9 @@ export default function DcaPage() {
   };
 
   const applyPosition = (position?: DcaPosition) => {
-    if (!position) { setPositionId(""); setLots([]); setSellPrice(""); return; }
+    if (!position) { positionIdRef.current = ""; setPositionId(""); setLots([]); setSellPrice(""); return; }
     const copy = clonePosition(position);
+    positionIdRef.current = copy.id;
     setPositionId(copy.id);
     setLots(sortLots(copy.lots));
     setSellPrice(copy.sellPrice === "" ? "" : String(copy.sellPrice));
@@ -202,17 +204,20 @@ export default function DcaPage() {
     const next = loadDcaPositions();
     setAllPositions(next);
     const visible = mergeWithHeldPositions(next);
-    const wanted = preferredId || readSavedSelection();
+    const wanted = preferredId || positionIdRef.current || readSavedSelection();
     const selected = visible.find((position) => position.id === wanted) ?? visible[0];
     applyPosition(selected);
   };
 
   useEffect(() => {
-    loadAll();
-    const refresh = () => loadAll(positionId);
+    loadAll(positionIdRef.current);
+    const refresh = () => loadAll(positionIdRef.current);
+    const refreshFromStorage = (event: StorageEvent) => {
+      if (event.key === null || event.key === "folio-dca-positions-v3") refresh();
+    };
     window.addEventListener(DCA_UPDATED_EVENT, refresh);
-    window.addEventListener("storage", refresh);
-    return () => { window.removeEventListener(DCA_UPDATED_EVENT, refresh); window.removeEventListener("storage", refresh); };
+    window.addEventListener("storage", refreshFromStorage);
+    return () => { window.removeEventListener(DCA_UPDATED_EVENT, refresh); window.removeEventListener("storage", refreshFromStorage); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
 
@@ -265,7 +270,7 @@ export default function DcaPage() {
   const optionPotentialProfit = isOption ? (optionTargetPrice - optionAverage) * optionContracts * 100 * optionDirection : 0;
   const optionPotentialPct = optionAverage && optionContracts ? optionPotentialProfit / (optionAverage * optionContracts * 100) * 100 : 0;
   const calculatedOptionDays = selectedPosition?.addedDate ? Number(daysSinceAdded(selectedPosition.addedDate).replace(/,/g, "")) : Number.NaN;
-  const optionDays = selectedPosition?.daysSinceAdded ?? (Number.isFinite(calculatedOptionDays) ? calculatedOptionDays : null);
+  const optionDays = Number.isFinite(calculatedOptionDays) ? calculatedOptionDays : null;
   const load = (id: string) => { applyPosition(positions.find((position) => position.id === id)); setSavedMessage(""); };
 
   useEffect(() => {
@@ -436,8 +441,8 @@ export default function DcaPage() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Average Premium</p><p className="mt-3 text-2xl font-semibold">{money(optionAverage)}</p><p className="mt-2 text-sm text-zinc-500">{formatShares(optionContracts)} {optionContracts === 1 ? "Contract" : "Contracts"}</p></div>
         <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5">
-          <div className="flex items-center justify-between gap-2"><p className="text-sm text-zinc-500">Days Since Added</p><button onClick={() => { setOptionDaysDraft(optionDays === null ? "" : String(optionDays)); setEditingOptionDays(true); }} aria-label="Edit Days Since Added" title="Edit Days Since Added" className="rounded-lg p-1.5 text-zinc-500 hover:bg-emerald-500/10 hover:text-emerald-400"><Pencil size={15}/></button></div>
-          {editingOptionDays ? <div className="mt-3 flex items-center gap-2"><input autoFocus type="number" min="0" step="1" value={optionDaysDraft} onChange={(event) => setOptionDaysDraft(event.target.value)} className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 outline-none"/><button onClick={() => { if (selectedPosition) { const value = optionDaysDraft.trim() === "" ? undefined : Math.max(0, Math.floor(Number(optionDaysDraft))); upsertDcaPosition({ ...selectedPosition, daysSinceAdded: Number.isFinite(value) ? value : undefined, sellPrice: parseNumericInput(sellPrice), lots: sortLots(lots) }); loadAll(selectedPosition.id); } setEditingOptionDays(false); }} className="h-10 rounded-xl bg-emerald-400 px-3 text-sm font-semibold text-zinc-950">Save</button></div> : <p className="mt-3 text-2xl font-semibold">{optionDays === null ? "—" : `${optionDays.toLocaleString()} Days`}</p>}
+          <div className="flex items-center justify-between gap-2"><p className="text-sm text-zinc-500">Days Since Added</p><button onClick={() => { setOptionBuyDateDraft(selectedPosition?.addedDate ?? ""); setEditingOptionDays(true); }} aria-label="Edit Buy Date" title="Edit Buy Date" className="rounded-lg p-1.5 text-zinc-500 hover:bg-emerald-500/10 hover:text-emerald-400"><Pencil size={15}/></button></div>
+          {editingOptionDays ? <div className="mt-3 space-y-2"><label className="block text-xs text-zinc-500">Buy Date</label><div className="flex items-center gap-2"><input autoFocus type="date" max={new Date().toISOString().slice(0,10)} value={optionBuyDateDraft} onChange={(event) => setOptionBuyDateDraft(event.target.value)} className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 outline-none"/><button onClick={() => { if (selectedPosition) { upsertDcaPosition({ ...selectedPosition, addedDate: optionBuyDateDraft || undefined, daysSinceAdded: undefined, sellPrice: parseNumericInput(sellPrice), lots: sortLots(lots) }); loadAll(selectedPosition.id); } setEditingOptionDays(false); }} className="h-10 rounded-xl bg-emerald-400 px-3 text-sm font-semibold text-zinc-950">Save</button></div></div> : <><p className="mt-3 text-2xl font-semibold">{optionDays === null ? "—" : `${optionDays.toLocaleString()} Days`}</p>{selectedPosition?.addedDate && <p className="mt-2 text-xs text-zinc-500">Bought {formatDate(selectedPosition.addedDate)}</p>}</>}
         </div>
         <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Current Premium</p><p className="mt-3 text-2xl font-semibold">{money(selectedHolding.currentPrice)}</p></div>
         <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Market Value</p><p className="mt-3 text-2xl font-semibold">{money(optionMetrics.marketValue)}</p></div>
