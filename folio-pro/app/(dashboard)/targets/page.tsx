@@ -35,7 +35,7 @@ export default function TargetPlannerPage(){
   const selectedHoldings=useMemo(()=>isRobinhood?holdingsByPortfolio.robinhood:isRoth?holdingsByPortfolio["fidelity-401k"]:[...holdingsByPortfolio.robinhood,...holdingsByPortfolio["fidelity-401k"]],[holdingsByPortfolio,isRobinhood,isRoth]);
   const selectedCash=isRobinhood?cashByPortfolio.robinhood:isRoth?cashByPortfolio["fidelity-401k"]:cashByPortfolio.robinhood+cashByPortfolio["fidelity-401k"];
   const rows=useMemo(()=>isRobinhood?ROBINHOOD_TARGETS.map(([date,target,increase])=>({date,target,increase})):isRoth?ROTH_TARGETS.map(([date,target,increase])=>({date,target,increase})):ROBINHOOD_TARGETS.map(([date,target,increase],i)=>({date,target:target+ROTH_TARGETS[i][1],increase:increase+ROTH_TARGETS[i][2]})),[isRobinhood,isRoth]);
-  const [selectedDate,setSelectedDate]=useState<string>(rows[1].date);
+  const [selectedDate,setSelectedDate]=useState<string>(rows[rows.length-1].date);
   const [scenarios,setScenarios]=useState<Record<string,Scenario>>({});
   const [cashError,setCashError]=useState<string | null>(null);
   const [targetPriceInputs,setTargetPriceInputs]=useState<Record<string,string>>({});
@@ -45,14 +45,22 @@ export default function TargetPlannerPage(){
   const storageKey=`folio-target-scenarios:${activeId}`;
   const pathwayStorageKey=`folio-target-pathway:${activeId}`;
   const pathwaySelectionStorageKey=`folio-target-pathway-selection:${activeId}`;
-  useEffect(()=>{const raw=localStorage.getItem(storageKey);setScenarios(raw?JSON.parse(raw):{});setSelectedDate(rows[1].date)},[storageKey,rows]);
+  const targetDateStorageKey=`folio-target-date:${activeId}`;
+  useEffect(()=>{
+    const raw=localStorage.getItem(storageKey);
+    setScenarios(raw?JSON.parse(raw):{});
+    const savedDate=localStorage.getItem(targetDateStorageKey);
+    const validSavedDate=savedDate&&rows.some(r=>r.date===savedDate)?savedDate:null;
+    setSelectedDate(validSavedDate??rows[rows.length-1].date);
+  },[storageKey,targetDateStorageKey,rows]);
+  useEffect(()=>{if(selectedDate)localStorage.setItem(targetDateStorageKey,selectedDate)},[targetDateStorageKey,selectedDate]);
   useEffect(()=>{localStorage.setItem(storageKey,JSON.stringify(scenarios))},[storageKey,scenarios]);
   useEffect(()=>{
     const raw=localStorage.getItem(pathwayStorageKey);
     if(raw){
       try{setReinvestmentSteps(JSON.parse(raw));return;}catch{}
     }
-    setReinvestmentSteps([{id:`step-${Date.now()}`,ticker:"",returnPct:null,date:""}]);
+    setReinvestmentSteps([]);
   },[pathwayStorageKey]);
   useEffect(()=>{localStorage.setItem(pathwayStorageKey,JSON.stringify(reinvestmentSteps))},[pathwayStorageKey,reinvestmentSteps]);
   useEffect(()=>{
@@ -95,7 +103,8 @@ export default function TargetPlannerPage(){
   }));
   const totalSaleProceeds=sellSelections.reduce((sum,d)=>sum+d.saleProceeds,0);
   const startingCashPool=finite(totalSaleProceeds+availableCash);
-  const pathwayValues=reinvestmentSteps.reduce<Array<ReinvestmentStep & {startValue:number;endValue:number}>>((steps,step)=>{
+  const activeReinvestmentSteps=reinvestmentSteps.filter(step=>step.returnPct!==null||step.ticker.trim()!==""||step.date!=="");
+  const pathwayValues=activeReinvestmentSteps.reduce<Array<ReinvestmentStep & {startValue:number;endValue:number}>>((steps,step)=>{
     const startValue=steps.length?steps[steps.length-1].endValue:startingCashPool;
     const returnPct=typeof step.returnPct==="number"&&Number.isFinite(step.returnPct)?step.returnPct:0;
     const endValue=startValue*(1+returnPct/100);
@@ -103,11 +112,11 @@ export default function TargetPlannerPage(){
     return steps;
   },[]);
   const pathwayFinalValue=pathwayValues.length?pathwayValues[pathwayValues.length-1].endValue:startingCashPool;
-  const pathwayProfit=pathwayFinalValue-startingCashPool;
+  const pathwayProfit=pathwayValues.length?pathwayFinalValue-startingCashPool:0;
   const totalProjectedProfit=scenarioProfit;
   const projectedValue=scenarioProjectedValue;
-  const remainingGap=scenarioRemainingGap;
   const pathwayGap=Math.max(0,finite(remainingGapBeforeSteps-pathwayProfit));
+  const remainingGap=pathwayGap;
   const targetDateValue=new Date(selectedTarget.date);
   const update=(k:string,patch:Partial<Scenario>,h:Holding)=>setScenarios(prev=>{ const base=prev[k] ?? { targetPrice:0, newBuyPrice:0, additionalQty:0, gapShare:25 }; return {...prev,[k]:{...base,...patch}}; });
   const addReinvestmentStep=()=>setReinvestmentSteps(prev=>[...prev,{id:`step-${Date.now()}-${prev.length}`,ticker:"",returnPct:null,date:""}]);
@@ -172,15 +181,15 @@ export default function TargetPlannerPage(){
         <div className="grid gap-3 sm:grid-cols-4">
           <PathMetric label="Positions Selected" value={String(sellSelections.length)} />
           <PathMetric label="Starting Cash Pool" value={money2(startingCashPool)} accent />
-          <PathMetric label="Profit From Steps" value={`${pathwayProfit>=0?"+":""}${money2(pathwayProfit)}`} accent={pathwayProfit>0} />
+          <PathMetric label="Profit From Steps" value={`${pathwayProfit>0?"+":""}${money2(pathwayProfit)}`} accent={pathwayProfit>0} />
           <PathMetric label="Remaining Gap After Steps" value={money2(pathwayGap)} />
         </div>
 
-        {sellSelections.length===0?<div className="rounded-2xl border border-dashed border-white/10 bg-white/[.02] p-8 text-center"><div className="text-sm font-medium text-zinc-300">Select At Least One Position And Enter Its Your Target Price To Start Building The Pathway</div><div className="mt-2 text-xs text-zinc-500">You Can Keep Target Prices Filled For Every Position, Then Choose Only The Positions You Want Included In This Target Path.</div></div>:<>
-          <div className="rounded-2xl border border-amber-400/20 bg-amber-400/[.04] p-4">
+        <>
+          {sellSelections.length>0&&<div className="rounded-2xl border border-amber-400/20 bg-amber-400/[.04] p-4">
             <div className="mb-4 flex items-center justify-between gap-3"><div><div className="text-xs font-semibold tracking-wider text-amber-300">STEP 1 · SELL SELECTED POSITIONS</div><div className="mt-1 text-sm text-zinc-400">Estimated Cash Available From Your Available Cash And Selling Every Selected Position At Your Target Price</div></div><div className="text-right"><div className="text-xs text-zinc-500">Combined Cash</div><div className="text-xl font-semibold text-amber-300">{money2(startingCashPool)}</div></div></div>
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{sellSelections.map(d=><div key={d.k} className="rounded-xl border border-white/[.07] bg-zinc-950/50 p-3"><div className="flex items-start justify-between gap-3"><div><div className="font-medium">{positionLabel(d.h)}</div><div className="mt-1 text-xs text-zinc-500">Sell {d.ownedQty.toLocaleString()} {d.h.assetType==="option"?"Contracts":"Shares"} At {money2(d.s.targetPrice)}</div></div><div className="text-right text-sm font-semibold text-amber-200">{money2(d.saleProceeds)}</div></div></div>)}</div>
-          </div>
+          </div>}
 
           <div className="overflow-x-auto pb-2">
             <div className="flex min-w-max items-stretch gap-3">
@@ -203,14 +212,14 @@ export default function TargetPlannerPage(){
                 <ArrowRight className="size-5 shrink-0 text-violet-400"/>
                 <div className={cn("flex w-72 shrink-0 flex-col justify-between rounded-2xl border p-4",pathwayFinalValue>=selectedTarget.target?"border-emerald-400/30 bg-emerald-400/[.06]":"border-violet-400/25 bg-violet-400/[.06]")}>
                   <div><div className="text-xs font-semibold tracking-wider text-violet-300">FINAL TARGET</div><div className="mt-3 text-sm text-zinc-400">Remaining Gap Before Steps · Required By {selectedTarget.date}</div><div className="mt-1 text-2xl font-semibold text-violet-200">{money2(remainingGapBeforeSteps)}</div></div>
-                  <div className="mt-5"><div className="text-xs text-zinc-500">Profit From All Steps</div><div className={cn("mt-1 text-lg font-semibold",pathwayProfit>=0?"text-emerald-300":"text-red-300")}>{pathwayProfit>=0?"+":""}{money2(pathwayProfit)}</div><div className="mt-3 text-xs text-zinc-500">Remaining After Steps</div><div className={cn("mt-1 text-base font-semibold",pathwayGap===0?"text-emerald-300":"text-white")}>{money2(pathwayGap)}</div><div className="mt-1 text-xs text-zinc-500">{pathwayGap===0?"Target Reached In This Scenario":`${money2(pathwayGap)} Still Needed`}</div></div>
+                  <div className="mt-5"><div className="text-xs text-zinc-500">Profit From All Steps</div><div className={cn("mt-1 text-lg font-semibold",pathwayProfit>=0?"text-emerald-300":"text-red-300")}>{pathwayProfit>0?"+":""}{money2(pathwayProfit)}</div><div className="mt-3 text-xs text-zinc-500">Remaining After Steps</div><div className={cn("mt-1 text-base font-semibold",pathwayGap===0?"text-emerald-300":"text-white")}>{money2(pathwayGap)}</div><div className="mt-1 text-xs text-zinc-500">{pathwayGap===0?"Target Reached In This Scenario":`${money2(pathwayGap)} Still Needed`}</div></div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-blue-400/15 bg-blue-400/[.04] p-4 text-sm text-zinc-400"><span className="font-medium text-blue-200">How This Path Works:</span> The First Step assumes every position you selected for the target path, with a target price entered, is fully sold at that price. The sale proceeds are added to your remaining available cash, then each reinvestment step compounds the entire cash pool using the return you enter. Reinvestment dates are limited to the selected Target Date. This is a planning scenario, not a market prediction.</div>
-        </>}
+          <div className="rounded-2xl border border-blue-400/15 bg-blue-400/[.04] p-4 text-sm text-zinc-400"><span className="font-medium text-blue-200">How This Path Works:</span> Your available cash is always the starting cash pool. If you select positions for the target path, their estimated sale proceeds are added to that cash. Each reinvestment step then compounds the full cash pool using the return you enter. Reinvestment dates are limited to the selected Target Date. This is a planning scenario, not a market prediction.</div>
+        </>
       </div>
     </Card>
 
