@@ -1,0 +1,12 @@
+Realized P/L updates
+- Search now matches both ticker symbols and ticker-level comments.
+- Deleting a stock/option realized entry now also suppresses matching transaction/fee-backed rows so deleted tickers do not reappear.
+- If no stock/option entries remain for a ticker, the ticker disappears from Realized P/L By Ticker.
+- Summary cards are arranged as two rows of three:
+  1. Total Realized P/L
+  2. Total Stocks P/L
+  3. Total Options P/L
+  4. Total Dividend Amount
+  5. Profitable Tickers
+  6. Loss Recovery Tickers
+- Total Dividend Amount is the sum of all dividend amounts in the active portfolio view.

@@ -444,6 +444,7 @@ export default function Page() {
     const feeTotals = new Map<string, number>();
     portfolioIds.forEach((portfolioId) => {
       transactionsByPortfolio[portfolioId].forEach((transaction) => {
+        if (ignoredTransactionIds[portfolioId].includes(transaction.id)) return;
         const fees = Number(transaction.fees) || 0;
         if (fees <= 0 || transaction.realizedGain !== undefined || !transaction.symbol || !transaction.notes?.includes("Platform Fee")) return;
         const type: TradeType = transaction.assetType === "option" ? "option" : "stock";
@@ -502,7 +503,7 @@ export default function Page() {
 
   const filteredAndSortedGroups = useMemo(() => {
     const term = searchTerm.trim().toUpperCase();
-    const filtered = term ? groups.filter((group) => group.symbol.includes(term)) : groups;
+    const filtered = term ? groups.filter((group) => group.symbol.includes(term) || group.comment.toUpperCase().includes(term)) : groups;
     const direction = sortDirection === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => {
       let comparison = 0;
@@ -667,13 +668,21 @@ export default function Page() {
   }
 
   function ignoreSourceTransactions(position: RealizedPosition) {
-    const ids = position.sourceTransactionIds ?? [];
-    if (!ids.length) return;
     setIgnoredTransactionIds((current) => {
       const next = { ...current };
       (Object.keys(next) as RealizedPortfolioId[]).forEach((portfolioId) => {
         const existing = new Set(next[portfolioId]);
-        ids.forEach((id) => existing.add(id));
+        (position.sourceTransactionIds ?? []).forEach((id) => existing.add(id));
+
+        // Also suppress any transaction-backed rows for the same ticker/type.
+        // This includes fee-only transactions that would otherwise recreate the
+        // ticker immediately after its final realized P/L entry is removed.
+        transactionsByPortfolio[portfolioId].forEach((transaction) => {
+          const transactionType: TradeType = transaction.assetType === "option" ? "option" : "stock";
+          if (transaction.symbol?.trim().toUpperCase() === position.symbol && transactionType === position.type) {
+            existing.add(transaction.id);
+          }
+        });
         next[portfolioId] = Array.from(existing);
       });
       return next;
@@ -757,10 +766,11 @@ export default function Page() {
 
       {message && <p className="mt-4 text-sm text-emerald-500">{message}</p>}
 
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard label="Net Realized P/L" value={money(totals.realized)} />
-        <MetricCard label="Options P/L Total" value={money(totals.optionsPl)} />
-        <MetricCard label="Net Stocks P/L" value={money(totals.stocksPl)} />
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <MetricCard label="Total Realized P/L" value={money(totals.realized)} />
+        <MetricCard label="Total Stocks P/L" value={money(totals.stocksPl)} />
+        <MetricCard label="Total Options P/L" value={money(totals.optionsPl)} />
+        <MetricCard label="Total Dividend Amount" value={money(totals.dividendAmount)} />
         <MetricCard label="Profitable Tickers" value={`${winners.length} of ${groups.length}`} />
         <MetricCard label="Loss Recovery Tickers" value={lossRecoveryTickers.toLocaleString()} />
       </div>
@@ -775,7 +785,7 @@ export default function Page() {
             <div className="flex w-full flex-wrap justify-end gap-2">
               <div className="relative w-full sm:w-64">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-              <Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search Ticker..." className="pl-9" />
+              <Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search Ticker Or Comment..." className="pl-9" />
               </div>
             </div>
             <p className="text-xs text-zinc-500">{filteredAndSortedGroups.length} of {groups.length} Tickers</p>
