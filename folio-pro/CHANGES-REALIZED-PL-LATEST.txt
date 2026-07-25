@@ -1,0 +1,6 @@
+Realized P/L updates
+- Deleting a stock/option entry now persists even when the entry originated from transaction history.
+- If the removed entry is the final stock/option entry for a ticker, the ticker disappears automatically.
+- Tickers with exactly $0.00 realized P/L are included in Profitable Tickers.
+- Added ticker-level Edit action beside the ticker summary row.
+- Ticker-level comments are now stored independently at ticker level.

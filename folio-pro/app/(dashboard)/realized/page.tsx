@@ -50,6 +50,7 @@ type PositionGroup = {
   dividendAmount: number;
   dividendNraWithholding: number;
   lastDividendDate: string;
+  comment: string;
   quantity?: number;
   sellPrice?: number;
   costBasis?: number;
@@ -65,6 +66,8 @@ type SortDirection = "asc" | "desc";
 const STORAGE_KEY = "folio-realized-positions-v4";
 const PREVIOUS_STORAGE_KEYS = ["folio-realized-positions-v3", "folio-realized-positions-v2"];
 const REALIZED_SORT_STORAGE_KEY = "folio-realized-sort-preference";
+const REALIZED_IGNORED_TRANSACTION_IDS_KEY = "folio-realized-ignored-transaction-ids-v1";
+const REALIZED_TICKER_COMMENTS_KEY = "folio-realized-ticker-comments-v1";
 type RealizedPortfolioId = "robinhood" | "fidelity-401k" | "fidelity-roth";
 type PositionsByPortfolio = Record<RealizedPortfolioId, RealizedPosition[]>;
 
@@ -273,6 +276,9 @@ export default function Page() {
   }), []);
   const [positionsByPortfolio, setPositionsByPortfolio] = useState<PositionsByPortfolio>(defaultPositionsByPortfolio);
   const [editingPosition, setEditingPosition] = useState<RealizedPosition | null>(null);
+  const [editingGroup, setEditingGroup] = useState<{ symbol: string; comment: string } | null>(null);
+  const [ignoredTransactionIds, setIgnoredTransactionIds] = useState<Record<RealizedPortfolioId, string[]>>({ robinhood: [], "fidelity-401k": [], "fidelity-roth": [] });
+  const [tickerCommentsByPortfolio, setTickerCommentsByPortfolio] = useState<Record<RealizedPortfolioId, Record<string, string>>>({ robinhood: {}, "fidelity-401k": {}, "fidelity-roth": {} });
   const [message, setMessage] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
@@ -340,8 +346,38 @@ export default function Page() {
   }, []);
 
   useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(REALIZED_IGNORED_TRANSACTION_IDS_KEY) ?? "null") as Partial<Record<RealizedPortfolioId, string[]>> | null;
+      if (saved) setIgnoredTransactionIds({
+        robinhood: Array.isArray(saved.robinhood) ? saved.robinhood : [],
+        "fidelity-401k": Array.isArray(saved["fidelity-401k"]) ? saved["fidelity-401k"] : [],
+        "fidelity-roth": Array.isArray(saved["fidelity-roth"]) ? saved["fidelity-roth"] : [],
+      });
+    } catch {}
+  }, []);
+
+  useEffect(() => {
     if (hasHydrated) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(positionsByPortfolio));
   }, [hasHydrated, positionsByPortfolio]);
+
+  useEffect(() => {
+    if (hasHydrated) window.localStorage.setItem(REALIZED_IGNORED_TRANSACTION_IDS_KEY, JSON.stringify(ignoredTransactionIds));
+  }, [hasHydrated, ignoredTransactionIds]);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(REALIZED_TICKER_COMMENTS_KEY) ?? "null") as Partial<Record<RealizedPortfolioId, Record<string, string>>> | null;
+      if (saved) setTickerCommentsByPortfolio({
+        robinhood: saved.robinhood ?? {},
+        "fidelity-401k": saved["fidelity-401k"] ?? {},
+        "fidelity-roth": saved["fidelity-roth"] ?? {},
+      });
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (hasHydrated) window.localStorage.setItem(REALIZED_TICKER_COMMENTS_KEY, JSON.stringify(tickerCommentsByPortfolio));
+  }, [hasHydrated, tickerCommentsByPortfolio]);
 
   useEffect(() => {
     try {
@@ -376,6 +412,7 @@ export default function Page() {
 
     portfolioIds.forEach((portfolioId) => {
       transactionsByPortfolio[portfolioId].forEach((transaction) => {
+        if (ignoredTransactionIds[portfolioId].includes(transaction.id)) return;
         if (transaction.realizedGain === undefined || !transaction.symbol || alreadyApplied.has(transaction.id)) return;
         const symbol = transaction.symbol.trim().toUpperCase();
         const type: TradeType = transaction.assetType === "option" ? "option" : "stock";
@@ -423,7 +460,7 @@ export default function Page() {
       else base.push(makePosition(symbol + (type === "option" ? " Option" : ""), 0, fees, "", `tracked-fee-${symbol}-${type}`));
     });
     return base;
-  }, [activePortfolioId, positionsByPortfolio, transactionsByPortfolio]);
+  }, [activePortfolioId, ignoredTransactionIds, positionsByPortfolio, transactionsByPortfolio]);
 
   const totals = useMemo(() => ({
     realized: visiblePositions.reduce((sum, item) => sum + item.amount, 0),
@@ -434,6 +471,12 @@ export default function Page() {
     dividendAmount: visiblePositions.reduce((sum, item) => sum + item.dividendAmount, 0),
     dividendNraWithholding: visiblePositions.reduce((sum, item) => sum + item.dividendNraWithholding, 0),
   }), [visiblePositions]);
+
+  const tickerCommentFor = (symbol: string) => {
+    const portfolioIds: RealizedPortfolioId[] = activePortfolioId === "all" ? ["robinhood", "fidelity-401k", "fidelity-roth"] : [activePortfolioId];
+    const savedComments = portfolioIds.map((id) => tickerCommentsByPortfolio[id][symbol]?.trim()).filter(Boolean) as string[];
+    return savedComments[0] ?? "";
+  };
 
   const groups = useMemo<PositionGroup[]>(() => {
     const map = new Map<string, RealizedPosition[]>();
@@ -450,8 +493,9 @@ export default function Page() {
       dividendAmount: items.reduce((sum, item) => sum + item.dividendAmount, 0),
       dividendNraWithholding: items.reduce((sum, item) => sum + item.dividendNraWithholding, 0),
       lastDividendDate: [...items].filter((item) => item.lastDividendDate).sort((a, b) => new Date(b.lastDividendDate).getTime() - new Date(a.lastDividendDate).getTime())[0]?.lastDividendDate ?? "",
+      comment: tickerCommentFor(symbol) || Array.from(new Set(items.map((item) => item.comment.trim()).filter(Boolean))).join(" · "),
     }));
-  }, [visiblePositions]);
+  }, [activePortfolioId, tickerCommentsByPortfolio, visiblePositions]);
 
   const totalPatNeeded = groups.reduce((sum, group) => sum + group.patNeeded, 0);
   const lossRecoveryTickers = groups.filter((group) => group.patNeeded > 0).length;
@@ -470,7 +514,7 @@ export default function Page() {
     });
   }, [groups, searchTerm, sortDirection, sortKey]);
 
-  const winners = groups.filter((group) => group.amount > 0);
+  const winners = groups.filter((group) => group.amount >= 0);
 
   async function handleFileUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -564,6 +608,14 @@ export default function Page() {
   function deleteSelectedPositions() {
     const count = selectedPositionIds.size;
     if (!count || !window.confirm(`Delete ${count} selected realized P/L entr${count === 1 ? "y" : "ies"}?`)) return;
+    const sourceIds = visiblePositions.filter((item) => selectedPositionIds.has(item.id)).flatMap((item) => item.sourceTransactionIds ?? []);
+    if (sourceIds.length) {
+      setIgnoredTransactionIds((current) => {
+        const next = { ...current };
+        (Object.keys(next) as RealizedPortfolioId[]).forEach((portfolioId) => next[portfolioId] = Array.from(new Set([...next[portfolioId], ...sourceIds])));
+        return next;
+      });
+    }
     setPositionsByPortfolio((current) => ({
       robinhood: current.robinhood.filter((item) => !selectedPositionIds.has(item.id)),
       "fidelity-401k": current["fidelity-401k"].filter((item) => !selectedPositionIds.has(item.id)),
@@ -614,10 +666,47 @@ export default function Page() {
     setMessage(`${cleaned.symbol} was updated.`);
   }
 
+  function ignoreSourceTransactions(position: RealizedPosition) {
+    const ids = position.sourceTransactionIds ?? [];
+    if (!ids.length) return;
+    setIgnoredTransactionIds((current) => {
+      const next = { ...current };
+      (Object.keys(next) as RealizedPortfolioId[]).forEach((portfolioId) => {
+        const existing = new Set(next[portfolioId]);
+        ids.forEach((id) => existing.add(id));
+        next[portfolioId] = Array.from(existing);
+      });
+      return next;
+    });
+  }
+
+  function saveEditedGroup() {
+    if (!editingGroup) return;
+    const symbol = editingGroup.symbol.trim().toUpperCase();
+    if (!symbol) return;
+    setTickerCommentsByPortfolio((current) => ({
+      ...current,
+      [targetPortfolioId]: { ...current[targetPortfolioId], [symbol]: editingGroup.comment.trim() },
+    }));
+    setEditingGroup(null);
+    setMessage(`${symbol} ticker comment was updated.`);
+  }
+
   function removePosition(position: RealizedPosition) {
     if (!window.confirm(`Remove this ${position.type} entry for ${position.symbol}?`)) return;
+    ignoreSourceTransactions(position);
     setPositions((current) => current.filter((item) => item.id !== position.id));
-    setMessage(`${position.symbol} was removed.`);
+    setSelectedPositionIds((current) => { const next = new Set(current); next.delete(position.id); return next; });
+    const removesTicker = visiblePositions.filter((item) => item.symbol === position.symbol && item.id !== position.id).length === 0;
+    if (removesTicker) {
+      setTickerCommentsByPortfolio((current) => {
+        const portfolioComments = { ...current[targetPortfolioId] };
+        delete portfolioComments[position.symbol];
+        return { ...current, [targetPortfolioId]: portfolioComments };
+      });
+      setExpandedSymbols((current) => { const next = new Set(current); next.delete(position.symbol); return next; });
+    }
+    setMessage(`${position.symbol} ${position.type} entry was removed.${removesTicker ? " The ticker was removed because no entries remain." : ""}`);
   }
 
   function editNumber(field: "amount" | "fees" | "dividendAmount" | "dividendNraWithholding", value: string) {
@@ -707,6 +796,8 @@ export default function Page() {
                 <th className="px-3 py-3"><SortHeader label="Dividend Amount" column="dividendAmount" /></th>
                 <th className="px-3 py-3"><SortHeader label="Dividend NRA Withholding" column="dividendNraWithholding" /></th>
                 <th className="px-3 py-3"><SortHeader label="Last Dividend Date" column="lastDividendDate" /></th>
+                <th className="px-3 py-3">Comment</th>
+                <th className="px-3 py-3">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -730,17 +821,21 @@ export default function Page() {
                       <td className="px-3 py-4 tabular-nums text-emerald-500">{group.dividendAmount ? money(group.dividendAmount) : "-"}</td>
                       <td className="px-3 py-4 tabular-nums text-red-500">{group.dividendNraWithholding ? money(group.dividendNraWithholding) : "-"}</td>
                       <td className="whitespace-nowrap px-3 py-4 text-zinc-500">{group.lastDividendDate || "—"}</td>
+                      <td className="max-w-80 whitespace-pre-wrap break-words px-3 py-4 text-zinc-500">{group.comment || "-"}</td>
+                      <td className="px-3 py-4">
+                        <button onClick={(event) => { event.stopPropagation(); setEditingGroup({ symbol: group.symbol, comment: group.comment }); }} className="rounded-lg border border-zinc-500/20 p-2 text-zinc-400 hover:bg-zinc-500/10" aria-label={`Edit ${group.symbol} ticker`}><Pencil size={14} /></button>
+                      </td>
                     </tr>
                     {expanded && (
                       <tr className="border-b bg-zinc-500/[0.035]">
-                        <td colSpan={10} className="p-0">
+                        <td colSpan={12} className="p-0">
                           <div className="m-3 overflow-hidden rounded-lg border border-zinc-500/15">
                             <table className="w-full text-center text-xs">
                               <thead className="bg-zinc-500/5 tracking-wide text-zinc-500">
                                 <tr>
                                   <th className="px-3 py-3">Type</th><th className="px-3 py-3">Realized P/L</th><th className="px-3 py-3">Fees</th>
                                   <th className="px-3 py-3">Sell Date</th><th className="px-3 py-3">PAT</th><th className="px-3 py-3">Loss</th>
-                                  <th className="px-3 py-3">PAT Needed</th><th className="px-3 py-3">Dividend Amount</th><th className="px-3 py-3">Dividend NRA Withholding</th><th className="px-3 py-3">Last Dividend Date</th><th className="px-3 py-3">Comment</th><th className="px-3 py-3">Actions</th>
+                                  <th className="px-3 py-3">PAT Needed</th><th className="px-3 py-3">Dividend Amount</th><th className="px-3 py-3">Dividend NRA Withholding</th><th className="px-3 py-3">Last Dividend Date</th><th className="px-3 py-3">Actions</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -756,7 +851,6 @@ export default function Page() {
                                     <td className="px-3 py-3 tabular-nums text-emerald-500">{position.dividendAmount ? money(position.dividendAmount) : "-"}</td>
                                     <td className="px-3 py-3 tabular-nums text-red-500">{position.dividendNraWithholding ? money(position.dividendNraWithholding) : "-"}</td>
                                     <td className="whitespace-nowrap px-3 py-3 text-zinc-500">{position.lastDividendDate || "—"}</td>
-                                    <td className="max-w-64 whitespace-pre-wrap break-words px-3 py-3 text-zinc-500">{position.comment || "-"}</td>
                                     <td className="px-3 py-3">
                                       <div className="flex justify-center gap-2">
                                         <button onClick={(event) => { event.stopPropagation(); setEditingPosition({ ...position }); }} className="rounded-lg border border-zinc-500/20 p-2 text-zinc-400 hover:bg-zinc-500/10" aria-label={`Edit ${position.symbol}`}><Pencil size={14} /></button>
@@ -785,11 +879,30 @@ export default function Page() {
                 <td className="px-3 py-4 tabular-nums text-emerald-500">{money(totals.dividendAmount)}</td>
                 <td className="px-3 py-4 tabular-nums text-red-500">{money(totals.dividendNraWithholding)}</td>
                 <td />
+                <td />
+                <td />
               </tr>
             </tfoot>
           </table>
         </div>
       </Card>
+
+
+      {editingGroup && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">
+          <Card className="w-full max-w-lg rounded-b-none p-4 shadow-2xl sm:rounded-xl sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div><h2 className="text-xl font-semibold">Edit Ticker</h2><p className="mt-1 text-sm text-zinc-500">Update ticker-level details and comment.</p></div>
+              <button onClick={() => setEditingGroup(null)} className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-500/10" aria-label="Close"><X size={18} /></button>
+            </div>
+            <div className="mt-6 grid gap-4">
+              <label className="space-y-2 text-sm font-medium">Ticker<Input value={editingGroup.symbol} readOnly className="cursor-not-allowed bg-zinc-500/5 text-zinc-500" /></label>
+              <label className="space-y-2 text-sm font-medium">Comment<textarea rows={5} placeholder="-" value={editingGroup.comment} onChange={(e) => setEditingGroup({ ...editingGroup, comment: e.target.value })} className="flex min-h-28 w-full resize-y rounded-md border border-zinc-500/20 bg-transparent px-3 py-2 text-sm outline-none focus:border-emerald-500" /></label>
+            </div>
+            <div className="mt-6 flex justify-end gap-2"><Button variant="outline" onClick={() => setEditingGroup(null)}>Cancel</Button><Button onClick={saveEditedGroup}>Save Changes</Button></div>
+          </Card>
+        </div>
+      )}
 
       {editingPosition && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">

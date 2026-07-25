@@ -1,0 +1,11 @@
+Latest changes
+
+1. Position Simulator
+- Preserve the selected position across simulator storage refreshes.
+- If an internal position ID changes, recover the same portfolio/ticker/position identity before considering another position.
+- Prevent Robinhood lot additions/edits from sending the simulator to the first ticker (such as AMZN).
+
+2. Realized P/L
+- Added Comment to the ticker-level summary immediately after Last Dividend Date.
+- Removed Comment from the expanded stock/option detail columns.
+- Existing comments are preserved and surfaced at ticker level; multiple distinct comments for a ticker are shown together.

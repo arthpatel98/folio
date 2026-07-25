@@ -70,6 +70,7 @@ export default function DcaPage() {
   const [allPositions, setAllPositions] = useState<DcaPosition[]>([]);
   const [positionId, setPositionId] = useState("");
   const positionIdRef = useRef("");
+  const positionIdentityRef = useRef("");
   const [lots, setLots] = useState<DcaLot[]>([]);
   const [sellPrice, setSellPrice] = useState("");
   const [sellPriceFocused, setSellPriceFocused] = useState(false);
@@ -191,9 +192,17 @@ export default function DcaPage() {
   };
 
   const applyPosition = (position?: DcaPosition) => {
-    if (!position) { positionIdRef.current = ""; setPositionId(""); setLots([]); setSellPrice(""); return; }
+    if (!position) {
+      positionIdRef.current = "";
+      positionIdentityRef.current = "";
+      setPositionId("");
+      setLots([]);
+      setSellPrice("");
+      return;
+    }
     const copy = clonePosition(position);
     positionIdRef.current = copy.id;
+    positionIdentityRef.current = positionIdentity(copy);
     setPositionId(copy.id);
     setLots(sortLots(copy.lots));
     setSellPrice(copy.sellPrice === "" ? "" : String(copy.sellPrice));
@@ -204,8 +213,13 @@ export default function DcaPage() {
     const next = loadDcaPositions();
     setAllPositions(next);
     const visible = mergeWithHeldPositions(next);
-    const wanted = preferredId || positionIdRef.current || readSavedSelection();
-    const selected = visible.find((position) => position.id === wanted) ?? visible[0];
+    const wantedId = preferredId || positionIdRef.current || readSavedSelection();
+    const wantedIdentity = positionIdentityRef.current;
+    const previousSymbol = positionIdentityRef.current.split(":")[1] ?? "";
+    const selected = visible.find((position) => position.id === wantedId)
+      ?? (wantedIdentity ? visible.find((position) => positionIdentity(position) === wantedIdentity) : undefined)
+      ?? (previousSymbol ? visible.find((position) => position.symbol.trim().toUpperCase() === previousSymbol) : undefined)
+      ?? visible[0];
     applyPosition(selected);
   };
 
