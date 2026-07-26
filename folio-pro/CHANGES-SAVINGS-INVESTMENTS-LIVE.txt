@@ -1,0 +1,12 @@
+Savings & Investments updates
+- Removed Savings & Net Worth and Expenses tabs/views.
+- Added Investment to each brokerage card using workbook values.
+- Current Value now pulls each brokerage's live Portfolio Value from Holdings state.
+- Total Gain = Current Value - Investment.
+- Total Return = Total Gain / Investment.
+- CAGR = (Current Value / Investment)^(1/(2 + (MONTH(TODAY())-1)/12)) - 1.
+- Robinhood YTD = Current Value / 83,745 - 1.
+- Fidelity Roth IRA YTD = Current Value / 16,452 - 1.
+- Fidelity 401(k) YTD remains 20.50%.
+- Robinhood and Fidelity Roth IRA quarterly workbook data are displayed separately.
+- Top Total Investments and Total Gain metrics now recalculate from live brokerage values.
