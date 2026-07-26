@@ -23,8 +23,8 @@ function Metric({ label, value, detail, icon: Icon, positive }: { label: string;
 
 const accountPortfolioIds: Record<string, DataPortfolioId> = {
   Robinhood: "robinhood",
-  "Fidelity Roth IRA": "fidelity-roth",
-  "Fidelity 401(k)": "fidelity-401k",
+  "Fidelity Roth IRA": "fidelity-401k",
+  "Fidelity 401(k)": "fidelity-roth",
 };
 
 export default function SavingsInvestmentsPage() {
