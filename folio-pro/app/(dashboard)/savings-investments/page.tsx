@@ -16,6 +16,15 @@ import { usePortfolioStore, type DataPortfolioId } from "@/store/portfolio-store
 
 const pct = (value: number) => `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
 
+// The workbook/manual July 2026 Robinhood baseline is $3,669.10. Only Holdings
+// sales created after this build are layered onto that baseline so existing
+// historical transactions do not double-count the value the user supplied.
+const REALIZED_CHART_FUTURE_SALE_CUTOFF_MS = 1785077788669;
+const isFutureHoldingsSale = (transactionId: string) => {
+  const match = transactionId.match(/^trade-(\d+)-/);
+  return Boolean(match && Number(match[1]) > REALIZED_CHART_FUTURE_SALE_CUTOFF_MS);
+};
+
 function Metric({ label, value, detail, icon: Icon, positive }: { label: string; value: string; detail?: string; icon: typeof Landmark; positive?: boolean }) {
   return <Card className="p-4 sm:p-5"><div className="flex items-start justify-between gap-3"><div><div className="text-sm text-zinc-500">{label}</div><div className={cn("mt-2 text-2xl font-semibold tracking-tight", positive === true && "positive", positive === false && "negative")}>{value}</div>{detail && <div className="mt-2 text-xs text-zinc-600">{detail}</div>}</div><div className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-400/10 text-emerald-400"><Icon size={18}/></div></div></Card>;
 }
@@ -73,6 +82,7 @@ export default function SavingsInvestmentsPage() {
       (transactionsByPortfolio[portfolioId] ?? []).forEach((transaction) => {
         if (transaction.type !== "sell" || !Number.isFinite(transaction.realizedGain)) return;
         if (!transaction.notes?.includes("Sold from Holdings")) return;
+        if (!isFutureHoldingsSale(transaction.id)) return;
         const date = new Date(`${transaction.date}T12:00:00`);
         if (Number.isNaN(date.getTime())) return;
         const period = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(date);
@@ -175,7 +185,7 @@ export default function SavingsInvestmentsPage() {
       </Card>)}
     </div>
 
-    <div className="grid gap-6 xl:grid-cols-2">
+    <div className="grid gap-6 2xl:grid-cols-2">
       <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Profit vs Dividend, Interest & Bonus by quarter" data={robinhoodQuarterly}/>
       <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit vs Dividend, Interest & Bonus by quarter" data={rothQuarterly}/>
     </div>

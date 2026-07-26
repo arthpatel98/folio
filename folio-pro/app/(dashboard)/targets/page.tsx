@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, CalendarDays, CircleDollarSign, Flag, Plus, Target, Trash2, TrendingUp } from "lucide-react";
+import { ArrowRight, CalendarDays, CircleDollarSign, Flag, MinusCircle, Plus, Target, Trash2, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore } from "@/store/portfolio-store";
@@ -32,10 +32,11 @@ export default function TargetPlannerPage(){
   const cashByPortfolio=usePortfolioStore(s=>s.cashByPortfolio);
   const isRobinhood=activeId==="robinhood";
   const isRoth=activeId==="fidelity-401k";
+  const is401k=activeId==="fidelity-roth";
   const selectedHoldings=useMemo(()=>isRobinhood?holdingsByPortfolio.robinhood:isRoth?holdingsByPortfolio["fidelity-401k"]:[...holdingsByPortfolio.robinhood,...holdingsByPortfolio["fidelity-401k"]],[holdingsByPortfolio,isRobinhood,isRoth]);
   const selectedCash=isRobinhood?cashByPortfolio.robinhood:isRoth?cashByPortfolio["fidelity-401k"]:cashByPortfolio.robinhood+cashByPortfolio["fidelity-401k"];
   const rows=useMemo(()=>isRobinhood?ROBINHOOD_TARGETS.map(([date,target,increase])=>({date,target,increase})):isRoth?ROTH_TARGETS.map(([date,target,increase])=>({date,target,increase})):ROBINHOOD_TARGETS.map(([date,target,increase],i)=>({date,target:target+ROTH_TARGETS[i][1],increase:increase+ROTH_TARGETS[i][2]})),[isRobinhood,isRoth]);
-  const [selectedDate,setSelectedDate]=useState<string>(rows[rows.length-1].date);
+  const [selectedDate,setSelectedDate]=useState<string>(rows[0].date);
   const [scenarios,setScenarios]=useState<Record<string,Scenario>>({});
   const [cashError,setCashError]=useState<string | null>(null);
   const [targetPriceInputs,setTargetPriceInputs]=useState<Record<string,string>>({});
@@ -51,8 +52,17 @@ export default function TargetPlannerPage(){
     setScenarios(raw?JSON.parse(raw):{});
     const savedDate=localStorage.getItem(targetDateStorageKey);
     const validSavedDate=savedDate&&rows.some(r=>r.date===savedDate)?savedDate:null;
-    setSelectedDate(validSavedDate??rows[rows.length-1].date);
-  },[storageKey,targetDateStorageKey,rows]);
+    const defaultDate=rows[0].date;
+    const defaultVersionKey=`folio-target-date-default-aug-2026:${activeId}`;
+    const needsDefaultMigration=(isRobinhood||isRoth)&&localStorage.getItem(defaultVersionKey)!=="1";
+    if(needsDefaultMigration){
+      setSelectedDate(defaultDate);
+      localStorage.setItem(targetDateStorageKey,defaultDate);
+      localStorage.setItem(defaultVersionKey,"1");
+    }else{
+      setSelectedDate(validSavedDate??defaultDate);
+    }
+  },[activeId,isRobinhood,isRoth,storageKey,targetDateStorageKey,rows]);
   useEffect(()=>{if(selectedDate)localStorage.setItem(targetDateStorageKey,selectedDate)},[targetDateStorageKey,selectedDate]);
   useEffect(()=>{localStorage.setItem(storageKey,JSON.stringify(scenarios))},[storageKey,scenarios]);
   useEffect(()=>{
@@ -69,6 +79,21 @@ export default function TargetPlannerPage(){
     setSelectedPathPositions({});
   },[pathwaySelectionStorageKey]);
   useEffect(()=>{localStorage.setItem(pathwaySelectionStorageKey,JSON.stringify(selectedPathPositions))},[pathwaySelectionStorageKey,selectedPathPositions]);
+
+  if(is401k){
+    return <div className="space-y-6">
+      <div><h1 className="text-3xl font-semibold">Target Scenario Builder</h1><p className="mt-1 text-sm text-zinc-500">A focused planning space for each portfolio.</p></div>
+      <Card className="overflow-hidden">
+        <div className="flex min-h-[420px] flex-col items-center justify-center px-6 py-16 text-center">
+          <div className="grid size-16 place-items-center rounded-2xl border border-zinc-200 bg-zinc-50 text-zinc-400 shadow-sm dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-500"><MinusCircle size={30}/></div>
+          <div className="mt-6 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs font-medium tracking-wide text-zinc-500 dark:border-white/10 dark:bg-white/[.03]">401(K) · LONG-TERM PLAN</div>
+          <h2 className="mt-4 text-2xl font-semibold tracking-tight">No Target Needed</h2>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-500">This 401(k) portfolio is intentionally kept outside the Target Scenario Builder. Keep contributing, let the long-term allocation work, and use Robinhood or Fidelity Roth IRA when you want to model a specific portfolio target.</p>
+        </div>
+      </Card>
+    </div>;
+  }
+
   const availableCash=Math.max(0,selectedCash-optionCollateral(selectedHoldings));
   const currentValue=portfolioValue(selectedHoldings,selectedCash);
   const selectedTarget=rows.find(r=>r.date===selectedDate)??rows[0];

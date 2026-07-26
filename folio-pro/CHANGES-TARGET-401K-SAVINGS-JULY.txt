@@ -1,0 +1,6 @@
+Latest changes:
+- Robinhood July 2026 chart profit baseline is fixed at $3,669.10; only Holdings sales created after this build are added on top.
+- Fidelity 401(k) Target Planner shows a dedicated No Target Needed state.
+- Fidelity 401(k) Holdings hides the Total Options Value metric card.
+- Robinhood and Fidelity Roth IRA Target Scenario Builder default Target Date migrates once to Aug 31, 2026.
+- Robinhood and Roth quarterly charts use more horizontal space (full-width until 2XL screens).
