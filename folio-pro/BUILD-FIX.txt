@@ -1,0 +1,4 @@
+Vercel build fix
+- Fixed Recharts TypeScript readonly-array incompatibility on Savings & Investments page.
+- Realized Income By Period now passes a mutable array to BarChart.
+- Savings Progress now passes a mutable array to BarChart.
