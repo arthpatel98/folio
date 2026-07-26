@@ -1,0 +1,10 @@
+Savings & Investments updates
+
+- Fidelity Roth IRA CAGR uses: (Current Value / Investment)^(1 / (1.0833 + (MONTH(TODAY()) - 1) / 12)) - 1
+- Fidelity 401(k) CAGR uses: (Current Value / Investment)^(1 / (2 + (MONTH(TODAY()) - 1) / 12)) - 1
+- Robinhood retains the 2-year CAGR base.
+- Robinhood quarterly chart now shows Profit and Dividend, Interest & Bonus as separate bar series with legend.
+- Fidelity Roth IRA quarterly chart now shows Profit and Dividend, Interest & Bonus as separate bar series with legend.
+- Robinhood Q1 2025 Profit is reduced by $311.71.
+- Added Realized Income Totals bar chart for Robinhood and Fidelity Roth IRA with Realized Profit and DIV, INT & Bonus categories.
+- Realized Income summary is calculated from the adjusted component totals.

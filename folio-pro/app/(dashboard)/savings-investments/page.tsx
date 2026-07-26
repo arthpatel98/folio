@@ -2,14 +2,13 @@
 
 import { useMemo } from "react";
 import { BarChart3, Landmark, TrendingUp, WalletCards } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { portfolioSummary } from "@/lib/calculations/portfolio";
 import { cn, money } from "@/lib/utils";
 import {
   investmentAccounts,
   quarterlyIncome,
-  realizedTotals,
   yearlyIncome,
   ytdPerformance,
 } from "@/lib/savings-investments-data";
@@ -33,7 +32,7 @@ export default function SavingsInvestmentsPage() {
 
   const accounts = useMemo(() => {
     const monthNumber = new Date().getMonth() + 1;
-    const cagrYears = 2 + (monthNumber - 1) / 12;
+    const monthFraction = (monthNumber - 1) / 12;
 
     return investmentAccounts.map((account) => {
       const portfolioId = accountPortfolioIds[account.name];
@@ -45,6 +44,8 @@ export default function SavingsInvestmentsPage() {
       const invested = account.invested;
       const gain = current - invested;
       const totalReturn = invested > 0 ? gain / invested : 0;
+      const cagrBaseYears = account.name === "Fidelity Roth IRA" ? 1.0833 : 2;
+      const cagrYears = cagrBaseYears + monthFraction;
       const cagr = invested > 0 && current > 0
         ? Math.pow(current / invested, 1 / cagrYears) - 1
         : 0;
@@ -65,19 +66,39 @@ export default function SavingsInvestmentsPage() {
     return { invested, current, gain, totalReturn: invested > 0 ? gain / invested : 0 };
   }, [accounts]);
 
-  const robinhoodQuarterly = useMemo(() => quarterlyIncome.map((row) => ({
-    period: row.period,
-    realizedProfit: row.robinhoodProfit,
-    income: row.robinhoodIncome,
-    total: row.robinhoodProfit + row.robinhoodIncome,
-  })), []);
+  const robinhoodQuarterly = useMemo(() => quarterlyIncome.map((row) => {
+    const realizedProfit = row.robinhoodProfit - (row.period === "Q1 2025" ? 311.71 : 0);
+    return {
+      period: row.period,
+      realizedProfit,
+      income: row.robinhoodIncome,
+    };
+  }), []);
 
   const rothQuarterly = useMemo(() => quarterlyIncome.map((row) => ({
     period: row.period,
     realizedProfit: row.rothProfit,
     income: row.rothIncome,
-    total: row.rothProfit + row.rothIncome,
   })), []);
+
+  const incomeTotals = useMemo(() => {
+    const sum = (rows: { realizedProfit: number; income: number }[]) => ({
+      realizedProfit: rows.reduce((total, row) => total + row.realizedProfit, 0),
+      income: rows.reduce((total, row) => total + row.income, 0),
+    });
+    const robinhood = sum(robinhoodQuarterly);
+    const roth = sum(rothQuarterly);
+    return {
+      robinhood,
+      roth,
+      total: robinhood.realizedProfit + robinhood.income + roth.realizedProfit + roth.income,
+    };
+  }, [robinhoodQuarterly, rothQuarterly]);
+
+  const brokerageIncomeTotals = useMemo(() => [
+    { account: "Robinhood", realizedProfit: incomeTotals.robinhood.realizedProfit, income: incomeTotals.robinhood.income },
+    { account: "Roth IRA", realizedProfit: incomeTotals.roth.realizedProfit, income: incomeTotals.roth.income },
+  ], [incomeTotals]);
 
   const dynamicYtd = useMemo(() => ({
     Robinhood: accounts.find((account) => account.name === "Robinhood")?.ytd ?? 0,
@@ -95,7 +116,7 @@ export default function SavingsInvestmentsPage() {
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Metric label="Total Investments" value={money(totals.current)} detail={`${money(totals.invested)} invested`} icon={WalletCards}/>
       <Metric label="Total Gain" value={money(totals.gain)} detail={`${pct(totals.totalReturn)} total return`} icon={TrendingUp} positive={totals.gain >= 0}/>
-      <Metric label="Realized Income" value={money(realizedTotals.total)} detail="Realized profit + DIV / INT / extras" icon={Landmark} positive={realizedTotals.total >= 0}/>
+      <Metric label="Realized Income" value={money(incomeTotals.total)} detail="Realized profit + DIV / INT / extras" icon={Landmark} positive={incomeTotals.total >= 0}/>
       <Metric label="2026 Realized YTD" value={money(yearlyIncome[2].total)} detail="Through July 2026" icon={BarChart3} positive={yearlyIncome[2].total >= 0}/>
     </div>
 
@@ -118,9 +139,11 @@ export default function SavingsInvestmentsPage() {
     </div>
 
     <div className="grid gap-6 xl:grid-cols-2">
-      <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Realized profit plus dividends, interest, and bonus" data={robinhoodQuarterly}/>
-      <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Realized profit plus dividends, interest, and extras" data={rothQuarterly}/>
+      <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Profit vs Dividend, Interest & Bonus by quarter" data={robinhoodQuarterly}/>
+      <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit vs Dividend, Interest & Bonus by quarter" data={rothQuarterly}/>
     </div>
+
+    <IncomeTotalsChart data={brokerageIncomeTotals}/>
 
     <div className="grid gap-6 xl:grid-cols-[1fr_1.4fr]">
       <Card><CardHeader><h2 className="font-medium">Yearly Realized Income</h2><p className="text-xs text-zinc-500">Workbook yearly totals</p></CardHeader><CardContent className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">{yearlyIncome.map((row)=><div key={row.year} className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/[.025]"><div className="text-xs text-zinc-500">{row.year}</div><div className="mt-1 text-xl font-semibold">{money(row.total)}</div></div>)}</CardContent></Card>
@@ -133,6 +156,10 @@ export default function SavingsInvestmentsPage() {
   </div>;
 }
 
-function QuarterlyChart({ title, subtitle, data }: { title: string; subtitle: string; data: { period: string; realizedProfit: number; income: number; total: number }[] }) {
-  return <Card><CardHeader><h2 className="font-medium">{title}</h2><p className="text-xs text-zinc-500">{subtitle}</p></CardHeader><CardContent><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} margin={{left:4,right:8,top:8,bottom:0}}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(161,161,170,.12)"/><XAxis dataKey="period" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false} tickFormatter={(v)=>`$${Math.round(v/1000)}k`}/><Tooltip cursor={{fill:"rgba(255,255,255,.03)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,color:"#f4f4f5"}} formatter={(value)=>money(Number(value))}/><Bar dataKey="total" fill="#34d399" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer></div></CardContent></Card>;
+function QuarterlyChart({ title, subtitle, data }: { title: string; subtitle: string; data: { period: string; realizedProfit: number; income: number }[] }) {
+  return <Card><CardHeader><h2 className="font-medium">{title}</h2><p className="text-xs text-zinc-500">{subtitle}</p></CardHeader><CardContent><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} margin={{left:4,right:8,top:8,bottom:0}}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(161,161,170,.12)"/><XAxis dataKey="period" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false} tickFormatter={(v)=>`$${Math.round(v/1000)}k`}/><Tooltip cursor={{fill:"rgba(255,255,255,.03)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,color:"#f4f4f5"}} formatter={(value)=>money(Number(value))}/><Legend wrapperStyle={{fontSize:12,paddingTop:12}}/><Bar dataKey="realizedProfit" name="Profit" fill="#34d399" radius={[5,5,0,0]}/><Bar dataKey="income" name="Dividend, Interest & Bonus" fill="#60a5fa" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer></div></CardContent></Card>;
+}
+
+function IncomeTotalsChart({ data }: { data: { account: string; realizedProfit: number; income: number }[] }) {
+  return <Card><CardHeader><h2 className="font-medium">Realized Income Totals</h2><p className="text-xs text-zinc-500">Total realized profit compared with Dividend, Interest & Bonus for Robinhood and Fidelity Roth IRA.</p></CardHeader><CardContent><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} margin={{left:4,right:8,top:8,bottom:0}}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(161,161,170,.12)"/><XAxis dataKey="account" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false} tickFormatter={(v)=>`$${Math.round(v/1000)}k`}/><Tooltip cursor={{fill:"rgba(255,255,255,.03)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,color:"#f4f4f5"}} formatter={(value)=>money(Number(value))}/><Legend wrapperStyle={{fontSize:12,paddingTop:12}}/><Bar dataKey="realizedProfit" name="Realized Profit" fill="#34d399" radius={[5,5,0,0]}/><Bar dataKey="income" name="DIV, INT & Bonus" fill="#60a5fa" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer></div></CardContent></Card>;
 }
