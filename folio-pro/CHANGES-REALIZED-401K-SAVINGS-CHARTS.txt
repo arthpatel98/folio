@@ -1,0 +1,10 @@
+Latest changes:
+- Realized P/L ticker-comment edit confirmation now uses the same Sonner toast behavior as Holdings; toasts display bottom-left.
+- Fidelity 401(k) Holdings cash is always displayed/persisted as $0.00.
+- Fidelity 401(k) purchases still use a hidden temporary $25,000 purchase-capacity check so buys are not blocked by the zero displayed cash.
+- Savings & Investments current value for Fidelity 401(k) excludes cash.
+- Robinhood and Roth quarterly charts now include data labels, improved spacing, rounded bars, gradients, tooltips, and responsive axis handling.
+- Realized Income Totals chart also uses data labels and improved presentation.
+- New realized gains from positions sold through Holdings are automatically added to the matching brokerage chart by sell month.
+- A new month (for example Aug 2026) is automatically appended when a sale occurs in that month.
+- Robinhood sales feed only the Robinhood chart; Fidelity Roth IRA sales feed only the Roth IRA chart.

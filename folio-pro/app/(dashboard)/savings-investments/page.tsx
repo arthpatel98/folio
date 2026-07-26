@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { BarChart3, Landmark, TrendingUp, WalletCards } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { portfolioSummary } from "@/lib/calculations/portfolio";
 import { cn, money } from "@/lib/utils";
@@ -29,6 +29,7 @@ const accountPortfolioIds: Record<string, DataPortfolioId> = {
 export default function SavingsInvestmentsPage() {
   const holdingsByPortfolio = usePortfolioStore((state) => state.holdingsByPortfolio);
   const cashByPortfolio = usePortfolioStore((state) => state.cashByPortfolio);
+  const transactionsByPortfolio = usePortfolioStore((state) => state.transactionsByPortfolio);
 
   const accounts = useMemo(() => {
     const monthNumber = new Date().getMonth() + 1;
@@ -38,7 +39,7 @@ export default function SavingsInvestmentsPage() {
       const portfolioId = accountPortfolioIds[account.name];
       const summary = portfolioSummary(
         holdingsByPortfolio[portfolioId] ?? [],
-        cashByPortfolio[portfolioId] ?? 0,
+        account.name === "Fidelity 401(k)" ? 0 : (cashByPortfolio[portfolioId] ?? 0),
       );
       const current = summary.value;
       const invested = account.invested;
@@ -66,20 +67,56 @@ export default function SavingsInvestmentsPage() {
     return { invested, current, gain, totalReturn: invested > 0 ? gain / invested : 0 };
   }, [accounts]);
 
-  const robinhoodQuarterly = useMemo(() => quarterlyIncome.map((row) => {
-    const realizedProfit = row.robinhoodProfit - (row.period === "Q1 2025" ? 311.71 : 0);
-    return {
-      period: row.period,
-      realizedProfit,
-      income: row.robinhoodIncome,
+  const realizedSalesByMonth = useMemo(() => {
+    const aggregate = (portfolioId: DataPortfolioId) => {
+      const monthly = new Map<string, number>();
+      (transactionsByPortfolio[portfolioId] ?? []).forEach((transaction) => {
+        if (transaction.type !== "sell" || !Number.isFinite(transaction.realizedGain)) return;
+        if (!transaction.notes?.includes("Sold from Holdings")) return;
+        const date = new Date(`${transaction.date}T12:00:00`);
+        if (Number.isNaN(date.getTime())) return;
+        const period = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(date);
+        monthly.set(period, (monthly.get(period) ?? 0) + (transaction.realizedGain ?? 0));
+      });
+      return monthly;
     };
-  }), []);
+    return {
+      robinhood: aggregate("robinhood"),
+      roth: aggregate("fidelity-401k"),
+    };
+  }, [transactionsByPortfolio]);
 
-  const rothQuarterly = useMemo(() => quarterlyIncome.map((row) => ({
+  const mergeMonthlySales = (
+    base: { period: string; realizedProfit: number; income: number }[],
+    monthlySales: Map<string, number>,
+  ) => {
+    const rows = base.map((row) => ({ ...row }));
+    monthlySales.forEach((profit, period) => {
+      const existing = rows.find((row) => row.period === period);
+      if (existing) existing.realizedProfit += profit;
+      else rows.push({ period, realizedProfit: profit, income: 0 });
+    });
+    return rows.sort((a, b) => {
+      const parsePeriod = (period: string) => {
+        const quarter = period.match(/^Q([1-4]) (\d{4})$/);
+        if (quarter) return new Date(Number(quarter[2]), (Number(quarter[1]) - 1) * 3, 1).getTime();
+        const month = new Date(`${period} 1`);
+        return Number.isNaN(month.getTime()) ? 0 : month.getTime();
+      };
+      return parsePeriod(a.period) - parsePeriod(b.period);
+    });
+  };
+
+  const robinhoodQuarterly = useMemo(() => mergeMonthlySales(quarterlyIncome.map((row) => {
+    const realizedProfit = row.robinhoodProfit - (row.period === "Q1 2025" ? 311.71 : 0);
+    return { period: row.period, realizedProfit, income: row.robinhoodIncome };
+  }), realizedSalesByMonth.robinhood), [realizedSalesByMonth]);
+
+  const rothQuarterly = useMemo(() => mergeMonthlySales(quarterlyIncome.map((row) => ({
     period: row.period,
     realizedProfit: row.rothProfit,
     income: row.rothIncome,
-  })), []);
+  })), realizedSalesByMonth.roth), [realizedSalesByMonth]);
 
   const incomeTotals = useMemo(() => {
     const sum = (rows: { realizedProfit: number; income: number }[]) => ({
@@ -156,10 +193,17 @@ export default function SavingsInvestmentsPage() {
   </div>;
 }
 
+function chartValueLabel(value: number) {
+  const sign = value < 0 ? "-" : "";
+  const absolute = Math.abs(value);
+  if (absolute >= 1000) return `${sign}$${(absolute / 1000).toFixed(absolute >= 10000 ? 0 : 1)}k`;
+  return `${sign}$${absolute.toFixed(0)}`;
+}
+
 function QuarterlyChart({ title, subtitle, data }: { title: string; subtitle: string; data: { period: string; realizedProfit: number; income: number }[] }) {
-  return <Card><CardHeader><h2 className="font-medium">{title}</h2><p className="text-xs text-zinc-500">{subtitle}</p></CardHeader><CardContent><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} margin={{left:4,right:8,top:8,bottom:0}}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(161,161,170,.12)"/><XAxis dataKey="period" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false} tickFormatter={(v)=>`$${Math.round(v/1000)}k`}/><Tooltip cursor={{fill:"rgba(255,255,255,.03)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,color:"#f4f4f5"}} formatter={(value)=>money(Number(value))}/><Legend wrapperStyle={{fontSize:12,paddingTop:12}}/><Bar dataKey="realizedProfit" name="Profit" fill="#34d399" radius={[5,5,0,0]}/><Bar dataKey="income" name="Dividend, Interest & Bonus" fill="#60a5fa" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer></div></CardContent></Card>;
+  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">{title}</h2><p className="text-xs text-zinc-500">{subtitle}</p></CardHeader><CardContent className="pt-5"><div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:4}}><defs><linearGradient id={`${title.replace(/\W/g, "")}-profit`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={1}/><stop offset="100%" stopColor="#10b981" stopOpacity={0.65}/></linearGradient><linearGradient id={`${title.replace(/\W/g, "")}-income`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.65}/></linearGradient></defs><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="period" tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} interval={0} angle={data.length > 8 ? -28 : 0} textAnchor={data.length > 8 ? "end" : "middle"} height={data.length > 8 ? 55 : 30}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v)=>`$${Math.round(v/1000)}k`}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5",boxShadow:"0 12px 30px rgba(0,0,0,.25)"}} formatter={(value)=>money(Number(value))}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/><Bar dataKey="realizedProfit" name="Profit" fill={`url(#${title.replace(/\W/g, "")}-profit)`} radius={[7,7,2,2]} maxBarSize={34}><LabelList dataKey="realizedProfit" position="top" formatter={(value)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={9}/></Bar><Bar dataKey="income" name="Dividend, Interest & Bonus" fill={`url(#${title.replace(/\W/g, "")}-income)`} radius={[7,7,2,2]} maxBarSize={34}><LabelList dataKey="income" position="top" formatter={(value)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={9}/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
 }
 
 function IncomeTotalsChart({ data }: { data: { account: string; realizedProfit: number; income: number }[] }) {
-  return <Card><CardHeader><h2 className="font-medium">Realized Income Totals</h2><p className="text-xs text-zinc-500">Total realized profit compared with Dividend, Interest & Bonus for Robinhood and Fidelity Roth IRA.</p></CardHeader><CardContent><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} margin={{left:4,right:8,top:8,bottom:0}}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(161,161,170,.12)"/><XAxis dataKey="account" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false} tickFormatter={(v)=>`$${Math.round(v/1000)}k`}/><Tooltip cursor={{fill:"rgba(255,255,255,.03)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,color:"#f4f4f5"}} formatter={(value)=>money(Number(value))}/><Legend wrapperStyle={{fontSize:12,paddingTop:12}}/><Bar dataKey="realizedProfit" name="Realized Profit" fill="#34d399" radius={[5,5,0,0]}/><Bar dataKey="income" name="DIV, INT & Bonus" fill="#60a5fa" radius={[5,5,0,0]}/></BarChart></ResponsiveContainer></div></CardContent></Card>;
+  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">Realized Income Totals</h2><p className="text-xs text-zinc-500">Total realized profit compared with Dividend, Interest & Bonus for Robinhood and Fidelity Roth IRA.</p></CardHeader><CardContent className="pt-5"><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={10} barCategoryGap="30%" margin={{left:4,right:12,top:28,bottom:0}}><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="account" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v)=>`$${Math.round(v/1000)}k`}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5"}} formatter={(value)=>money(Number(value))}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/><Bar dataKey="realizedProfit" name="Realized Profit" fill="#34d399" radius={[8,8,2,2]} maxBarSize={50}><LabelList dataKey="realizedProfit" position="top" formatter={(value)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={10}/></Bar><Bar dataKey="income" name="DIV, INT & Bonus" fill="#60a5fa" radius={[8,8,2,2]} maxBarSize={50}><LabelList dataKey="income" position="top" formatter={(value)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={10}/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
 }

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { money } from "@/lib/utils";
 import { usePortfolioStore } from "@/store/portfolio-store";
 
+import { toast } from "sonner";
 type TradeType = "stock" | "option";
 
 type RealizedPosition = {
@@ -698,7 +699,7 @@ export default function Page() {
       [targetPortfolioId]: { ...current[targetPortfolioId], [symbol]: editingGroup.comment.trim() },
     }));
     setEditingGroup(null);
-    setMessage(`${symbol} ticker comment was updated.`);
+    toast.success(`${symbol} ticker comment was updated.`);
   }
 
   function removePosition(position: RealizedPosition) {

@@ -33,7 +33,9 @@ function normalizeCashByPortfolio(value?: Partial<Record<DataPortfolioId, number
   return {
     robinhood: typeof value?.robinhood === "number" && Number.isFinite(value.robinhood) ? value.robinhood : initialCashByPortfolio.robinhood,
     "fidelity-401k": typeof value?.["fidelity-401k"] === "number" && Number.isFinite(value["fidelity-401k"]) ? value["fidelity-401k"] : initialCashByPortfolio["fidelity-401k"],
-    "fidelity-roth": typeof value?.["fidelity-roth"] === "number" && Number.isFinite(value["fidelity-roth"]) ? value["fidelity-roth"] : initialCashByPortfolio["fidelity-roth"],
+    // The fidelity-roth storage slot is the UI's Fidelity 401(k) portfolio.
+    // Its displayed/persisted cash is intentionally always zero.
+    "fidelity-roth": 0,
   };
 }
 
@@ -174,7 +176,7 @@ export const usePortfolioStore = create<State>()(
       setCash: (cash) =>
         set((state) => {
           const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
-          const cashByPortfolio = { ...state.cashByPortfolio, [target]: cash };
+          const cashByPortfolio = { ...state.cashByPortfolio, [target]: target === "fidelity-roth" ? 0 : cash };
           return {
             cashByPortfolio,
             ...visibleState(state.activePortfolioId, state.holdingsByPortfolio, state.transactionsByPortfolio, cashByPortfolio),
@@ -321,12 +323,9 @@ export const usePortfolioStore = create<State>()(
         if (assetType === "stock" && action === "sell" && (!current || quantity > current.shares)) {
           return { ok: false, message: current ? `Only ${current.shares} shares are available.` : "No matching open position was found." };
         }
-        // Fidelity 401(k) currently uses a temporary $25,000 purchasing cash pool when
-        // no explicit cash balance has been entered yet. Once a real/remaining cash value
-        // exists, continue using that stored balance normally.
-        const availableTradeCash = target === "fidelity-roth" && state.cashByPortfolio[target] <= 0
-          ? 25000
-          : state.cashByPortfolio[target];
+        // Fidelity 401(k) displays $0 cash, but uses a temporary hidden $25,000
+        // purchase-capacity check so buys are not blocked by the displayed zero balance.
+        const availableTradeCash = target === "fidelity-roth" ? 25000 : state.cashByPortfolio[target];
         if (cashChange < 0 && availableTradeCash < Math.abs(cashChange)) {
           return { ok: false, message: `Insufficient cash. This purchase requires $${Math.abs(cashChange).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.` };
         }
@@ -399,10 +398,10 @@ export const usePortfolioStore = create<State>()(
           }
 
           const holdingsByPortfolio = { ...latest.holdingsByPortfolio, [target]: nextHoldings };
-          const startingTradeCash = target === "fidelity-roth" && latest.cashByPortfolio[target] <= 0
-            ? 25000
-            : latest.cashByPortfolio[target];
-          const cashByPortfolio = { ...latest.cashByPortfolio, [target]: startingTradeCash + cashChange };
+          const cashByPortfolio = {
+            ...latest.cashByPortfolio,
+            [target]: target === "fidelity-roth" ? 0 : latest.cashByPortfolio[target] + cashChange,
+          };
           const transaction: Transaction = {
             id: `trade-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             symbol: holding.symbol,

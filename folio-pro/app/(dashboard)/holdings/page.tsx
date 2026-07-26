@@ -45,9 +45,10 @@ export default function Page() {
   const stocks = filtered.filter((holding) => (holding.assetType ?? "stock") === "stock");
   const isFidelity401k = activePortfolioId === "fidelity-roth";
   const options = isFidelity401k ? [] : filtered.filter((holding) => holding.assetType === "option");
-  const collateral = useMemo(() => optionCollateral(holdings), [holdings]);
-  const availableCash = cash - collateral;
-  const summary = useMemo(() => portfolioSummary(holdings, cash), [holdings, cash]);
+  const displayedCash = isFidelity401k ? 0 : cash;
+  const collateral = useMemo(() => isFidelity401k ? 0 : optionCollateral(holdings), [holdings, isFidelity401k]);
+  const availableCash = displayedCash - collateral;
+  const summary = useMemo(() => portfolioSummary(holdings, displayedCash), [holdings, displayedCash]);
   const positionValue = summary.invested;
   const stockValue = holdings.filter((holding) => (holding.assetType ?? "stock") === "stock").reduce((sum, holding) => sum + holdingMetrics(holding).marketValue, 0);
   const optionValue = holdings.filter((holding) => holding.assetType === "option").reduce((sum, holding) => sum + holdingMetrics(holding).marketValue, 0);
@@ -303,7 +304,7 @@ export default function Page() {
           </div>
           {!isFidelity401k && <div className="grid min-h-[88px] grid-cols-[1fr_auto] items-center gap-6 px-6 py-4">
             <div className="flex items-center gap-3"><div className="rounded-xl bg-emerald-500/10 p-2 text-emerald-500"><Banknote size={18} /></div><div><p className="font-semibold">Cash</p><p className="text-sm text-zinc-500">Available Cash Balance</p></div></div>
-            <div className="flex items-center gap-3"><div className="text-right"><p className="font-semibold">{money(availableCash)}</p><p className="text-sm text-zinc-500">{summary.value ? ((availableCash / summary.value) * 100).toFixed(2) : "0.00"}%</p></div><EditCashDialog /></div>
+            <div className="flex items-center gap-3"><div className="text-right"><p className="font-semibold">{money(availableCash)}</p><p className="text-sm text-zinc-500">{summary.value ? ((availableCash / summary.value) * 100).toFixed(2) : "0.00"}%</p></div>{!isFidelity401k && <EditCashDialog />}</div>
           </div>}
           {!isFidelity401k && <div className="grid min-h-[88px] grid-cols-[1fr_auto] items-center gap-6 px-6 py-4">
             <div className="flex items-center gap-3"><div className="rounded-xl bg-violet-500/10 p-2 text-violet-500"><LockKeyhole size={18} /></div><div><p className="font-semibold">Options Collateral</p><p className="text-sm text-zinc-500">Cash Reserved for Sell Puts</p></div></div>
