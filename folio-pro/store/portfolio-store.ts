@@ -321,7 +321,13 @@ export const usePortfolioStore = create<State>()(
         if (assetType === "stock" && action === "sell" && (!current || quantity > current.shares)) {
           return { ok: false, message: current ? `Only ${current.shares} shares are available.` : "No matching open position was found." };
         }
-        if (cashChange < 0 && state.cashByPortfolio[target] < Math.abs(cashChange)) {
+        // Fidelity 401(k) currently uses a temporary $25,000 purchasing cash pool when
+        // no explicit cash balance has been entered yet. Once a real/remaining cash value
+        // exists, continue using that stored balance normally.
+        const availableTradeCash = target === "fidelity-roth" && state.cashByPortfolio[target] <= 0
+          ? 25000
+          : state.cashByPortfolio[target];
+        if (cashChange < 0 && availableTradeCash < Math.abs(cashChange)) {
           return { ok: false, message: `Insufficient cash. This purchase requires $${Math.abs(cashChange).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.` };
         }
 
@@ -393,7 +399,10 @@ export const usePortfolioStore = create<State>()(
           }
 
           const holdingsByPortfolio = { ...latest.holdingsByPortfolio, [target]: nextHoldings };
-          const cashByPortfolio = { ...latest.cashByPortfolio, [target]: latest.cashByPortfolio[target] + cashChange };
+          const startingTradeCash = target === "fidelity-roth" && latest.cashByPortfolio[target] <= 0
+            ? 25000
+            : latest.cashByPortfolio[target];
+          const cashByPortfolio = { ...latest.cashByPortfolio, [target]: startingTradeCash + cashChange };
           const transaction: Transaction = {
             id: `trade-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             symbol: holding.symbol,
