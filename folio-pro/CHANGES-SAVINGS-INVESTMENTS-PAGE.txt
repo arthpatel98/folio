@@ -1,0 +1,5 @@
+Added a new /savings-investments dashboard page based on Savings & Investments.xlsx.
+- Reuses the existing Card, typography, spacing, borders, colors, dark/light theme, responsive patterns, and Recharts dependency.
+- Adds Investments, Savings & Net Worth, and Expenses views.
+- Displays portfolio account metrics, realized income history, YTD performance, savings, net worth, extras, utilities, and monthly expense-category data from the workbook.
+- Added Savings & Investments to desktop navigation and Wealth to mobile navigation.

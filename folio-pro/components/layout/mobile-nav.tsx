@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BriefcaseBusiness, Coins, LayoutDashboard, Landmark, Target } from "lucide-react";
+import { BriefcaseBusiness, Coins, LayoutDashboard, Landmark, PiggyBank, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -11,6 +11,7 @@ const items = [
   ["/dca", "Simulator", Coins],
   ["/targets", "Targets", Target],
   ["/realized", "Realized", Landmark],
+  ["/savings-investments", "Wealth", PiggyBank],
 ] as const;
 
 export function MobileNav() {
@@ -19,7 +20,7 @@ export function MobileNav() {
   return (
     <nav
       aria-label="Mobile navigation"
-      className="fixed inset-x-2 bottom-2 z-50 grid grid-cols-5 rounded-2xl border border-zinc-200 bg-white/95 px-1 py-1.5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/95 lg:hidden"
+      className="fixed inset-x-2 bottom-2 z-50 grid grid-cols-6 rounded-2xl border border-zinc-200 bg-white/95 px-1 py-1.5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/95 lg:hidden"
       style={{ paddingBottom: "max(0.375rem, env(safe-area-inset-bottom))" }}
     >
       {items.map(([href, label, Icon]) => {
