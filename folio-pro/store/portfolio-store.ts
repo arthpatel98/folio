@@ -102,7 +102,7 @@ function aggregateHoldings(groups: Holding[][]): Holding[] {
   return Array.from(result.values());
 }
 
-function visibleState(
+export function visibleState(
   activePortfolioId: ActivePortfolioId,
   holdingsByPortfolio: Record<DataPortfolioId, Holding[]>,
   transactionsByPortfolio: Record<DataPortfolioId, Transaction[]>,
@@ -270,6 +270,9 @@ export const usePortfolioStore = create<State>()(
       updateStockQuotes: (quotes, portfolioId) =>
         set((state) => {
           const portfolioIds: DataPortfolioId[] = portfolioId ? [portfolioId] : ["robinhood", "fidelity-401k", "fidelity-roth"];
+          // Always preserve untouched portfolio buckets. Previously this reducer started from
+          // an empty object when refreshing a single account, which dropped the other accounts
+          // from live state and made switching appear random/cross-contaminated.
           const holdingsByPortfolio = portfolioIds.reduce<Record<DataPortfolioId, Holding[]>>((result, portfolioId) => {
             result[portfolioId] = state.holdingsByPortfolio[portfolioId].map((holding) => {
               if ((holding.assetType ?? "stock") !== "stock" || holding.symbol.trim().toUpperCase() === "VSTL") return holding;
@@ -283,7 +286,7 @@ export const usePortfolioStore = create<State>()(
               };
             });
             return result;
-          }, {} as Record<DataPortfolioId, Holding[]>);
+          }, { ...state.holdingsByPortfolio });
 
           return {
             holdingsByPortfolio,
@@ -307,7 +310,7 @@ export const usePortfolioStore = create<State>()(
               };
             });
             return result;
-          }, {} as Record<DataPortfolioId, Holding[]>);
+          }, { ...state.holdingsByPortfolio });
           return { holdingsByPortfolio, ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, state.cashByPortfolio) };
         }),
       executeTrade: ({ action, holding, quantity, price, tradeDate, fees = 0 }) => {

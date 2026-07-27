@@ -1,0 +1,6 @@
+Portfolio Switching / Holdings Stability Fix
+
+- Canonical active portfolio now lives only in the Zustand portfolio store. The sidebar/context no longer maintains a second activeId state that can drift during rapid switching.
+- Fixed updateStockQuotes and updateOptionQuotes so refreshing one portfolio preserves the other portfolio buckets instead of replacing holdingsByPortfolio with a one-key object.
+- Holdings page derives its visible holdings/cash directly from canonical holdingsByPortfolio/cashByPortfolio plus activePortfolioId, rather than relying on a duplicated cached visible array.
+- Existing one-time Fidelity Roth IRA / Fidelity 401(k) ID migration remains unchanged and preserved.

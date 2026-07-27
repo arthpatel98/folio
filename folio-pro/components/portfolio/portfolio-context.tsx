@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef } from "react";
 import { usePortfolioStore } from "@/store/portfolio-store";
 import { PORTFOLIO_ID_SCHEMA_VERSION, swapLegacyFidelityId } from "@/lib/portfolio-id-migration";
 
@@ -19,12 +19,13 @@ const ID_MIGRATION_KEY = "folio-portfolio-id-schema-version";
 const Context = createContext<{ activeId: PortfolioId; active: Portfolio; setActiveId: (id: PortfolioId) => void } | null>(null);
 
 export function PortfolioProvider({ children }: { children: React.ReactNode }) {
-  const [activeId, setActiveIdState] = useState<PortfolioId>("robinhood");
+  const activeId = usePortfolioStore((state) => state.activePortfolioId);
   const setStorePortfolio = usePortfolioStore((state) => state.setActivePortfolio);
   const hasHydrated = usePortfolioStore((state) => state.hasHydrated);
+  const initialized = useRef(false);
 
   useEffect(() => {
-    if (!hasHydrated) return;
+    if (!hasHydrated || initialized.current) return;
     const rawSaved = window.localStorage.getItem(STORAGE_KEY) as PortfolioId | null;
     const needsIdMigration = window.localStorage.getItem(ID_MIGRATION_KEY) !== String(PORTFOLIO_ID_SCHEMA_VERSION);
     const saved = (needsIdMigration ? swapLegacyFidelityId(rawSaved) : rawSaved) as PortfolioId | null;
@@ -33,12 +34,13 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       window.localStorage.setItem(ID_MIGRATION_KEY, String(PORTFOLIO_ID_SCHEMA_VERSION));
     }
     const resolved = saved && portfolios.some((portfolio) => portfolio.id === saved) ? saved : "robinhood";
-    setActiveIdState(resolved);
+    initialized.current = true;
     setStorePortfolio(resolved);
   }, [hasHydrated, setStorePortfolio]);
 
   const setActiveId = (id: PortfolioId) => {
-    setActiveIdState(id);
+    // The Zustand portfolio store is the single source of truth. The sidebar/context no
+    // longer keeps a second active-portfolio state that can drift during rapid switching.
     setStorePortfolio(id);
     window.localStorage.setItem(STORAGE_KEY, id);
   };

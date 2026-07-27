@@ -10,7 +10,7 @@ import { holdingMetrics, optionCollateral, portfolioSummary } from "@/lib/calcul
 import { cn, money } from "@/lib/utils";
 import { buildOptionSymbol } from "@/lib/options";
 import { isUsMarketDay, isUsMarketOpen } from "@/lib/market-hours";
-import { usePortfolioStore } from "@/store/portfolio-store";
+import { usePortfolioStore, visibleState } from "@/store/portfolio-store";
 import type { Holding, OptionType } from "@/types/portfolio";
 import * as XLSX from "xlsx";
 
@@ -20,9 +20,18 @@ function MetricBlock({ label, value, subvalue, positive, icon: Icon, tone = "gre
 }
 
 export default function Page() {
-  const holdings = usePortfolioStore((state) => state.holdings);
-  const cash = usePortfolioStore((state) => state.cash);
   const activePortfolioId = usePortfolioStore((state) => state.activePortfolioId);
+  const holdingsByPortfolio = usePortfolioStore((state) => state.holdingsByPortfolio);
+  const transactionsByPortfolio = usePortfolioStore((state) => state.transactionsByPortfolio);
+  const cashByPortfolio = usePortfolioStore((state) => state.cashByPortfolio);
+  // Holdings is derived directly from the canonical per-portfolio buckets instead of the
+  // store's compatibility cache. This makes cross-portfolio leakage impossible on switching.
+  const portfolioView = useMemo(
+    () => visibleState(activePortfolioId, holdingsByPortfolio, transactionsByPortfolio, cashByPortfolio),
+    [activePortfolioId, cashByPortfolio, holdingsByPortfolio, transactionsByPortfolio],
+  );
+  const holdings = portfolioView.holdings;
+  const cash = portfolioView.cash;
   const updateStockQuotes = usePortfolioStore((state) => state.updateStockQuotes);
   const updateOptionQuotes = usePortfolioStore((state) => state.updateOptionQuotes);
   const replaceHoldings = usePortfolioStore((state) => state.replaceHoldings);
