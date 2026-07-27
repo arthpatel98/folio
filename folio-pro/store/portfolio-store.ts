@@ -489,8 +489,10 @@ export const usePortfolioStore = create<State>()(
         const holdingsByPortfolio = normalizeHoldingsByPortfolio(migratedSaved.holdingsByPortfolio ?? legacyHoldings);
         let recoveryVersion = migratedSaved.recoveryVersion ?? "";
 
-        // One-time recovery only. After the marker is persisted, normal user removals remain
-        // removed and are never resurrected by this migration on future reloads.
+        // One-time recovery only. RECOVERY_VERSION v3 specifically repairs Robinhood buckets
+        // that were persisted as empty by the former single-portfolio quote-refresh reducer.
+        // Once this marker is persisted, normal user removals remain removed and are never
+        // resurrected on future reloads.
         if (recoveryVersion !== RECOVERY_VERSION) {
           transactionsByPortfolio["fidelity-roth"] = mergeKnownRothTransactions(transactionsByPortfolio["fidelity-roth"]);
           holdingsByPortfolio.robinhood = restoreKnownRobinhoodIfEmpty(holdingsByPortfolio.robinhood);

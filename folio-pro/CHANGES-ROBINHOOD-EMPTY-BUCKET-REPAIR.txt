@@ -1,0 +1,7 @@
+Robinhood Empty-Bucket Repair
+
+- Bumped the portfolio recovery marker to a new one-time repair version.
+- If Robinhood was accidentally persisted as an empty holdings bucket by the former quote-refresh bug, the known Robinhood recovery snapshot is restored.
+- The repair runs once and then stores the new recovery marker, so future intentional removals are not resurrected.
+- Cloud/local startup merge uses the same repair marker and cannot let an empty cloud bucket erase a non-empty local Robinhood bucket.
+- Canonical Fidelity mapping remains fidelity-401k -> Fidelity 401(k), fidelity-roth -> Fidelity Roth IRA.

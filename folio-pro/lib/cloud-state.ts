@@ -63,6 +63,9 @@ function unionTransactions(primary: Transaction[] = [], secondary: Transaction[]
  * Robinhood bucket. Roth recovery is additive by exact transaction IDs, so future holdings
  * are preserved and duplicate recovered positions are not added.
  */
+// RECOVERY_VERSION gates this repair so a Robinhood bucket accidentally persisted empty by
+// the historical quote-refresh bug is restored once, without resurrecting positions after a
+// legitimate future user removal.
 function applyKnownRecovery(serialized: string): string {
   const parsed = parsePortfolio(serialized);
   if (!parsed) return serialized;
