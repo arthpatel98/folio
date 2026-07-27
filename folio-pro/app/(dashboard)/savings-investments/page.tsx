@@ -32,8 +32,8 @@ function Metric({ label, value, detail, icon: Icon, positive }: { label: string;
 
 const accountPortfolioIds: Record<string, DataPortfolioId> = {
   Robinhood: "robinhood",
-  "Fidelity Roth IRA": "fidelity-401k",
-  "Fidelity 401(k)": "fidelity-roth",
+  "Fidelity Roth IRA": "fidelity-roth",
+  "Fidelity 401(k)": "fidelity-401k",
 };
 
 export default function SavingsInvestmentsPage() {
@@ -94,7 +94,7 @@ export default function SavingsInvestmentsPage() {
     };
     return {
       robinhood: aggregate("robinhood"),
-      roth: aggregate("fidelity-401k"),
+      roth: aggregate("fidelity-roth"),
     };
   }, [transactionsByPortfolio]);
 
@@ -157,9 +157,9 @@ export default function SavingsInvestmentsPage() {
 
   const selectedVisual = activeId === "robinhood"
     ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Profit vs Dividend, Interest & Bonus by quarter" data={robinhoodQuarterly}/>
-    : activeId === "fidelity-401k"
+    : activeId === "fidelity-roth"
       ? <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit vs Dividend, Interest & Bonus by quarter" data={rothQuarterly}/>
-      : activeId === "fidelity-roth"
+      : activeId === "fidelity-401k"
         ? <YtdAccountChart account="Fidelity 401(k)" data={ytdPerformance.find((row) => row.account === "401(k) IRA") ?? { account: "401(k) IRA", "2024": 0, "2025": 0, "2026": 0.205 }} currentYtd={dynamicYtd["Fidelity 401(k)"]}/>
         : <IncomeTotalsChart data={brokerageIncomeTotals}/>;
 

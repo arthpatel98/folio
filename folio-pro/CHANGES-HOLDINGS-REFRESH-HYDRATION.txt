@@ -1,0 +1,8 @@
+Holdings refresh reliability fix
+
+- Added an explicit portfolio-store hydration state.
+- PortfolioProvider now waits until persisted holdings are hydrated before applying the saved active portfolio.
+- CloudSync now waits until local Zustand hydration has completed before reconciling cloud/local data.
+- When cloud data is merged into localStorage, the live Zustand store is immediately rehydrated instead of relying on browser refresh timing.
+- Dashboard page content waits for both local hydration and initial cloud reconciliation before rendering.
+- This prevents Roth IRA / 401(k) Holdings from intermittently rendering an empty startup bucket after refresh.

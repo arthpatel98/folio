@@ -6,6 +6,7 @@ import {
   RECOVERY_VERSION,
   restoreKnownRobinhoodIfEmpty,
 } from "@/lib/recovery-data";
+import { migrateLegacyBucketJson, migrateLegacyPortfolioState, PORTFOLIO_ID_SCHEMA_VERSION, swapLegacyFidelityId } from "@/lib/portfolio-id-migration";
 
 export const CLOUD_KEYS = [
   "folio-pro-portfolio",
@@ -30,7 +31,9 @@ function parsePortfolio(serialized?: string): { root: any; state: PortfolioState
   if (!serialized) return null;
   try {
     const root = JSON.parse(serialized);
-    const state = (root?.state ?? root) as PortfolioState;
+    const rawState = (root?.state ?? root) as PortfolioState;
+    const state = migrateLegacyPortfolioState(rawState as Record<string, any>) as PortfolioState;
+    if (root?.state) root.state = state;
     if (!state || typeof state !== "object") return null;
     return { root, state };
   } catch {
@@ -64,7 +67,7 @@ function applyKnownRecovery(serialized: string): string {
   const parsed = parsePortfolio(serialized);
   if (!parsed) return serialized;
 
-  if (parsed.state.recoveryVersion === RECOVERY_VERSION) return serialized;
+  if (parsed.state.recoveryVersion === RECOVERY_VERSION) return serializePortfolio(parsed);
 
   const holdings = parsed.state.holdingsByPortfolio ?? {};
   const transactions = parsed.state.transactionsByPortfolio ?? {};
@@ -73,22 +76,45 @@ function applyKnownRecovery(serialized: string): string {
   holdings.robinhood = restoreKnownRobinhoodIfEmpty(robinhood);
 
   const rothTransactions = mergeKnownRothTransactions(
-    Array.isArray(transactions["fidelity-401k"]) ? transactions["fidelity-401k"] : [],
+    Array.isArray(transactions["fidelity-roth"]) ? transactions["fidelity-roth"] : [],
   );
-  transactions["fidelity-401k"] = rothTransactions;
-  holdings["fidelity-401k"] = mergeKnownRothRecovery(
-    Array.isArray(holdings["fidelity-401k"]) ? holdings["fidelity-401k"] : [],
+  transactions["fidelity-roth"] = rothTransactions;
+  holdings["fidelity-roth"] = mergeKnownRothRecovery(
+    Array.isArray(holdings["fidelity-roth"]) ? holdings["fidelity-roth"] : [],
     rothTransactions,
   );
 
-  if (!Array.isArray(holdings["fidelity-roth"])) holdings["fidelity-roth"] = [];
+  if (!Array.isArray(holdings["fidelity-401k"])) holdings["fidelity-401k"] = [];
   if (!Array.isArray(transactions.robinhood)) transactions.robinhood = [];
-  if (!Array.isArray(transactions["fidelity-roth"])) transactions["fidelity-roth"] = [];
+  if (!Array.isArray(transactions["fidelity-401k"])) transactions["fidelity-401k"] = [];
 
   parsed.state.holdingsByPortfolio = holdings;
   parsed.state.transactionsByPortfolio = transactions;
   parsed.state.recoveryVersion = RECOVERY_VERSION;
   return serializePortfolio(parsed);
+}
+
+function migratePayloadPortfolioIds(payload: CloudPayload): CloudPayload {
+  const next = { ...payload };
+  const raw = payload["folio-pro-portfolio"];
+  if (!raw) return next;
+  try {
+    const root = JSON.parse(raw);
+    const state = root?.state ?? root;
+    const needsMigration = state?.portfolioIdSchemaVersion !== PORTFOLIO_ID_SCHEMA_VERSION;
+    if (!needsMigration) return next;
+    const migratedState = migrateLegacyPortfolioState(state);
+    if (root?.state) root.state = migratedState;
+    else Object.assign(root, migratedState);
+    next["folio-pro-portfolio"] = JSON.stringify(root);
+    if (next["folio-active-portfolio"]) {
+      next["folio-active-portfolio"] = swapLegacyFidelityId(next["folio-active-portfolio"]) ?? next["folio-active-portfolio"];
+    }
+    if (next["folio-realized-positions-v4"]) {
+      next["folio-realized-positions-v4"] = migrateLegacyBucketJson(next["folio-realized-positions-v4"]) ?? next["folio-realized-positions-v4"];
+    }
+  } catch {}
+  return next;
 }
 
 /**
@@ -97,6 +123,8 @@ function applyKnownRecovery(serialized: string): string {
  * unioned by ID per portfolio so one account cannot overwrite another account's history.
  */
 export function mergeCloudIntoLocalPayload(cloudPayload: CloudPayload, localPayload: CloudPayload): CloudPayload {
+  cloudPayload = migratePayloadPortfolioIds(cloudPayload);
+  localPayload = migratePayloadPortfolioIds(localPayload);
   const merged: CloudPayload = { ...localPayload, ...cloudPayload };
   const cloudPortfolio = parsePortfolio(cloudPayload["folio-pro-portfolio"]);
   const localPortfolio = parsePortfolio(localPayload["folio-pro-portfolio"]);
@@ -149,6 +177,8 @@ export function mergeCloudIntoLocalPayload(cloudPayload: CloudPayload, localPayl
  * a new local transaction in that same portfolio. Other portfolios are merged independently.
  */
 export function mergeLocalIntoCloudPayload(cloudPayload: CloudPayload | null, localPayload: CloudPayload): CloudPayload {
+  localPayload = migratePayloadPortfolioIds(localPayload);
+  cloudPayload = cloudPayload ? migratePayloadPortfolioIds(cloudPayload) : null;
   if (!cloudPayload) {
     return {
       ...localPayload,
@@ -214,11 +244,20 @@ export function readLocalFolioState(): CloudPayload {
 }
 
 export function writeLocalFolioState(payload: CloudPayload) {
+  const canonicalPayload = migratePayloadPortfolioIds(payload);
   for (const key of CLOUD_KEYS) {
-    if (Object.prototype.hasOwnProperty.call(payload, key)) {
-      const value = key === "folio-pro-portfolio" ? applyKnownRecovery(payload[key]) : payload[key];
+    if (Object.prototype.hasOwnProperty.call(canonicalPayload, key)) {
+      const value = key === "folio-pro-portfolio" ? applyKnownRecovery(canonicalPayload[key]) : canonicalPayload[key];
       window.localStorage.setItem(key, value);
     }
+  }
+  // These markers prevent client pages from applying the same legacy ID swap a second time
+  // after cloud hydration has already canonicalized the payload.
+  if (canonicalPayload["folio-active-portfolio"]) {
+    window.localStorage.setItem("folio-portfolio-id-schema-version", String(PORTFOLIO_ID_SCHEMA_VERSION));
+  }
+  if (canonicalPayload["folio-realized-positions-v4"]) {
+    window.localStorage.setItem("folio-realized-portfolio-id-schema-version", String(PORTFOLIO_ID_SCHEMA_VERSION));
   }
 }
 

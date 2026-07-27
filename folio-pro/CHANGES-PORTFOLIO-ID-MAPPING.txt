@@ -1,0 +1,13 @@
+Portfolio ID mapping correction
+
+Canonical mapping:
+- fidelity-401k = Fidelity 401(k)
+- fidelity-roth = Fidelity Roth IRA
+
+Data-safety migration:
+- Existing persisted holdings, transactions, and cash from the historical reversed mapping are swapped exactly once.
+- A schema marker prevents the migration from running twice.
+- Cloud and local portfolio payloads are canonicalized before merge decisions.
+- Active portfolio, Realized P/L buckets, DCA positions, and Target Planner local-storage data are migrated to the canonical account IDs.
+- Roth recovery data now targets fidelity-roth.
+- Fidelity 401(k)-specific Holdings/Target behavior now targets fidelity-401k.

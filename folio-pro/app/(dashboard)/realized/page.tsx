@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { money } from "@/lib/utils";
 import { usePortfolioStore } from "@/store/portfolio-store";
+import { PORTFOLIO_ID_SCHEMA_VERSION, swapLegacyFidelityBuckets } from "@/lib/portfolio-id-migration";
 
 import { toast } from "sonner";
 type TradeType = "stock" | "option";
@@ -69,6 +70,7 @@ const PREVIOUS_STORAGE_KEYS = ["folio-realized-positions-v3", "folio-realized-po
 const REALIZED_SORT_STORAGE_KEY = "folio-realized-sort-preference";
 const REALIZED_IGNORED_TRANSACTION_IDS_KEY = "folio-realized-ignored-transaction-ids-v1";
 const REALIZED_TICKER_COMMENTS_KEY = "folio-realized-ticker-comments-v1";
+const REALIZED_ID_SCHEMA_KEY = "folio-realized-portfolio-id-schema-version";
 type RealizedPortfolioId = "robinhood" | "fidelity-401k" | "fidelity-roth";
 type PositionsByPortfolio = Record<RealizedPortfolioId, RealizedPosition[]>;
 
@@ -299,6 +301,20 @@ export default function Page() {
   };
 
   useEffect(() => {
+    const needsIdMigration = window.localStorage.getItem(REALIZED_ID_SCHEMA_KEY) !== String(PORTFOLIO_ID_SCHEMA_VERSION);
+    if (needsIdMigration) {
+      for (const key of [STORAGE_KEY, REALIZED_IGNORED_TRANSACTION_IDS_KEY, REALIZED_TICKER_COMMENTS_KEY]) {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && !Array.isArray(parsed) && typeof parsed === "object") {
+            window.localStorage.setItem(key, JSON.stringify(swapLegacyFidelityBuckets(parsed)));
+          }
+        } catch {}
+      }
+      window.localStorage.setItem(REALIZED_ID_SCHEMA_KEY, String(PORTFOLIO_ID_SCHEMA_VERSION));
+    }
     const currentSaved = window.localStorage.getItem(STORAGE_KEY);
     const previousSaved = PREVIOUS_STORAGE_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean);
     const saved = currentSaved ?? previousSaved;
@@ -535,7 +551,7 @@ export default function Page() {
       const result = applyImportedUpdates(positions, rows);
       if (!result.matchedRows) throw new Error("No ticker rows with recognized Realized P/L columns were found. Existing data was not changed.");
       setPositions(result.positions);
-      setMessage(`${result.matchedRows} ticker row${result.matchedRows === 1 ? "" : "s"} imported into ${targetPortfolioId === "robinhood" ? "Robinhood" : targetPortfolioId === "fidelity-401k" ? "Fidelity Roth IRA" : "Fidelity 401(k)"}. ${result.addedRows} new ticker${result.addedRows === 1 ? " was" : "s were"} added and ${result.updatedCells} matching column${result.updatedCells === 1 ? " was" : "s were"} updated.`);
+      setMessage(`${result.matchedRows} ticker row${result.matchedRows === 1 ? "" : "s"} imported into ${targetPortfolioId === "robinhood" ? "Robinhood" : targetPortfolioId === "fidelity-401k" ? "Fidelity 401(k)" : "Fidelity Roth IRA"}. ${result.addedRows} new ticker${result.addedRows === 1 ? " was" : "s were"} added and ${result.updatedCells} matching column${result.updatedCells === 1 ? " was" : "s were"} updated.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The file could not be imported.");
     } finally {

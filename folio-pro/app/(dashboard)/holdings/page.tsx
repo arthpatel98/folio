@@ -43,7 +43,7 @@ export default function Page() {
   }, [holdings, normalizedQuery]);
 
   const stocks = filtered.filter((holding) => (holding.assetType ?? "stock") === "stock");
-  const isFidelity401k = activePortfolioId === "fidelity-roth";
+  const isFidelity401k = activePortfolioId === "fidelity-401k";
   const options = isFidelity401k ? [] : filtered.filter((holding) => holding.assetType === "option");
   const displayedCash = isFidelity401k ? 0 : cash;
   const collateral = useMemo(() => isFidelity401k ? 0 : optionCollateral(holdings), [holdings, isFidelity401k]);

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getCloudState, mergeCloudIntoLocalPayload, readLocalFolioState, uploadLocalState, writeLocalFolioState } from "@/lib/cloud-state";
 import { RECOVERY_VERSION } from "@/lib/recovery-data";
+import { usePortfolioStore } from "@/store/portfolio-store";
 
 const RESTORE_MARKER = "folio-cloud-restored-session";
 
@@ -12,17 +13,25 @@ function restoreMarkerForUser(userId: string) {
 }
 
 export function CloudSync() {
+  const hasHydrated = usePortfolioStore((state) => state.hasHydrated);
+  const setCloudReady = usePortfolioStore((state) => state.setCloudReady);
   const lastSnapshot = useRef("");
   const ready = useRef(false);
 
   useEffect(() => {
+    if (!hasHydrated) return;
+
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | undefined;
 
     const start = async () => {
       try {
         const cloud = await getCloudState();
-        if (cancelled || !cloud.user) return;
+        if (cancelled) return;
+        if (!cloud.user) {
+          setCloudReady(true);
+          return;
+        }
 
         if (cloud.payload && sessionStorage.getItem(RESTORE_MARKER) !== restoreMarkerForUser(cloud.user.id)) {
           // Merge each portfolio independently. A valid non-empty cloud portfolio wins, but an
@@ -30,8 +39,9 @@ export function CloudSync() {
           const safeHydratedPayload = mergeCloudIntoLocalPayload(cloud.payload, readLocalFolioState());
           writeLocalFolioState(safeHydratedPayload);
           sessionStorage.setItem(RESTORE_MARKER, restoreMarkerForUser(cloud.user.id));
-          location.reload();
-          return;
+          // Update the already-mounted Zustand store from the canonical localStorage payload.
+          // This removes the refresh-order race that could leave Holdings showing an empty bucket.
+          await usePortfolioStore.persist.rehydrate();
         }
 
         const localState = readLocalFolioState();
@@ -47,6 +57,7 @@ export function CloudSync() {
 
         lastSnapshot.current = JSON.stringify(readLocalFolioState());
         ready.current = Boolean(cloud.payload);
+        setCloudReady(true);
         timer = setInterval(async () => {
           if (!ready.current) return;
           const next = JSON.stringify(readLocalFolioState());
@@ -60,6 +71,7 @@ export function CloudSync() {
         }, 2000);
       } catch (error) {
         console.error("Folio cloud initialization failed", error);
+        if (!cancelled) setCloudReady(true);
       }
     };
 
@@ -78,7 +90,7 @@ export function CloudSync() {
       if (timer) clearInterval(timer);
       listener.subscription.unsubscribe();
     };
-  }, []);
+  }, [hasHydrated, setCloudReady]);
 
   return null;
 }

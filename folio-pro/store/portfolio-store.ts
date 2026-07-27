@@ -7,6 +7,7 @@ import { holdings as robinhoodHoldings, transactions as robinhoodTransactions } 
 import { buildOptionSymbol } from "@/lib/options";
 import { consumeStockLots, recordStockTrade, removeDcaPosition } from "@/lib/dca-storage";
 import { mergeKnownRothRecovery, mergeKnownRothTransactions, RECOVERY_VERSION, restoreKnownRobinhoodIfEmpty } from "@/lib/recovery-data";
+import { migrateLegacyPortfolioState, PORTFOLIO_ID_SCHEMA_VERSION } from "@/lib/portfolio-id-migration";
 
 export type DataPortfolioId = "robinhood" | "fidelity-401k" | "fidelity-roth";
 export type ActivePortfolioId = DataPortfolioId | "all";
@@ -32,10 +33,9 @@ function normalizeTransactionsByPortfolio(value?: Partial<Record<DataPortfolioId
 function normalizeCashByPortfolio(value?: Partial<Record<DataPortfolioId, number>>): Record<DataPortfolioId, number> {
   return {
     robinhood: typeof value?.robinhood === "number" && Number.isFinite(value.robinhood) ? value.robinhood : initialCashByPortfolio.robinhood,
-    "fidelity-401k": typeof value?.["fidelity-401k"] === "number" && Number.isFinite(value["fidelity-401k"]) ? value["fidelity-401k"] : initialCashByPortfolio["fidelity-401k"],
-    // The fidelity-roth storage slot is the UI's Fidelity 401(k) portfolio.
-    // Its displayed/persisted cash is intentionally always zero.
-    "fidelity-roth": 0,
+    // Fidelity 401(k) intentionally displays/persists zero cash.
+    "fidelity-401k": 0,
+    "fidelity-roth": typeof value?.["fidelity-roth"] === "number" && Number.isFinite(value["fidelity-roth"]) ? value["fidelity-roth"] : initialCashByPortfolio["fidelity-roth"],
   };
 }
 
@@ -137,6 +137,11 @@ type State = {
   cash: number;
   range: string;
   recoveryVersion: string;
+  portfolioIdSchemaVersion: number;
+  hasHydrated: boolean;
+  cloudReady: boolean;
+  setHasHydrated: (value: boolean) => void;
+  setCloudReady: (value: boolean) => void;
   setActivePortfolio: (portfolioId: ActivePortfolioId) => void;
   setRange: (range: string) => void;
   setCash: (cash: number) => void;
@@ -162,6 +167,11 @@ export const usePortfolioStore = create<State>()(
       cash: initialCashByPortfolio.robinhood,
       range: "1Y",
       recoveryVersion: "",
+      portfolioIdSchemaVersion: PORTFOLIO_ID_SCHEMA_VERSION,
+      hasHydrated: false,
+      cloudReady: false,
+      setHasHydrated: (hasHydrated) => set({ hasHydrated }),
+      setCloudReady: (cloudReady) => set({ cloudReady }),
       setActivePortfolio: (activePortfolioId) =>
         set((state) => ({
           activePortfolioId,
@@ -176,7 +186,7 @@ export const usePortfolioStore = create<State>()(
       setCash: (cash) =>
         set((state) => {
           const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
-          const cashByPortfolio = { ...state.cashByPortfolio, [target]: target === "fidelity-roth" ? 0 : cash };
+          const cashByPortfolio = { ...state.cashByPortfolio, [target]: target === "fidelity-401k" ? 0 : cash };
           return {
             cashByPortfolio,
             ...visibleState(state.activePortfolioId, state.holdingsByPortfolio, state.transactionsByPortfolio, cashByPortfolio),
@@ -325,7 +335,7 @@ export const usePortfolioStore = create<State>()(
         }
         // Fidelity 401(k) displays $0 cash, but uses a temporary hidden $25,000
         // purchase-capacity check so buys are not blocked by the displayed zero balance.
-        const availableTradeCash = target === "fidelity-roth" ? 25000 : state.cashByPortfolio[target];
+        const availableTradeCash = target === "fidelity-401k" ? 25000 : state.cashByPortfolio[target];
         if (cashChange < 0 && availableTradeCash < Math.abs(cashChange)) {
           return { ok: false, message: `Insufficient cash. This purchase requires $${Math.abs(cashChange).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.` };
         }
@@ -400,7 +410,7 @@ export const usePortfolioStore = create<State>()(
           const holdingsByPortfolio = { ...latest.holdingsByPortfolio, [target]: nextHoldings };
           const cashByPortfolio = {
             ...latest.cashByPortfolio,
-            [target]: target === "fidelity-roth" ? 0 : latest.cashByPortfolio[target] + cashChange,
+            [target]: target === "fidelity-401k" ? 0 : latest.cashByPortfolio[target] + cashChange,
           };
           const transaction: Transaction = {
             id: `trade-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -443,7 +453,14 @@ export const usePortfolioStore = create<State>()(
         cashByPortfolio: state.cashByPortfolio,
         range: state.range,
         recoveryVersion: state.recoveryVersion,
+        portfolioIdSchemaVersion: state.portfolioIdSchemaVersion,
       }),
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.error("Folio portfolio hydration failed", error);
+        }
+        state?.setHasHydrated(true);
+      },
       merge: (persisted, current) => {
         const saved = persisted as Partial<State> & {
           holdings?: Holding[];
@@ -460,32 +477,38 @@ export const usePortfolioStore = create<State>()(
         const legacyTransactions = saved.transactions ? { robinhood: saved.transactions } : undefined;
         const legacyCash = typeof saved.cash === "number" ? { robinhood: saved.cash } : undefined;
 
-        const transactionsByPortfolio = normalizeTransactionsByPortfolio(saved.transactionsByPortfolio ?? legacyTransactions);
-        const holdingsByPortfolio = normalizeHoldingsByPortfolio(saved.holdingsByPortfolio ?? legacyHoldings);
-        let recoveryVersion = saved.recoveryVersion ?? "";
+        const migratedSaved = migrateLegacyPortfolioState(saved as Record<string, any>) as Partial<State> & {
+          holdings?: Holding[];
+          transactions?: Transaction[];
+          cash?: number;
+        };
+        const transactionsByPortfolio = normalizeTransactionsByPortfolio(migratedSaved.transactionsByPortfolio ?? legacyTransactions);
+        const holdingsByPortfolio = normalizeHoldingsByPortfolio(migratedSaved.holdingsByPortfolio ?? legacyHoldings);
+        let recoveryVersion = migratedSaved.recoveryVersion ?? "";
 
         // One-time recovery only. After the marker is persisted, normal user removals remain
         // removed and are never resurrected by this migration on future reloads.
         if (recoveryVersion !== RECOVERY_VERSION) {
-          transactionsByPortfolio["fidelity-401k"] = mergeKnownRothTransactions(transactionsByPortfolio["fidelity-401k"]);
+          transactionsByPortfolio["fidelity-roth"] = mergeKnownRothTransactions(transactionsByPortfolio["fidelity-roth"]);
           holdingsByPortfolio.robinhood = restoreKnownRobinhoodIfEmpty(holdingsByPortfolio.robinhood);
-          holdingsByPortfolio["fidelity-401k"] = mergeKnownRothRecovery(
-            holdingsByPortfolio["fidelity-401k"],
-            transactionsByPortfolio["fidelity-401k"],
+          holdingsByPortfolio["fidelity-roth"] = mergeKnownRothRecovery(
+            holdingsByPortfolio["fidelity-roth"],
+            transactionsByPortfolio["fidelity-roth"],
           );
           recoveryVersion = RECOVERY_VERSION;
         }
-        const cashByPortfolio = normalizeCashByPortfolio(saved.cashByPortfolio ?? legacyCash);
+        const cashByPortfolio = normalizeCashByPortfolio(migratedSaved.cashByPortfolio ?? legacyCash);
         const activePortfolioId = current.activePortfolioId;
 
         return {
           ...current,
-          ...saved,
+          ...migratedSaved,
           activePortfolioId,
           holdingsByPortfolio,
           transactionsByPortfolio,
           cashByPortfolio,
           recoveryVersion,
+          portfolioIdSchemaVersion: PORTFOLIO_ID_SCHEMA_VERSION,
           ...visibleState(activePortfolioId, holdingsByPortfolio, transactionsByPortfolio, cashByPortfolio),
         };
       },

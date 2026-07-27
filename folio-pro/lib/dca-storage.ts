@@ -3,10 +3,12 @@
 import { builtInDcaPositions, DcaPosition } from "@/lib/dca-data";
 import type { DataPortfolioId } from "@/store/portfolio-store";
 import type { AssetType } from "@/types/portfolio";
+import { PORTFOLIO_ID_SCHEMA_VERSION, swapLegacyFidelityId } from "@/lib/portfolio-id-migration";
 
 export const DCA_STORAGE_KEY = "folio-dca-positions-v3";
 export const DCA_UPDATED_EVENT = "folio-dca-updated";
 export const DCA_SELECTED_POSITION_KEY = "folio-dca-selected-position";
+const DCA_ID_SCHEMA_KEY = "folio-dca-portfolio-id-schema-version";
 
 const clone = (position: DcaPosition): DcaPosition => ({ ...position, lots: position.lots.map((lot) => ({ ...lot })) });
 
@@ -20,7 +22,7 @@ function normalizeDate(value: string) {
 function migrate(positions: DcaPosition[]) {
   return positions.map((position) => ({
     ...position,
-    portfolioId: position.id === "ONDS-B" ? "fidelity-roth" : (position.portfolioId ?? "robinhood"),
+    portfolioId: position.id === "ONDS-B" ? "fidelity-401k" : (position.portfolioId ?? "robinhood"),
     lots: position.lots.map((lot) => ({ ...lot, date: normalizeDate(lot.date) })),
   }));
 }
@@ -29,15 +31,26 @@ export function loadDcaPositions(): DcaPosition[] {
   if (typeof window === "undefined") return builtInDcaPositions.map(clone);
   try {
     const saved = window.localStorage.getItem(DCA_STORAGE_KEY);
-    if (saved) return migrate(JSON.parse(saved) as DcaPosition[]);
+    if (saved) {
+      let parsed = JSON.parse(saved) as DcaPosition[];
+      if (window.localStorage.getItem(DCA_ID_SCHEMA_KEY) !== String(PORTFOLIO_ID_SCHEMA_VERSION)) {
+        parsed = parsed.map((position) => ({ ...position, portfolioId: swapLegacyFidelityId(position.portfolioId) }));
+        window.localStorage.setItem(DCA_ID_SCHEMA_KEY, String(PORTFOLIO_ID_SCHEMA_VERSION));
+        window.localStorage.setItem(DCA_STORAGE_KEY, JSON.stringify(parsed));
+      }
+      return migrate(parsed);
+    }
     const previous = window.localStorage.getItem("folio-dca-positions-v2");
     if (previous) {
       const migrated = migrate(JSON.parse(previous) as DcaPosition[]);
-      saveDcaPositions(migrated, false);
-      return migrated;
+      const remapped = migrated.map((position) => ({ ...position, portfolioId: swapLegacyFidelityId(position.portfolioId) }));
+      window.localStorage.setItem(DCA_ID_SCHEMA_KEY, String(PORTFOLIO_ID_SCHEMA_VERSION));
+      saveDcaPositions(remapped, false);
+      return remapped;
     }
   } catch {}
   const initial = builtInDcaPositions.map(clone);
+  window.localStorage.setItem(DCA_ID_SCHEMA_KEY, String(PORTFOLIO_ID_SCHEMA_VERSION));
   saveDcaPositions(initial, false);
   return initial;
 }

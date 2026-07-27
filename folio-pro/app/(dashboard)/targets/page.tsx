@@ -8,6 +8,7 @@ import { usePortfolioStore } from "@/store/portfolio-store";
 import { cn } from "@/lib/utils";
 import { optionCollateral } from "@/lib/calculations/portfolio";
 import type { Holding } from "@/types/portfolio";
+import { PORTFOLIO_ID_SCHEMA_VERSION } from "@/lib/portfolio-id-migration";
 
 const ROBINHOOD_TARGETS = [
   ["Aug 31, 2026",112000,0],["Oct 31, 2026",129360,17360],["Dec 31, 2026",149411,20051],["Feb 28, 2027",172569,23159],["Apr 30, 2027",199318,26748],["Jun 30, 2027",230212,30894],["Aug 31, 2027",265895,35683],["Oct 31, 2027",307109,41214],["Dec 31, 2027",354710,47602],
@@ -31,10 +32,10 @@ export default function TargetPlannerPage(){
   const holdingsByPortfolio=usePortfolioStore(s=>s.holdingsByPortfolio);
   const cashByPortfolio=usePortfolioStore(s=>s.cashByPortfolio);
   const isRobinhood=activeId==="robinhood";
-  const isRoth=activeId==="fidelity-401k";
-  const is401k=activeId==="fidelity-roth";
-  const selectedHoldings=useMemo(()=>isRobinhood?holdingsByPortfolio.robinhood:isRoth?holdingsByPortfolio["fidelity-401k"]:[...holdingsByPortfolio.robinhood,...holdingsByPortfolio["fidelity-401k"]],[holdingsByPortfolio,isRobinhood,isRoth]);
-  const selectedCash=isRobinhood?cashByPortfolio.robinhood:isRoth?cashByPortfolio["fidelity-401k"]:cashByPortfolio.robinhood+cashByPortfolio["fidelity-401k"];
+  const isRoth=activeId==="fidelity-roth";
+  const is401k=activeId==="fidelity-401k";
+  const selectedHoldings=useMemo(()=>isRobinhood?holdingsByPortfolio.robinhood:isRoth?holdingsByPortfolio["fidelity-roth"]:[...holdingsByPortfolio.robinhood,...holdingsByPortfolio["fidelity-roth"]],[holdingsByPortfolio,isRobinhood,isRoth]);
+  const selectedCash=isRobinhood?cashByPortfolio.robinhood:isRoth?cashByPortfolio["fidelity-roth"]:cashByPortfolio.robinhood+cashByPortfolio["fidelity-roth"];
   const rows=useMemo(()=>isRobinhood?ROBINHOOD_TARGETS.map(([date,target,increase])=>({date,target,increase})):isRoth?ROTH_TARGETS.map(([date,target,increase])=>({date,target,increase})):ROBINHOOD_TARGETS.map(([date,target,increase],i)=>({date,target:target+ROTH_TARGETS[i][1],increase:increase+ROTH_TARGETS[i][2]})),[isRobinhood,isRoth]);
   const [selectedDate,setSelectedDate]=useState<string>(rows[0].date);
   const [scenarios,setScenarios]=useState<Record<string,Scenario>>({});
@@ -47,6 +48,19 @@ export default function TargetPlannerPage(){
   const pathwayStorageKey=`folio-target-pathway:${activeId}`;
   const pathwaySelectionStorageKey=`folio-target-pathway-selection:${activeId}`;
   const targetDateStorageKey=`folio-target-date:${activeId}`;
+  useEffect(()=>{
+    const migrationKey="folio-target-portfolio-id-schema-version";
+    if(localStorage.getItem(migrationKey)!==String(PORTFOLIO_ID_SCHEMA_VERSION)){
+      const prefixes=["folio-target-scenarios:","folio-target-pathway:","folio-target-pathway-selection:","folio-target-date:","folio-target-date-default-aug-2026:"];
+      prefixes.forEach((prefix)=>{
+        const old401k=localStorage.getItem(`${prefix}fidelity-401k`);
+        const oldRoth=localStorage.getItem(`${prefix}fidelity-roth`);
+        if(oldRoth!==null)localStorage.setItem(`${prefix}fidelity-401k`,oldRoth);else localStorage.removeItem(`${prefix}fidelity-401k`);
+        if(old401k!==null)localStorage.setItem(`${prefix}fidelity-roth`,old401k);else localStorage.removeItem(`${prefix}fidelity-roth`);
+      });
+      localStorage.setItem(migrationKey,String(PORTFOLIO_ID_SCHEMA_VERSION));
+    }
+  },[]);
   useEffect(()=>{
     const raw=localStorage.getItem(storageKey);
     setScenarios(raw?JSON.parse(raw):{});
