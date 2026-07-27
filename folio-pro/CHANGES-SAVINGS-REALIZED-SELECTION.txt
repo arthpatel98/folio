@@ -1,0 +1,15 @@
+Updated July 27, 2026
+
+- Realized P/L: option removals/transaction-backed option closes no longer auto-populate the Comment field.
+- Savings & Investments: YTD Performance no longer uses a forced minimum table width or horizontal scrolling.
+- Removed the YTD subtitle: "Annual performance by account; 2026 uses the live formulas above."
+- YTD labels now display "Fidelity Roth IRA" and "Fidelity 401(k)".
+- Savings & Investments now renders one chart/visual based on the globally selected portfolio:
+  - Robinhood: Robinhood Quarterly Data
+  - Fidelity Roth IRA: Fidelity Roth IRA Quarterly Data
+  - Fidelity 401(k): Fidelity 401(k) YTD Performance
+  - All Portfolios: Realized Income Totals
+
+Validation note:
+- Source-level assertions passed for all requested changes.
+- Full npm typecheck/build could not be completed because the sandbox package registry/cache could not provide required dependencies.

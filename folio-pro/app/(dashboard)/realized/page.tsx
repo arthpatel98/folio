@@ -426,7 +426,7 @@ export default function Page() {
           match.amount += transaction.realizedGain;
           if (!match.manualFees) match.fees += Number(transaction.fees) || 0;
           if (!match.lastSellDate || new Date(sellDate).getTime() >= new Date(match.lastSellDate).getTime()) match.lastSellDate = sellDate;
-          match.comment = optionDetails ?? "";
+          // Transaction-backed option closes should not create or overwrite Realized P/L comments.
           match.sourceTransaction = true;
           match.sourceTransactionIds = [...(match.sourceTransactionIds ?? []), transaction.id];
         } else {
@@ -435,7 +435,7 @@ export default function Page() {
             optionDetails,
             sourceTransaction: true,
             sourceTransactionIds: [transaction.id],
-            comment: optionDetails ?? "",
+            comment: "",
           });
         }
         alreadyApplied.add(transaction.id);
