@@ -9,7 +9,6 @@ import { cn, money } from "@/lib/utils";
 import {
   investmentAccounts,
   quarterlyIncome,
-  yearlyIncome,
   ytdPerformance,
 } from "@/lib/savings-investments-data";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
@@ -144,6 +143,45 @@ export default function SavingsInvestmentsPage() {
     };
   }, [robinhoodQuarterly, rothQuarterly]);
 
+  const selectedRealizedIncome = activeId === "robinhood"
+    ? incomeTotals.robinhood.realizedProfit + incomeTotals.robinhood.income
+    : activeId === "fidelity-roth"
+      ? incomeTotals.roth.realizedProfit + incomeTotals.roth.income
+      : activeId === "fidelity-401k"
+        ? 0
+        : incomeTotals.total;
+
+  const yearlyRealizedIncome = useMemo(() => {
+    const summarize = (rows: { period: string; realizedProfit: number; income: number }[]) => {
+      const totals = new Map<string, { realizedProfit: number; income: number }>();
+      rows.forEach((row) => {
+        const yearMatch = row.period.match(/(20\d{2})/);
+        if (!yearMatch) return;
+        const year = yearMatch[1];
+        const current = totals.get(year) ?? { realizedProfit: 0, income: 0 };
+        current.realizedProfit += row.realizedProfit;
+        current.income += row.income;
+        totals.set(year, current);
+      });
+      return ["2024", "2025", "2026"].map((year) => {
+        const values = totals.get(year) ?? { realizedProfit: 0, income: 0 };
+        return {
+          year: year === "2026" ? "2026 YTD" : year,
+          realizedProfit: values.realizedProfit,
+          income: values.income,
+          total: values.realizedProfit + values.income,
+        };
+      });
+    };
+
+    if (activeId === "robinhood") return summarize(robinhoodQuarterly);
+    if (activeId === "fidelity-roth") return summarize(rothQuarterly);
+    if (activeId === "fidelity-401k") return summarize([]);
+    return summarize([...robinhoodQuarterly, ...rothQuarterly]);
+  }, [activeId, robinhoodQuarterly, rothQuarterly]);
+
+  const selected2026Income = yearlyRealizedIncome.find((row) => row.year === "2026 YTD")?.total ?? 0;
+
   const brokerageIncomeTotals = useMemo(() => [
     { account: "Robinhood", realizedProfit: incomeTotals.robinhood.realizedProfit, income: incomeTotals.robinhood.income },
     { account: "Fidelity Roth IRA", realizedProfit: incomeTotals.roth.realizedProfit, income: incomeTotals.roth.income },
@@ -156,25 +194,23 @@ export default function SavingsInvestmentsPage() {
   }), [accounts]);
 
   const selectedVisual = activeId === "robinhood"
-    ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Profit vs Dividend, Interest & Bonus by quarter" data={robinhoodQuarterly}/>
+    ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={robinhoodQuarterly}/>
     : activeId === "fidelity-roth"
-      ? <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit vs Dividend, Interest & Bonus by quarter" data={rothQuarterly}/>
+      ? <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={rothQuarterly}/>
       : activeId === "fidelity-401k"
         ? <YtdAccountChart account="Fidelity 401(k)" data={ytdPerformance.find((row) => row.account === "401(k) IRA") ?? { account: "401(k) IRA", "2024": 0, "2025": 0, "2026": 0.205 }} currentYtd={dynamicYtd["Fidelity 401(k)"]}/>
         : <IncomeTotalsChart data={brokerageIncomeTotals}/>;
 
   return <div className="space-y-6">
     <div>
-      <p className="text-sm text-zinc-500">Savings & Investments workbook</p>
-      <h1 className="mt-1 text-3xl font-semibold tracking-tight">Savings & Investments</h1>
-      <p className="mt-2 max-w-2xl text-sm text-zinc-500">Investment performance using your workbook investment basis and live portfolio values from Holdings.</p>
+      <h1 className="text-3xl font-semibold tracking-tight">Savings & Investments</h1>
     </div>
 
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <Metric label="Total Investments" value={money(totals.current)} detail={`${money(totals.invested)} invested`} icon={WalletCards}/>
-      <Metric label="Total Gain" value={money(totals.gain)} detail={`${pct(totals.totalReturn)} total return`} icon={TrendingUp} positive={totals.gain >= 0}/>
-      <Metric label="Realized Income" value={money(incomeTotals.total)} detail="Realized profit + DIV / INT / extras" icon={Landmark} positive={incomeTotals.total >= 0}/>
-      <Metric label="2026 Realized YTD" value={money(yearlyIncome[2].total)} detail="Through July 2026" icon={BarChart3} positive={yearlyIncome[2].total >= 0}/>
+      <Metric label="Total Investments" value={money(totals.current)} detail={`${money(totals.invested)} Invested`} icon={WalletCards}/>
+      <Metric label="Total Gain" value={money(totals.gain)} detail={`${pct(totals.totalReturn)} Total Return`} icon={TrendingUp} positive={totals.gain >= 0}/>
+      <Metric label="Realized Income" value={money(selectedRealizedIncome)} icon={Landmark} positive={selectedRealizedIncome >= 0}/>
+      <Metric label="2026 Realized YTD" value={money(selected2026Income)} detail="Through July 2026" icon={BarChart3} positive={selected2026Income >= 0}/>
     </div>
 
     <div className="grid gap-4 xl:grid-cols-3">
@@ -198,13 +234,46 @@ export default function SavingsInvestmentsPage() {
     {selectedVisual}
 
     <div className="grid gap-6 xl:grid-cols-[1fr_1.4fr]">
-      <Card><CardHeader><h2 className="font-medium">Yearly Realized Income</h2><p className="text-xs text-zinc-500">Workbook yearly totals</p></CardHeader><CardContent className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">{yearlyIncome.map((row)=><div key={row.year} className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/[.025]"><div className="text-xs text-zinc-500">{row.year}</div><div className="mt-1 text-xl font-semibold">{money(row.total)}</div></div>)}</CardContent></Card>
+      <Card>
+        <CardHeader><h2 className="font-medium">Yearly Realized Income</h2></CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+          {yearlyRealizedIncome.map((row)=><div key={row.year} className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/[.025]">
+            <div className="text-xs text-zinc-500">{row.year}</div>
+            <div className={cn("mt-1 text-xl font-semibold", row.total >= 0 ? "positive" : "negative")}>{money(row.total)}</div>
+            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-zinc-200/70 pt-3 text-xs dark:border-white/[.06]">
+              <div><div className="text-zinc-500">Profit</div><div className={cn("mt-1 font-medium", row.realizedProfit >= 0 ? "positive" : "negative")}>{money(row.realizedProfit)}</div></div>
+              <div><div className="text-zinc-500">Dividend, Interest & Bonus</div><div className={cn("mt-1 font-medium", row.income >= 0 ? "positive" : "negative")}>{money(row.income)}</div></div>
+            </div>
+          </div>)}
+        </CardContent>
+      </Card>
 
-      <Card className="overflow-hidden"><CardHeader><h2 className="font-medium">YTD Performance</h2></CardHeader><CardContent><table className="w-full table-fixed text-xs sm:text-sm"><thead><tr className="border-b border-zinc-200 text-left text-[11px] text-zinc-500 sm:text-xs dark:border-white/10"><th className="w-[43%] pb-3 pr-2 font-medium sm:pr-4">Account</th><th className="w-[19%] pb-3 px-1 text-right font-medium sm:px-2">2024</th><th className="w-[19%] pb-3 px-1 text-right font-medium sm:px-2">2025</th><th className="w-[19%] pb-3 pl-1 text-right font-medium sm:pl-2">2026</th></tr></thead><tbody>{ytdPerformance.map(row=>{
-        const displayAccount = row.account === "Roth IRA" ? "Fidelity Roth IRA" : row.account === "401(k) IRA" ? "Fidelity 401(k)" : row.account;
-        const currentYtd = dynamicYtd[displayAccount as keyof typeof dynamicYtd];
-        return <tr key={row.account} className="border-b border-zinc-200/70 last:border-0 dark:border-white/[.06]"><td className="break-words py-4 pr-2 font-medium leading-tight sm:pr-4">{displayAccount}</td><td className={cn("px-1 py-4 text-right font-medium tabular-nums sm:px-2",row["2024"]>=0?"positive":"negative")}>{pct(row["2024"])}</td><td className={cn("px-1 py-4 text-right font-medium tabular-nums sm:px-2",row["2025"]>=0?"positive":"negative")}>{pct(row["2025"])}</td><td className={cn("pl-1 py-4 text-right font-medium tabular-nums sm:pl-2",currentYtd>=0?"positive":"negative")}>{pct(currentYtd)}</td></tr>;
-      })}</tbody></table></CardContent></Card>
+      <Card className="overflow-hidden">
+        <CardHeader><h2 className="font-medium">YTD Performance</h2></CardHeader>
+        <CardContent>
+          <div className="overflow-hidden rounded-xl border border-dashed border-zinc-300/80 dark:border-white/15">
+            <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
+              <thead><tr className="text-left text-[11px] text-zinc-500 sm:text-xs">
+                <th className="w-[43%] border-b border-r border-dashed border-zinc-300/70 p-3 font-medium dark:border-white/10">Account</th>
+                <th className="w-[19%] border-b border-r border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">2024</th>
+                <th className="w-[19%] border-b border-r border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">2025</th>
+                <th className="w-[19%] border-b border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">2026</th>
+              </tr></thead>
+              <tbody>{ytdPerformance.map((row, index)=>{
+                const displayAccount = row.account === "Roth IRA" ? "Fidelity Roth IRA" : row.account === "401(k) IRA" ? "Fidelity 401(k)" : row.account;
+                const currentYtd = dynamicYtd[displayAccount as keyof typeof dynamicYtd];
+                const rowBorder = index < ytdPerformance.length - 1 ? "border-b border-dashed border-zinc-300/60 dark:border-white/10" : "";
+                return <tr key={row.account}>
+                  <td className={cn("break-words border-r border-dashed border-zinc-300/60 p-3 font-medium leading-tight dark:border-white/10", rowBorder)}>{displayAccount}</td>
+                  <td className={cn("border-r border-dashed border-zinc-300/60 p-3 text-right font-medium tabular-nums dark:border-white/10", rowBorder,row["2024"]>=0?"positive":"negative")}>{pct(row["2024"])}</td>
+                  <td className={cn("border-r border-dashed border-zinc-300/60 p-3 text-right font-medium tabular-nums dark:border-white/10", rowBorder,row["2025"]>=0?"positive":"negative")}>{pct(row["2025"])}</td>
+                  <td className={cn("p-3 text-right font-medium tabular-nums", rowBorder,currentYtd>=0?"positive":"negative")}>{pct(currentYtd)}</td>
+                </tr>;
+              })}</tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   </div>;
 }
@@ -226,9 +295,9 @@ function YtdAccountChart({ account, data, currentYtd }: { account: string; data:
     { year: "2025", performance: data["2025"] * 100 },
     { year: "2026", performance: currentYtd * 100 },
   ];
-  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">{account} YTD Performance</h2><p className="text-xs text-zinc-500">Annual portfolio performance</p></CardHeader><CardContent className="pt-5"><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={chartData} margin={{left:4,right:12,top:28,bottom:0}}><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="year" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`${v.toFixed(0)}%`}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5"}} formatter={(value: any)=>`${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}%`}/><Bar dataKey="performance" name="YTD Performance" fill="#34d399" radius={[8,8,2,2]} maxBarSize={72}><LabelList dataKey="performance" position="top" formatter={(value: any)=>`${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(1)}%`} fill="#a1a1aa" fontSize={10}/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
+  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">{account} YTD Performance</h2><p className="text-xs text-zinc-500">Annual Portfolio Performance</p></CardHeader><CardContent className="pt-5"><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={chartData} margin={{left:4,right:12,top:28,bottom:0}}><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="year" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`${v.toFixed(0)}%`}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5"}} formatter={(value: any)=>`${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}%`}/><Bar dataKey="performance" name="YTD Performance" fill="#34d399" radius={[8,8,2,2]} maxBarSize={72}><LabelList dataKey="performance" position="top" formatter={(value: any)=>`${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(1)}%`} fill="#a1a1aa" fontSize={10}/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
 }
 
 function IncomeTotalsChart({ data }: { data: { account: string; realizedProfit: number; income: number }[] }) {
-  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">Realized Income Totals</h2><p className="text-xs text-zinc-500">Total realized profit compared with Dividend, Interest & Bonus for Robinhood and Fidelity Roth IRA.</p></CardHeader><CardContent className="pt-5"><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={10} barCategoryGap="30%" margin={{left:4,right:12,top:28,bottom:0}}><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="account" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`$${Math.round(v/1000)}k`}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5"}} formatter={(value: any)=>money(Number(value))}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/><Bar dataKey="realizedProfit" name="Realized Profit" fill="#34d399" radius={[8,8,2,2]} maxBarSize={50}><LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={10}/></Bar><Bar dataKey="income" name="DIV, INT & Bonus" fill="#60a5fa" radius={[8,8,2,2]} maxBarSize={50}><LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={10}/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
+  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">Realized Income Totals</h2><p className="text-xs text-zinc-500">Total Realized Profit Compared With Dividend, Interest & Bonus For Robinhood And Fidelity Roth IRA.</p></CardHeader><CardContent className="pt-5"><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={10} barCategoryGap="30%" margin={{left:4,right:12,top:28,bottom:0}}><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="account" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`$${Math.round(v/1000)}k`}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5"}} formatter={(value: any)=>money(Number(value))}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/><Bar dataKey="realizedProfit" name="Realized Profit" fill="#34d399" radius={[8,8,2,2]} maxBarSize={50}><LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={10}/></Bar><Bar dataKey="income" name="Dividend, Interest & Bonus" fill="#60a5fa" radius={[8,8,2,2]} maxBarSize={50}><LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={10}/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
 }

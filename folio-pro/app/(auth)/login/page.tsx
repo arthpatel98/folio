@@ -26,7 +26,7 @@ export default function Page() {
     const { error } = await createClient().auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/settings`,
+        redirectTo: `${window.location.origin}/auth/callback?next=/holdings`,
       },
     });
 
@@ -47,7 +47,7 @@ export default function Page() {
     const { error } = await createClient().auth.signInWithOtp({
       email: email.trim(),
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/settings`,
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/holdings`,
       },
     });
 

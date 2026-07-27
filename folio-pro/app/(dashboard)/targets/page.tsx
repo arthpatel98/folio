@@ -212,7 +212,7 @@ export default function TargetPlannerPage(){
             <h2 className="font-semibold">Your Path To The Target</h2>
             <p className="mt-1 text-sm text-zinc-500">Only Positions You Select In Build Your Price-Target Scenarios Are Included. Selected Positions With A Your Target Price Are Combined Into One Cash Pool, Then Reinvested Step By Step Before The Target Date.</p>
           </div>
-          <button onClick={addReinvestmentStep} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-medium text-emerald-300 transition hover:bg-emerald-400/15"><Plus size={16}/>Add Reinvestment Step</button>
+          <button onClick={addReinvestmentStep} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-medium text-emerald-300 transition hover:bg-emerald-400/15"><Plus size={16} className="shrink-0"/>Add Investment Step</button>
         </div>
       </div>
 

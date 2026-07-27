@@ -191,6 +191,27 @@ export default function DcaPage() {
     } catch {}
   };
 
+  const liveHoldingForPosition = (position: DcaPosition) => {
+    const candidatePortfolioIds = position.portfolioId
+      ? [position.portfolioId]
+      : activeId === "all"
+        ? (["robinhood", "fidelity-401k", "fidelity-roth"] as const)
+        : [activeId];
+    const isOptionPosition = position.id.includes("-option-") || /\b(?:call|put)\b/i.test(position.label ?? "");
+    const label = position.label ?? "";
+    for (const portfolioId of candidatePortfolioIds) {
+      const holding = holdingsByPortfolio[portfolioId].find((item) => {
+        if (item.symbol.trim().toUpperCase() !== position.symbol.trim().toUpperCase()) return false;
+        if (!isOptionPosition) return (item.assetType ?? "stock") === "stock";
+        return item.assetType === "option"
+          && (!item.optionStrike || label.includes(`$${item.optionStrike}`))
+          && (!item.optionExpiry || label.includes(formatDate(item.optionExpiry)));
+      });
+      if (holding) return holding;
+    }
+    return undefined;
+  };
+
   const applyPosition = (position?: DcaPosition) => {
     if (!position) {
       positionIdRef.current = "";
@@ -205,7 +226,14 @@ export default function DcaPage() {
     positionIdentityRef.current = positionIdentity(copy);
     setPositionId(copy.id);
     setLots(sortLots(copy.lots));
-    setSellPrice(copy.sellPrice === "" ? "" : String(copy.sellPrice));
+    // Potential Sell Price always starts from the latest Holdings price whenever a
+    // position is selected/reselected. A temporary manual scenario price is not reused
+    // after switching to another ticker and coming back.
+    const liveHolding = liveHoldingForPosition(copy);
+    const livePrice = liveHolding?.currentPrice;
+    setSellPrice(Number.isFinite(livePrice) && (livePrice ?? 0) > 0
+      ? Number(livePrice).toFixed(2)
+      : copy.sellPrice === "" ? "" : String(copy.sellPrice));
     saveSelection(copy.id);
   };
 

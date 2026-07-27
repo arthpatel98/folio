@@ -1,0 +1,33 @@
+Folio Pro — Option Cash, Position Simulator, Savings, and Login Update
+
+1. Short option removal cash rules
+- Sell Call removal: stored cash decreases by absolute contracts × current/close price.
+- Sell Put removal: stored cash decreases by absolute contracts × current/close price.
+- Sell Put collateral remains derived from open positions. Removing/closing contracts therefore releases strike × contracts × 100 into displayed available cash automatically, without double-adding collateral to stored cash.
+- Applied to both direct Holdings removal and transaction-style option close paths.
+
+2. Position Simulator
+- Potential Sell Price resets to the latest current Holdings price whenever a position/ticker is selected or reselected.
+- A manual scenario price remains usable while staying on that position, but does not persist after switching away and back.
+
+3. Target Planner
+- Renamed button to Add Investment Step.
+- Added no-wrap/shrink safeguards so button text stays aligned.
+
+4. Savings & Investments
+- Added light dashed gridlines to YTD Performance.
+- Yearly Realized Income now follows the selected portfolio (Robinhood, Fidelity Roth IRA, Fidelity 401(k), or All Portfolios).
+- Added yearly breakdowns for Profit and Dividend, Interest & Bonus.
+- 2026 Realized YTD and Realized Income summary values now follow the selected portfolio for consistency.
+- Removed Workbook yearly totals.
+- Removed Realized profit + DIV / INT / extras.
+- Removed Savings & Investments workbook.
+- Removed Investment performance using your workbook investment basis and live portfolio values from Holdings.
+- Updated visible Savings page wording to Title Case, including Profit Vs Dividend, Interest & Bonus By Quarter.
+
+5. Authentication and homepage routing
+- Signed-out visits to the app redirect to /login.
+- Signed-in visits to /login redirect to /holdings.
+- Root / redirects authenticated users to /holdings.
+- Google and email sign-in callbacks now land on /holdings.
+- Supabase session cookies continue to persist, so users remain signed in until they explicitly sign out or the session becomes invalid.
