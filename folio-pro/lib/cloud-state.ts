@@ -8,13 +8,37 @@ import {
 } from "@/lib/recovery-data";
 import { migrateLegacyBucketJson, migrateLegacyPortfolioState, PORTFOLIO_ID_SCHEMA_VERSION, swapLegacyFidelityId } from "@/lib/portfolio-id-migration";
 
+export const CLOUD_AUTHORITY_VERSION = "1";
+export const CLOUD_AUTHORITY_VERSION_KEY = "folio-cloud-authority-version";
+
 export const CLOUD_KEYS = [
+  CLOUD_AUTHORITY_VERSION_KEY,
   "folio-pro-portfolio",
   "folio-realized-positions-v4",
+  "folio-realized-ignored-transaction-ids-v1",
+  "folio-realized-ticker-comments-v1",
+  "folio-realized-sort-preference",
   "folio-active-portfolio",
   "folio-column-widths-stock",
   "folio-column-widths-option",
+  "folio-holdings-sort-stock",
+  "folio-holdings-sort-option",
+  "folio-dca-positions-v3",
+  "folio-dca-selected-position",
+  "folio-dca-purchase-lot-column-widths",
 ] as const;
+
+const CLOUD_KEY_PREFIXES = [
+  "folio-target-scenarios:",
+  "folio-target-pathway:",
+  "folio-target-pathway-selection:",
+  "folio-target-date:",
+  "folio-target-date-default-aug-2026:",
+] as const;
+
+function isManagedCloudKey(key: string) {
+  return (CLOUD_KEYS as readonly string[]).includes(key) || CLOUD_KEY_PREFIXES.some((prefix) => key.startsWith(prefix));
+}
 
 export type CloudPayload = Record<string, string>;
 const PORTFOLIO_IDS = ["robinhood", "fidelity-401k", "fidelity-roth"] as const;
@@ -115,6 +139,33 @@ function migratePayloadPortfolioIds(payload: CloudPayload): CloudPayload {
     }
     if (next["folio-realized-positions-v4"]) {
       next["folio-realized-positions-v4"] = migrateLegacyBucketJson(next["folio-realized-positions-v4"]) ?? next["folio-realized-positions-v4"];
+    }
+    if (next["folio-realized-ignored-transaction-ids-v1"]) {
+      next["folio-realized-ignored-transaction-ids-v1"] = migrateLegacyBucketJson(next["folio-realized-ignored-transaction-ids-v1"]) ?? next["folio-realized-ignored-transaction-ids-v1"];
+    }
+    if (next["folio-realized-ticker-comments-v1"]) {
+      next["folio-realized-ticker-comments-v1"] = migrateLegacyBucketJson(next["folio-realized-ticker-comments-v1"]) ?? next["folio-realized-ticker-comments-v1"];
+    }
+    if (next["folio-dca-positions-v3"]) {
+      try {
+        const positions = JSON.parse(next["folio-dca-positions-v3"]);
+        if (Array.isArray(positions)) {
+          next["folio-dca-positions-v3"] = JSON.stringify(positions.map((position) => ({
+            ...position,
+            portfolioId: swapLegacyFidelityId(position?.portfolioId),
+          })));
+        }
+      } catch {}
+    }
+    for (const prefix of CLOUD_KEY_PREFIXES) {
+      const old401kKey = `${prefix}fidelity-401k`;
+      const oldRothKey = `${prefix}fidelity-roth`;
+      const old401k = next[old401kKey];
+      const oldRoth = next[oldRothKey];
+      if (oldRoth !== undefined) next[old401kKey] = oldRoth;
+      else delete next[old401kKey];
+      if (old401k !== undefined) next[oldRothKey] = old401k;
+      else delete next[oldRothKey];
     }
   } catch {}
   return next;
@@ -239,29 +290,92 @@ export function mergeLocalIntoCloudPayload(cloudPayload: CloudPayload | null, lo
 
 export function readLocalFolioState(): CloudPayload {
   const payload: CloudPayload = {};
-  for (const key of CLOUD_KEYS) {
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index);
+    if (!key || !isManagedCloudKey(key)) continue;
     const value = window.localStorage.getItem(key);
     if (value !== null) payload[key] = value;
   }
-  return payload;
+  return migratePayloadPortfolioIds(payload);
 }
 
-export function writeLocalFolioState(payload: CloudPayload) {
+/**
+ * Writes the canonical cloud snapshot into the browser cache. When authoritative=true,
+ * managed browser keys that do not exist in Supabase are removed so stale data from another
+ * device/account cannot survive a login and later sync back to the cloud.
+ */
+export function writeLocalFolioState(payload: CloudPayload, options?: { authoritative?: boolean }) {
   const canonicalPayload = migratePayloadPortfolioIds(payload);
-  for (const key of CLOUD_KEYS) {
-    if (Object.prototype.hasOwnProperty.call(canonicalPayload, key)) {
-      const value = key === "folio-pro-portfolio" ? applyKnownRecovery(canonicalPayload[key]) : canonicalPayload[key];
-      window.localStorage.setItem(key, value);
+
+  if (options?.authoritative) {
+    const keysToRemove: string[] = [];
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (key && isManagedCloudKey(key) && !Object.prototype.hasOwnProperty.call(canonicalPayload, key)) {
+        keysToRemove.push(key);
+      }
     }
+    keysToRemove.forEach((key) => window.localStorage.removeItem(key));
   }
-  // These markers prevent client pages from applying the same legacy ID swap a second time
-  // after cloud hydration has already canonicalized the payload.
-  if (canonicalPayload["folio-active-portfolio"]) {
-    window.localStorage.setItem("folio-portfolio-id-schema-version", String(PORTFOLIO_ID_SCHEMA_VERSION));
+
+  for (const [key, rawValue] of Object.entries(canonicalPayload)) {
+    if (!isManagedCloudKey(key)) continue;
+    const value = key === "folio-pro-portfolio" ? applyKnownRecovery(rawValue) : rawValue;
+    window.localStorage.setItem(key, value);
   }
-  if (canonicalPayload["folio-realized-positions-v4"]) {
-    window.localStorage.setItem("folio-realized-portfolio-id-schema-version", String(PORTFOLIO_ID_SCHEMA_VERSION));
-  }
+
+  // The cloud payload is canonical, so local page-level migrations must never swap it again.
+  window.localStorage.setItem("folio-portfolio-id-schema-version", String(PORTFOLIO_ID_SCHEMA_VERSION));
+  window.localStorage.setItem("folio-realized-portfolio-id-schema-version", String(PORTFOLIO_ID_SCHEMA_VERSION));
+  window.localStorage.setItem("folio-dca-portfolio-id-schema-version", String(PORTFOLIO_ID_SCHEMA_VERSION));
+  window.localStorage.setItem("folio-target-portfolio-id-schema-version", String(PORTFOLIO_ID_SCHEMA_VERSION));
+}
+
+export function summarizeCloudPayload(payload: CloudPayload | null) {
+  const parsed = parsePortfolio(payload?.["folio-pro-portfolio"]);
+  const holdings = parsed?.state.holdingsByPortfolio ?? {};
+  const transactions = parsed?.state.transactionsByPortfolio ?? {};
+  const count = (value: unknown) => Array.isArray(value) ? value.length : 0;
+  return {
+    robinhoodHoldings: count(holdings.robinhood),
+    rothHoldings: count(holdings["fidelity-roth"]),
+    k401Holdings: count(holdings["fidelity-401k"]),
+    robinhoodTransactions: count(transactions.robinhood),
+    rothTransactions: count(transactions["fidelity-roth"]),
+    k401Transactions: count(transactions["fidelity-401k"]),
+  };
+}
+
+export function hasCloudAuthorityMarker(payload: CloudPayload | null) {
+  return payload?.[CLOUD_AUTHORITY_VERSION_KEY] === CLOUD_AUTHORITY_VERSION;
+}
+
+/**
+ * One-time upgrade path from the older browser-first sync model. Existing local edits win
+ * when present, but the defensive merge prevents an unexplained empty browser bucket from
+ * erasing populated cloud holdings. After this succeeds, future startups are cloud-first.
+ */
+export async function establishCloudAuthority(existingCloud: CloudPayload | null) {
+  const supabase = createClient();
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+  if (!user) throw new Error("Sign in before establishing cloud portfolio data.");
+
+  const localPayload = readLocalFolioState();
+  const payload = existingCloud
+    ? mergeLocalIntoCloudPayload(existingCloud, localPayload)
+    : { ...localPayload };
+  payload[CLOUD_AUTHORITY_VERSION_KEY] = CLOUD_AUTHORITY_VERSION;
+
+  const { error } = await supabase.from("user_app_state").upsert({
+    user_id: user.id,
+    payload,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id" });
+  if (error) throw error;
+
+  writeLocalFolioState(payload, { authoritative: true });
+  return payload;
 }
 
 export async function getCloudState() {
@@ -297,16 +411,17 @@ export async function uploadLocalState(options?: { force?: boolean }) {
   }, { onConflict: "user_id" });
   if (error) throw error;
 
-  // Keep browser state aligned with any cloud holdings that were protected from an accidental wipe.
-  if (!options?.force) writeLocalFolioState(payload);
+  // The returned payload is the cloud-accepted canonical snapshot. Keep the cache identical.
+  writeLocalFolioState(payload, { authoritative: true });
   return payload;
 }
 
+/** Cloud is authoritative: restoring replaces managed browser data instead of merging it. */
 export async function downloadCloudState() {
   const state = await getCloudState();
   if (!state.user) throw new Error("Sign in before downloading cloud data.");
   if (!state.payload) throw new Error("No cloud portfolio backup exists yet.");
-  const merged = mergeCloudIntoLocalPayload(state.payload, readLocalFolioState());
-  writeLocalFolioState(merged);
-  return merged;
+  const canonical = migratePayloadPortfolioIds(state.payload);
+  writeLocalFolioState(canonical, { authoritative: true });
+  return canonical;
 }

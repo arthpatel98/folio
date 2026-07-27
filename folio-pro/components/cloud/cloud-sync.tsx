@@ -2,21 +2,31 @@
 
 import { useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { getCloudState, mergeCloudIntoLocalPayload, readLocalFolioState, uploadLocalState, writeLocalFolioState } from "@/lib/cloud-state";
-import { RECOVERY_VERSION } from "@/lib/recovery-data";
+import { establishCloudAuthority, getCloudState, hasCloudAuthorityMarker, readLocalFolioState, uploadLocalState, writeLocalFolioState } from "@/lib/cloud-state";
 import { usePortfolioStore } from "@/store/portfolio-store";
 
-const RESTORE_MARKER = "folio-cloud-restored-session";
+const SYNC_INTERVAL_MS = 2000;
+const REMOTE_CHECK_EVERY_TICKS = 5;
 
-function restoreMarkerForUser(userId: string) {
-  return `${userId}:${RECOVERY_VERSION}`;
-}
-
+/**
+ * Supabase is the source of truth whenever a user is signed in.
+ *
+ * Startup:
+ * - Existing cloud row -> replace all managed browser cache keys with cloud state.
+ * - No cloud row -> seed Supabase once from the current browser, then cloud becomes authoritative.
+ *
+ * Runtime:
+ * - Local edits are pushed only after authoritative startup has completed.
+ * - When this device has no pending local edit, a newer remote snapshot is pulled down.
+ */
 export function CloudSync() {
   const hasHydrated = usePortfolioStore((state) => state.hasHydrated);
   const setCloudReady = usePortfolioStore((state) => state.setCloudReady);
   const lastSnapshot = useRef("");
+  const lastCloudUpdatedAt = useRef<string | null>(null);
   const ready = useRef(false);
+  const inFlight = useRef(false);
+  const tick = useRef(0);
 
   useEffect(() => {
     if (!hasHydrated) return;
@@ -24,64 +34,93 @@ export function CloudSync() {
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | undefined;
 
+    const rehydrateLiveStore = async () => {
+      await usePortfolioStore.persist.rehydrate();
+    };
+
+    const applyAuthoritativeCloud = async (payload: Record<string, string>) => {
+      writeLocalFolioState(payload, { authoritative: true });
+      await rehydrateLiveStore();
+      lastSnapshot.current = JSON.stringify(readLocalFolioState());
+    };
+
     const start = async () => {
       try {
         const cloud = await getCloudState();
         if (cancelled) return;
+
         if (!cloud.user) {
+          ready.current = false;
           setCloudReady(true);
           return;
         }
 
-        if (cloud.payload && sessionStorage.getItem(RESTORE_MARKER) !== restoreMarkerForUser(cloud.user.id)) {
-          // Merge each portfolio independently. A valid non-empty cloud portfolio wins, but an
-          // empty cloud bucket can never erase non-empty browser data during startup.
-          const safeHydratedPayload = mergeCloudIntoLocalPayload(cloud.payload, readLocalFolioState());
-          writeLocalFolioState(safeHydratedPayload);
-          sessionStorage.setItem(RESTORE_MARKER, restoreMarkerForUser(cloud.user.id));
-          // Update the already-mounted Zustand store from the canonical localStorage payload.
-          // This removes the refresh-order race that could leave Holdings showing an empty bucket.
-          await usePortfolioStore.persist.rehydrate();
+        if (cloud.payload && hasCloudAuthorityMarker(cloud.payload)) {
+          // After the one-time upgrade, an existing Supabase snapshot always wins startup.
+          await applyAuthoritativeCloud(cloud.payload);
+          lastCloudUpdatedAt.current = cloud.updatedAt;
+        } else {
+          // One-time safe cutover from the older browser-first model (or first cloud creation).
+          // This preserves current data before making Supabase authoritative permanently.
+          await establishCloudAuthority(cloud.payload);
+          await rehydrateLiveStore();
+          lastSnapshot.current = JSON.stringify(readLocalFolioState());
+          const refreshed = await getCloudState();
+          lastCloudUpdatedAt.current = refreshed.updatedAt;
         }
 
-        const localState = readLocalFolioState();
-        // After hydration/recovery, reconcile a safe local repair back to the cloud immediately.
-        // The upload function itself blocks unexplained non-empty -> empty portfolio overwrites.
-        if (cloud.payload && JSON.stringify(localState) !== JSON.stringify(cloud.payload)) {
-          try {
-            await uploadLocalState();
-          } catch (error) {
-            console.error("Folio initial cloud reconciliation was blocked or failed", error);
-          }
-        }
-
-        lastSnapshot.current = JSON.stringify(readLocalFolioState());
-        ready.current = Boolean(cloud.payload);
+        ready.current = true;
         setCloudReady(true);
+
         timer = setInterval(async () => {
-          if (!ready.current) return;
-          const next = JSON.stringify(readLocalFolioState());
-          if (next === lastSnapshot.current) return;
+          if (!ready.current || inFlight.current || cancelled) return;
+          inFlight.current = true;
           try {
-            await uploadLocalState();
-            lastSnapshot.current = next;
+            const localPayload = readLocalFolioState();
+            const nextSnapshot = JSON.stringify(localPayload);
+
+            if (nextSnapshot !== lastSnapshot.current) {
+              // A local user edit occurred after authoritative startup. Push it safely.
+              const uploaded = await uploadLocalState();
+              lastSnapshot.current = JSON.stringify(readLocalFolioState());
+              const refreshed = await getCloudState();
+              lastCloudUpdatedAt.current = refreshed.updatedAt;
+              return;
+            }
+
+            tick.current += 1;
+            if (tick.current % REMOTE_CHECK_EVERY_TICKS !== 0) return;
+
+            // No pending local change: check whether another device wrote a newer cloud snapshot.
+            const remote = await getCloudState();
+            if (!remote.user || !remote.payload) return;
+            // A user edit may have happened while the remote request was in flight. Never pull
+            // over it; the next interval will push that local edit first.
+            if (JSON.stringify(readLocalFolioState()) !== lastSnapshot.current) return;
+            if (remote.updatedAt && remote.updatedAt !== lastCloudUpdatedAt.current) {
+              await applyAuthoritativeCloud(remote.payload);
+              lastCloudUpdatedAt.current = remote.updatedAt;
+            }
           } catch (error) {
             console.error("Folio cloud sync failed", error);
+          } finally {
+            inFlight.current = false;
           }
-        }, 2000);
+        }, SYNC_INTERVAL_MS);
       } catch (error) {
         console.error("Folio cloud initialization failed", error);
         if (!cancelled) setCloudReady(true);
       }
     };
 
-    start();
+    void start();
+
     const supabase = createClient();
     const { data: listener } = supabase.auth.onAuthStateChange((event) => {
-      // Supabase emits INITIAL_SESSION and TOKEN_REFRESHED during normal page loads.
-      // Clearing the marker for those events causes an infinite refresh loop.
       if (event === "SIGNED_OUT") {
-        sessionStorage.removeItem(RESTORE_MARKER);
+        ready.current = false;
+        lastSnapshot.current = "";
+        lastCloudUpdatedAt.current = null;
       }
     });
 

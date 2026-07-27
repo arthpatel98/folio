@@ -1,0 +1,14 @@
+SUPABASE SOURCE-OF-TRUTH UPDATE
+
+- Supabase user_app_state is authoritative after the one-time cloud-authority cutover.
+- Existing users get a protected one-time cutover that safely reconciles older cloud/local state before authority is enabled.
+- Existing authoritative cloud data replaces managed browser cache on login/refresh; stale browser data is not merged into it.
+- Accounts with no cloud row are automatically seeded from the current browser once.
+- Browser localStorage remains a cache/offline working copy, not the startup authority while signed in.
+- Local edits auto-save to Supabase after authoritative startup completes.
+- Newer remote updates are pulled when this device has no pending local edit.
+- A remote pull rechecks for local edits after the network request before applying the cloud snapshot.
+- Cloud payload now includes Holdings/transactions/cash, Realized P/L data/comments/ignored IDs, DCA/Position Simulator data, Target Planner data, active portfolio, and relevant table preferences.
+- Authoritative cloud writes remove stale managed browser keys missing from the cloud snapshot.
+- Settings now shows cloud holding counts and last saved time, labels Supabase as the source of truth, and keeps manual browser->cloud replacement as an explicitly dangerous emergency action.
+- Canonical portfolio IDs remain fidelity-401k = Fidelity 401(k), fidelity-roth = Fidelity Roth IRA.
