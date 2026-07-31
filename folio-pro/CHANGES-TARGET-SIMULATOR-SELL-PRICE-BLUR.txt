@@ -1,0 +1,8 @@
+Target Simulator Potential Sell Price Fix
+
+- Fixed the Potential Sell Price field resetting to the current market price when clicking elsewhere on the page.
+- The temporary scenario sell price now remains in local page state after blur.
+- Switching to another position and returning still initializes the field from the latest Holdings price, as intended.
+
+Validation note:
+- Production build could not be run because the available npm registry did not contain the locked zustand@5.0.14 package, leaving Next.js dependencies unavailable.
