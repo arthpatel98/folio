@@ -89,6 +89,7 @@ export function EditHoldingDialog({ holding }: { holding: Holding }) {
     const currentPrice = Number(form.currentPrice);
     const previousClose = Number(form.previousClose);
     const isOption = form.assetType === "option";
+    const usesLiveVstlPrice = !isOption && symbol === "VSTL";
 
     if (!symbol || !company) {
       setError("Ticker symbol and company name are required.");
@@ -121,8 +122,8 @@ export function EditHoldingDialog({ holding }: { holding: Holding }) {
       company,
       shares,
       averageCost,
-      currentPrice,
-      previousClose,
+      currentPrice: usesLiveVstlPrice ? holding.currentPrice : currentPrice,
+      previousClose: usesLiveVstlPrice ? holding.previousClose : previousClose,
       dividendYield: holding.dividendYield ?? 0,
       sector: form.sector,
       optionType: isOption ? form.optionType as any : undefined,
@@ -187,10 +188,11 @@ export function EditHoldingDialog({ holding }: { holding: Holding }) {
               <Input className="number-input-no-spinner" type="number" min="0" step="any" value={form.averageCost} onChange={(e) => update("averageCost", e.target.value)} />
             </Field>
             <Field label="Current Price">
-              <Input className="number-input-no-spinner" type="number" min="0" step="any" value={form.currentPrice} onChange={(e) => update("currentPrice", e.target.value)} />
+              <Input className="number-input-no-spinner" type="number" min="0" step="any" value={form.currentPrice} onChange={(e) => update("currentPrice", e.target.value)} disabled={form.assetType === "stock" && form.symbol.trim().toUpperCase() === "VSTL"} />
+              {form.assetType === "stock" && form.symbol.trim().toUpperCase() === "VSTL" && <span className="block text-xs font-normal text-zinc-500">Updated From Live Quotes When Prices Refresh</span>}
             </Field>
             <Field label="Previous Close">
-              <Input className="number-input-no-spinner" type="number" min="0" step="any" value={form.previousClose} onChange={(e) => update("previousClose", e.target.value)} />
+              <Input className="number-input-no-spinner" type="number" min="0" step="any" value={form.previousClose} onChange={(e) => update("previousClose", e.target.value)} disabled={form.assetType === "stock" && form.symbol.trim().toUpperCase() === "VSTL"} />
             </Field>
             {form.assetType === "option" && <>
               <Field label="Option Type"><select value={form.optionType} onChange={(e) => update("optionType", e.target.value)} className="flex h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-100 outline-none"><option value="buy-call" className="bg-white dark:bg-zinc-950">Buy Call</option><option value="sell-call" className="bg-white dark:bg-zinc-950">Sell Call</option><option value="buy-put" className="bg-white dark:bg-zinc-950">Buy Put</option><option value="sell-put" className="bg-white dark:bg-zinc-950">Sell Put</option></select></Field>

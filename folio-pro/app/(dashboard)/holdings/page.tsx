@@ -70,7 +70,6 @@ export default function Page() {
     Array.from(new Set(holdings
       .filter((holding) => (holding.assetType ?? "stock") === "stock")
       .map((holding) => holding.symbol.trim().toUpperCase())
-      .filter((symbol) => symbol !== "VSTL")
       .filter(Boolean)))
       .sort(),
   [holdings]);

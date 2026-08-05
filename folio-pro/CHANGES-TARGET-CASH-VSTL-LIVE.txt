@@ -1,0 +1,11 @@
+Target Planner and VSTL live price update
+
+- Projected Profit now includes Profit From All Steps.
+- Projected Portfolio and Remaining Gap now use the combined scenario and step profit.
+- Available Cash dynamically subtracts Buy More x New Buy Price (and x100 for options).
+- Starting Cash Pool uses remaining available cash after planned purchases.
+- VSTL is now included in stock price refresh requests and quote-store updates.
+- VSTL Current Price and Previous Close are read-only in Edit Position and are refreshed from live quotes.
+
+Validation note:
+- Production build could not run in this environment because dependencies are not installed (`next: not found`) and external npm registry access is unavailable.

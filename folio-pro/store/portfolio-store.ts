@@ -286,7 +286,7 @@ export const usePortfolioStore = create<State>()(
           // from live state and made switching appear random/cross-contaminated.
           const holdingsByPortfolio = portfolioIds.reduce<Record<DataPortfolioId, Holding[]>>((result, portfolioId) => {
             result[portfolioId] = state.holdingsByPortfolio[portfolioId].map((holding) => {
-              if ((holding.assetType ?? "stock") !== "stock" || holding.symbol.trim().toUpperCase() === "VSTL") return holding;
+              if ((holding.assetType ?? "stock") !== "stock") return holding;
               const quote = quotes[holding.symbol.trim().toUpperCase()];
               if (!quote || !Number.isFinite(quote.currentPrice) || quote.currentPrice <= 0) return holding;
               return {

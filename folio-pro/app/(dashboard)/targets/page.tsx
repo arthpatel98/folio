@@ -132,16 +132,17 @@ export default function TargetPlannerPage(){
     return {h,k,s,multiplier,ownedQty,totalQty,existingProfit,addedProfit,totalProfit,investment,expectedReturn,gapCovered,desiredProfit,qtyForGoal,extraForGoal};
   });
   const scenarioProfit=finite(details.reduce((s,d)=>s+finite(d.totalProfit),0));
+  const totalInvestment=finite(details.reduce((s,d)=>s+finite(d.investment),0));
+  const remainingAvailableCash=Math.max(0,finite(availableCash-totalInvestment));
   const scenarioProjectedValue=finite(currentValue+scenarioProfit);
   const scenarioRemainingGap=Math.max(0,finite(selectedTarget.target-scenarioProjectedValue));
   const remainingGapBeforeSteps=scenarioRemainingGap;
-  const totalInvestment=finite(details.reduce((s,d)=>s+finite(d.investment),0));
   const sellSelections=details.filter(d=>d.s.targetPrice>0&&selectedPathPositions[d.k]).map(d=>({
     ...d,
     saleProceeds:d.s.targetPrice*d.ownedQty*d.multiplier,
   }));
   const totalSaleProceeds=sellSelections.reduce((sum,d)=>sum+d.saleProceeds,0);
-  const startingCashPool=finite(totalSaleProceeds+availableCash);
+  const startingCashPool=finite(totalSaleProceeds+remainingAvailableCash);
   const pathwayValues=reinvestmentSteps.reduce<Array<ReinvestmentStep & {startValue:number;endValue:number}>>((steps,step)=>{
     const startValue=steps.length?steps[steps.length-1].endValue:startingCashPool;
     const returnPct=typeof step.returnPct==="number"&&Number.isFinite(step.returnPct)?step.returnPct:0;
@@ -151,9 +152,9 @@ export default function TargetPlannerPage(){
   },[]);
   const pathwayFinalValue=pathwayValues.length?pathwayValues[pathwayValues.length-1].endValue:startingCashPool;
   const pathwayProfit=pathwayValues.length?pathwayFinalValue-startingCashPool:0;
-  const totalProjectedProfit=scenarioProfit;
-  const projectedValue=scenarioProjectedValue;
-  const pathwayGap=Math.max(0,finite(remainingGapBeforeSteps-pathwayProfit));
+  const totalProjectedProfit=finite(scenarioProfit+pathwayProfit);
+  const projectedValue=finite(currentValue+totalProjectedProfit);
+  const pathwayGap=Math.max(0,finite(selectedTarget.target-projectedValue));
   const remainingGap=pathwayGap;
   const targetDateValue=new Date(selectedTarget.date);
   const update=(k:string,patch:Partial<Scenario>,h:Holding)=>setScenarios(prev=>{ const base=prev[k] ?? { targetPrice:0, newBuyPrice:0, additionalQty:0, gapShare:25 }; return {...prev,[k]:{...base,...patch}}; });
@@ -188,7 +189,7 @@ export default function TargetPlannerPage(){
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="font-semibold">Build Your Price-Target Scenarios</h2>
-            <p className="mt-2 text-xs text-zinc-500">Available Cash: <span className="font-medium text-white">{money2(availableCash)}</span></p>
+            <p className="mt-2 text-xs text-zinc-500">Available Cash: <span className="font-medium text-white">{money2(remainingAvailableCash)}</span></p>
             {cashError&&<p className="mt-2 text-sm font-medium text-red-400">{cashError}</p>}
           </div>
           <label className="w-full lg:w-auto lg:min-w-56">
@@ -232,7 +233,7 @@ export default function TargetPlannerPage(){
           <div className="overflow-x-auto pb-2">
             <div className="flex min-w-max items-stretch gap-3">
               <div className="flex w-72 shrink-0 flex-col justify-between rounded-2xl border border-amber-400/25 bg-gradient-to-b from-amber-400/[.08] to-transparent p-4 shadow-[0_0_28px_rgba(251,191,36,0.05)]">
-                <div><div className="text-xs font-semibold tracking-wider text-amber-300">STARTING CASH POOL</div><div className="mt-3 text-2xl font-semibold">{money2(startingCashPool)}</div><div className="mt-2 text-xs leading-5 text-zinc-500">{money2(availableCash)} Available Cash + {money2(totalSaleProceeds)} From {sellSelections.length} Selected Position{sellSelections.length===1?"":"s"}</div></div>
+                <div><div className="text-xs font-semibold tracking-wider text-amber-300">STARTING CASH POOL</div><div className="mt-3 text-2xl font-semibold">{money2(startingCashPool)}</div><div className="mt-2 text-xs leading-5 text-zinc-500">{money2(remainingAvailableCash)} Available Cash + {money2(totalSaleProceeds)} From {sellSelections.length} Selected Position{sellSelections.length===1?"":"s"}</div></div>
                 <div className="mt-5 text-xs text-zinc-500">Target Completion: <span className="text-zinc-300">{selectedTarget.date}</span></div>
               </div>
 
