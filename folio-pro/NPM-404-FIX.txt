@@ -1,0 +1,16 @@
+NPM 404 FIX
+===========
+
+The install failure was caused by an environment-level internal npm mirror returning 404 for valid public packages such as zustand and zod.
+
+This project now includes a project-level .npmrc that:
+- uses the official npm registry: https://registry.npmjs.org/
+- prevents npm from replacing package-lock registry URLs with an internal mirror
+- disables audit and funding network calls during installation
+
+Run:
+  npm ci
+  npm run typecheck
+  npm run build
+
+No application source code or dependency versions were changed for this fix.

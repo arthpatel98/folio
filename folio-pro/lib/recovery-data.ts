@@ -1,6 +1,6 @@
 import type { Holding, Transaction } from "@/types/portfolio";
 
-export const RECOVERY_VERSION = "2026-07-27-robinhood-empty-bucket-repair-v3";
+export const RECOVERY_VERSION = "2026-08-05-remove-closed-robn-call-v4";
 
 export const KNOWN_ROBINHOOD_HOLDINGS: Holding[] = [
   {
@@ -26,20 +26,6 @@ export const KNOWN_ROBINHOOD_HOLDINGS: Holding[] = [
     "dividendYield": 0,
     "sector": "Crypto / Bitcoin",
     "optionType": "sell-put",
-    "optionExpiry": "2026-08-21",
-    "updatedAt": "2026-07-18T03:02:03.486Z"
-  },
-  {
-    "assetType": "option",
-    "symbol": "ROBN",
-    "company": "ROBN $41 Call Exp Aug 21, 2026",
-    "shares": -1,
-    "averageCost": 2.05,
-    "currentPrice": 1.9,
-    "previousClose": 5.5,
-    "dividendYield": 0,
-    "sector": "Crypto / Bitcoin",
-    "optionType": "sell-call",
     "optionExpiry": "2026-08-21",
     "updatedAt": "2026-07-18T03:02:03.486Z"
   },

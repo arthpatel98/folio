@@ -34,7 +34,19 @@ const lotDateValue = (value: string) => {
 };
 const sortLots = (lots: DcaLot[]) => lots.slice().sort((a, b) => lotDateValue(a.date) - lotDateValue(b.date));
 const clonePosition = (position: DcaPosition): DcaPosition => ({ ...position, lots: position.lots.map((lot) => ({ ...lot })) });
-const positionIdentity = (position: DcaPosition) => `${position.portfolioId ?? "all"}:${position.symbol.trim().toUpperCase()}:${(position.label ?? position.symbol).replace(/\s+/g, " ").trim().toUpperCase()}`;
+const normalizedOptionLabel = (value: string) => value.replace(/\s+/g, " ").trim().toUpperCase();
+const positionIdentity = (position: DcaPosition) => `${position.portfolioId ?? "all"}:${position.symbol.trim().toUpperCase()}:${normalizedOptionLabel(position.label ?? position.symbol)}:${position.id}`;
+const optionHoldingIdentity = (holding: { optionSymbol?: string; optionType?: string; optionStrike?: number; optionExpiry?: string; company: string }) =>
+  holding.optionSymbol?.trim().toUpperCase()
+  || [holding.optionType ?? "option", holding.optionStrike ?? "", holding.optionExpiry ?? "", normalizedOptionLabel(holding.company)].join(":");
+const optionPositionMatchesHolding = (position: DcaPosition, holding: { optionSymbol?: string; optionType?: string; optionStrike?: number; optionExpiry?: string; company: string }) => {
+  if (holding.optionSymbol && position.id.toUpperCase().includes(holding.optionSymbol.trim().toUpperCase())) return true;
+  const label = normalizedOptionLabel(position.label ?? "");
+  const typeMatches = !holding.optionType || label.includes(holding.optionType.includes("put") ? "PUT" : "CALL");
+  const strikeMatches = holding.optionStrike === undefined || label.includes(`$${holding.optionStrike}`);
+  const expiryMatches = !holding.optionExpiry || label.includes(normalizedOptionLabel(formatDate(holding.optionExpiry)));
+  return typeMatches && strikeMatches && expiryMatches;
+};
 
 type LotDraft = { shares: NumericValue; price: NumericValue; cost: NumericValue; costOverridden: boolean; date: string; future: boolean };
 const emptyDraft = (future = false): LotDraft => ({ shares: "", price: "", cost: "", costOverridden: false, date: "", future });
@@ -105,8 +117,7 @@ export default function DcaPage() {
           if (holding.shares === 0 || holding.symbol.trim().toUpperCase() !== position.symbol.trim().toUpperCase()) return false;
           if (!isOptionPosition) return (holding.assetType ?? "stock") === "stock";
           if (holding.assetType !== "option") return false;
-          const label = position.label ?? "";
-          return (!holding.optionStrike || label.includes(`$${holding.optionStrike}`)) && (!holding.optionExpiry || label.includes(formatDate(holding.optionExpiry)));
+          return optionPositionMatchesHolding(position, holding);
         }));
       })
       .map((position) => {
@@ -133,7 +144,6 @@ export default function DcaPage() {
     const savedStockKeys = new Set(visibleSaved
       .filter((position) => !position.id.includes("-option-"))
       .map((position) => `${position.portfolioId}:${position.symbol.trim().toUpperCase()}`));
-    const savedPositionKeys = new Set(visibleSaved.map(positionIdentity));
     const placeholders: DcaPosition[] = [];
 
     portfolioIds.forEach((portfolioId) => {
@@ -146,11 +156,15 @@ export default function DcaPage() {
             ? `${symbol} ${holding.optionStrike !== undefined ? `$${holding.optionStrike}` : ""} ${holding.optionType?.includes("put") ? "Put" : "Call"}${holding.optionExpiry ? ` · ${formatDate(holding.optionExpiry)}` : ""}`.replace(/\s+/g, " ").trim()
             : symbol;
           const stockKey = `${portfolioId}:${symbol}`;
-          const candidateKey = `${portfolioId}:${symbol}:${optionLabel.replace(/\s+/g, " ").trim().toUpperCase()}`;
-          if ((!isOptionHolding && savedStockKeys.has(stockKey)) || savedPositionKeys.has(candidateKey)) return;
+          const optionIdentity = isOptionHolding ? optionHoldingIdentity(holding) : "";
+          const candidateId = `PORTFOLIO-${portfolioId}-${holding.assetType ?? "stock"}-${optionIdentity || symbol}`;
+          const alreadySaved = isOptionHolding
+            ? visibleSaved.some((position) => position.portfolioId === portfolioId && position.symbol.trim().toUpperCase() === symbol && optionPositionMatchesHolding(position, holding))
+            : savedStockKeys.has(stockKey);
+          if (alreadySaved) return;
 
           placeholders.push({
-            id: `PORTFOLIO-${portfolioId}-${holding.assetType ?? "stock"}-${holding.optionSymbol ?? optionLabel}`,
+            id: candidateId,
             symbol,
             label: optionLabel,
             sellPrice: "",
@@ -198,14 +212,11 @@ export default function DcaPage() {
         ? (["robinhood", "fidelity-401k", "fidelity-roth"] as const)
         : [activeId];
     const isOptionPosition = position.id.includes("-option-") || /\b(?:call|put)\b/i.test(position.label ?? "");
-    const label = position.label ?? "";
     for (const portfolioId of candidatePortfolioIds) {
       const holding = holdingsByPortfolio[portfolioId].find((item) => {
         if (item.symbol.trim().toUpperCase() !== position.symbol.trim().toUpperCase()) return false;
         if (!isOptionPosition) return (item.assetType ?? "stock") === "stock";
-        return item.assetType === "option"
-          && (!item.optionStrike || label.includes(`$${item.optionStrike}`))
-          && (!item.optionExpiry || label.includes(formatDate(item.optionExpiry)));
+        return item.assetType === "option" && optionPositionMatchesHolding(position, item);
       });
       if (holding) return holding;
     }
@@ -300,8 +311,7 @@ export default function DcaPage() {
   const selectedHolding = selectedPosition ? activeHoldings.find((holding) => {
     if (holding.symbol.trim().toUpperCase() !== selectedPosition.symbol.trim().toUpperCase()) return false;
     if (!selectedPosition.id.includes("-option-")) return (holding.assetType ?? "stock") === "stock";
-    const label = selectedPosition.label ?? "";
-    return holding.assetType === "option" && (!holding.optionStrike || label.includes(`$${holding.optionStrike}`)) && (!holding.optionExpiry || label.includes(formatDate(holding.optionExpiry)));
+    return holding.assetType === "option" && optionPositionMatchesHolding(selectedPosition, holding);
   }) : undefined;
   const isOption = selectedHolding?.assetType === "option";
   const optionMetrics = selectedHolding ? holdingMetrics(selectedHolding) : null;

@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Download, FileDown, Pencil, Search, Trash2, Upload, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Download, Pencil, Search, Trash2, Upload, X } from "lucide-react";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -71,6 +71,7 @@ const REALIZED_SORT_STORAGE_KEY = "folio-realized-sort-preference";
 const REALIZED_IGNORED_TRANSACTION_IDS_KEY = "folio-realized-ignored-transaction-ids-v1";
 const REALIZED_TICKER_COMMENTS_KEY = "folio-realized-ticker-comments-v1";
 const REALIZED_ID_SCHEMA_KEY = "folio-realized-portfolio-id-schema-version";
+const REALIZED_ROTH_BUCKET_FIX_KEY = "folio-realized-roth-bucket-fix-v1";
 type RealizedPortfolioId = "robinhood" | "fidelity-401k" | "fidelity-roth";
 type PositionsByPortfolio = Record<RealizedPortfolioId, RealizedPosition[]>;
 
@@ -274,7 +275,7 @@ export default function Page() {
   const transactionsByPortfolio = usePortfolioStore((state) => state.transactionsByPortfolio);
   const defaultPositionsByPortfolio = useMemo<PositionsByPortfolio>(() => ({
     robinhood: initialPositions,
-    "fidelity-401k": initialPositions.filter((item) => item.symbol === "IREN").map((item) => ({ ...item, id: `401k-${item.id}` })),
+    "fidelity-401k": [],
     "fidelity-roth": initialPositions.filter((item) => item.symbol === "IREN").map((item) => ({ ...item, id: `roth-${item.id}` })),
   }), []);
   const [positionsByPortfolio, setPositionsByPortfolio] = useState<PositionsByPortfolio>(defaultPositionsByPortfolio);
@@ -315,6 +316,25 @@ export default function Page() {
       }
       window.localStorage.setItem(REALIZED_ID_SCHEMA_KEY, String(PORTFOLIO_ID_SCHEMA_VERSION));
     }
+    if (window.localStorage.getItem(REALIZED_ROTH_BUCKET_FIX_KEY) !== "1") {
+      const move401kDataToRoth = (key: string, merge: (roth: any, k401: any) => any) => {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) return;
+        try {
+          const parsed = JSON.parse(raw);
+          if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") return;
+          const k401 = parsed["fidelity-401k"];
+          const roth = parsed["fidelity-roth"];
+          parsed["fidelity-roth"] = merge(roth, k401);
+          parsed["fidelity-401k"] = Array.isArray(k401) ? [] : {};
+          window.localStorage.setItem(key, JSON.stringify(parsed));
+        } catch {}
+      };
+      move401kDataToRoth(STORAGE_KEY, (roth, k401) => [...(Array.isArray(roth) ? roth : []), ...(Array.isArray(k401) ? k401 : [])]);
+      move401kDataToRoth(REALIZED_IGNORED_TRANSACTION_IDS_KEY, (roth, k401) => Array.from(new Set([...(Array.isArray(roth) ? roth : []), ...(Array.isArray(k401) ? k401 : [])])));
+      move401kDataToRoth(REALIZED_TICKER_COMMENTS_KEY, (roth, k401) => ({ ...(k401 && typeof k401 === "object" ? k401 : {}), ...(roth && typeof roth === "object" ? roth : {}) }));
+      window.localStorage.setItem(REALIZED_ROTH_BUCKET_FIX_KEY, "1");
+    }
     const currentSaved = window.localStorage.getItem(STORAGE_KEY);
     const previousSaved = PREVIOUS_STORAGE_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean);
     const saved = currentSaved ?? previousSaved;
@@ -347,7 +367,7 @@ export default function Page() {
           const migrated = migratePositions(parsed);
           setPositionsByPortfolio({
             robinhood: migrated,
-            "fidelity-401k": migrated.filter((item) => item.symbol === "IREN").map((item) => ({ ...item, id: `401k-${item.id}` })),
+            "fidelity-401k": [],
             "fidelity-roth": migrated.filter((item) => item.symbol === "IREN").map((item) => ({ ...item, id: `roth-${item.id}` })),
           });
         } else if (parsed && typeof parsed === "object") {
@@ -575,26 +595,6 @@ export default function Page() {
     URL.revokeObjectURL(url);
   }
 
-  async function exportPdf() {
-    const [{ jsPDF }, autoTableModule] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
-    const autoTable = autoTableModule.default;
-    const doc = new jsPDF({ orientation: "landscape" });
-    doc.setFontSize(18);
-    doc.text("Realized P/L Report", 14, 16);
-    doc.setFontSize(10);
-    doc.text(`Realized P/L: ${money(totals.realized)}   Fees: ${money(totals.fees)}   PAT Needed: ${money(totalPatNeeded)}   Dividends: ${money(totals.dividendAmount)}   NRA Withholding: ${money(totals.dividendNraWithholding)}`, 14, 23);
-    autoTable(doc, {
-      startY: 29,
-      head: [["Ticker", "Type", "Realized P/L", "Fees", "Sell Date", "PAT", "Loss", "PAT Needed", "Dividend", "NRA Withholding", "Dividend Date", "Comment"]],
-      body: visiblePositions.map((item) => [
-        item.symbol, item.type === "option" ? "Option" : "Stock", money(item.amount), money(item.fees), item.lastSellDate || "-",
-        item.pat === null ? "-" : money(item.pat), item.loss === null ? "-" : money(item.loss),
-        derivedPatNeeded(item.pat, item.loss) === null ? "-" : money(derivedPatNeeded(item.pat, item.loss) ?? 0), money(item.dividendAmount), money(item.dividendNraWithholding), item.lastDividendDate || "-", item.comment || "-",
-      ]),
-      styles: { fontSize: 8 },
-    });
-    doc.save(`realized-pl-${new Date().toISOString().slice(0, 10)}.pdf`);
-  }
 
   function toggleGroup(symbol: string) {
     setExpandedSymbols((current) => {
@@ -769,7 +769,6 @@ export default function Page() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold sm:text-3xl">Realized P/L</h1>
-          <p className="mt-1 text-sm text-zinc-500">Review Realized Results Grouped By Ticker, Including Stock And Option Trades.</p>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <input ref={fileInputRef} className="hidden" type="file" accept=".csv" onChange={handleFileUpload} />
@@ -777,7 +776,6 @@ export default function Page() {
             <Upload className="mr-2 h-4 w-4" />{isImporting ? "Importing..." : "Import Document"}
           </Button>
           <Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4" />Export CSV</Button>
-          <Button variant="outline" onClick={exportPdf}><FileDown className="mr-2 h-4 w-4" />Export PDF</Button>
         </div>
       </div>
 

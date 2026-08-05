@@ -1,0 +1,13 @@
+Changes in this version (August 5, 2026)
+
+- Position Simulator now treats every option contract as a separate position, even when multiple options share the same ticker.
+- Removed the closed ROBN $41 Call from Robinhood recovery holdings so it no longer reappears in Holdings or Position Simulator.
+- Fixed Add Investment Step so a newly added blank step appears immediately and can be edited.
+- Removed Export PDF from Realized P/L.
+- Removed the Realized P/L header description line.
+- Moved persisted Fidelity 401(k) Realized P/L entries, ignored transaction IDs, and ticker comments into Fidelity Roth IRA once, leaving the 401(k) realized bucket empty.
+- Updated default Realized P/L seed mapping so Fidelity 401(k) starts empty and Roth IRA owns its Roth values.
+
+Validation
+- Source-level checks completed for all changed areas.
+- Full npm typecheck/build could not be completed because the environment package registry returned 404 for the package-lock's zustand 5.0.14 tarball during npm ci.
