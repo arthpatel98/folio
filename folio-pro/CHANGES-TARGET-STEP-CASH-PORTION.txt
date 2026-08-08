@@ -1,0 +1,9 @@
+Target Planner — Partial Cash Allocation Per Investment Step
+
+- Added an Investment Portion (%) field to every reinvestment step.
+- New steps default to 100% to preserve the previous behavior.
+- Existing saved steps without an allocation value also behave as 100%.
+- The return is applied only to the allocated portion of cash.
+- Uninvested cash is carried forward into the next step.
+- Each step now displays Amount Invested, Cash Carried Forward, Estimated Value After Step, and step profit.
+- Allocation is constrained between 0% and 100%.

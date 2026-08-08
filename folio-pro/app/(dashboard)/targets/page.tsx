@@ -18,7 +18,7 @@ const ROTH_TARGETS = [
 ] as const;
 
 type Scenario = { targetPrice: number; newBuyPrice: number; additionalQty: number; gapShare: number };
-type ReinvestmentStep = { id: string; ticker: string; returnPct: number | null; date: string };
+type ReinvestmentStep = { id: string; ticker: string; allocationPct: number | null; returnPct: number | null; date: string };
 const finite=(v:number)=>Number.isFinite(v)?v:0;
 const money=(v:number)=>finite(v).toLocaleString("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0});
 const money2=(v:number)=>finite(v).toLocaleString("en-US",{style:"currency",currency:"USD",minimumFractionDigits:2,maximumFractionDigits:2});
@@ -38,20 +38,20 @@ export default function TargetPlannerPage(){
   const selectedCash=isRobinhood?cashByPortfolio.robinhood:isRoth?cashByPortfolio["fidelity-roth"]:cashByPortfolio.robinhood+cashByPortfolio["fidelity-roth"];
   const rows=useMemo(()=>isRobinhood?ROBINHOOD_TARGETS.map(([date,target,increase])=>({date,target,increase})):isRoth?ROTH_TARGETS.map(([date,target,increase])=>({date,target,increase})):ROBINHOOD_TARGETS.map(([date,target,increase],i)=>({date,target:target+ROTH_TARGETS[i][1],increase:increase+ROTH_TARGETS[i][2]})),[isRobinhood,isRoth]);
   const [selectedDate,setSelectedDate]=useState<string>(rows[0].date);
-  const [scenarios,setScenarios]=useState<Record<string,Scenario>>({});
+  const [scenariosByDate,setScenariosByDate]=useState<Record<string,Record<string,Scenario>>>({});
   const [cashError,setCashError]=useState<string | null>(null);
   const [targetPriceInputs,setTargetPriceInputs]=useState<Record<string,string>>({});
   const [newBuyPriceInputs,setNewBuyPriceInputs]=useState<Record<string,string>>({});
-  const [reinvestmentSteps,setReinvestmentSteps]=useState<ReinvestmentStep[]>([]);
-  const [selectedPathPositions,setSelectedPathPositions]=useState<Record<string,boolean>>({});
-  const storageKey=`folio-target-scenarios:${activeId}`;
-  const pathwayStorageKey=`folio-target-pathway:${activeId}`;
-  const pathwaySelectionStorageKey=`folio-target-pathway-selection:${activeId}`;
+  const [reinvestmentStepsByDate,setReinvestmentStepsByDate]=useState<Record<string,ReinvestmentStep[]>>({});
+  const [selectedPathPositionsByDate,setSelectedPathPositionsByDate]=useState<Record<string,Record<string,boolean>>>({});
+  const storageKey=`folio-target-scenarios-by-date:${activeId}`;
+  const pathwayStorageKey=`folio-target-pathway-by-date:${activeId}`;
+  const pathwaySelectionStorageKey=`folio-target-pathway-selection-by-date:${activeId}`;
   const targetDateStorageKey=`folio-target-date:${activeId}`;
   useEffect(()=>{
     const migrationKey="folio-target-portfolio-id-schema-version";
     if(localStorage.getItem(migrationKey)!==String(PORTFOLIO_ID_SCHEMA_VERSION)){
-      const prefixes=["folio-target-scenarios:","folio-target-pathway:","folio-target-pathway-selection:","folio-target-date:","folio-target-date-default-aug-2026:"];
+      const prefixes=["folio-target-scenarios:","folio-target-pathway:","folio-target-pathway-selection:","folio-target-date:","folio-target-date-default-aug-2026:","folio-target-scenarios-by-date:","folio-target-pathway-by-date:","folio-target-pathway-selection-by-date:"];
       prefixes.forEach((prefix)=>{
         const old401k=localStorage.getItem(`${prefix}fidelity-401k`);
         const oldRoth=localStorage.getItem(`${prefix}fidelity-roth`);
@@ -62,37 +62,40 @@ export default function TargetPlannerPage(){
     }
   },[]);
   useEffect(()=>{
-    const raw=localStorage.getItem(storageKey);
-    setScenarios(raw?JSON.parse(raw):{});
     const savedDate=localStorage.getItem(targetDateStorageKey);
     const validSavedDate=savedDate&&rows.some(r=>r.date===savedDate)?savedDate:null;
     const defaultDate=rows[0].date;
     const defaultVersionKey=`folio-target-date-default-aug-2026:${activeId}`;
     const needsDefaultMigration=(isRobinhood||isRoth)&&localStorage.getItem(defaultVersionKey)!=="1";
+    const initialDate=needsDefaultMigration?defaultDate:(validSavedDate??defaultDate);
     if(needsDefaultMigration){
-      setSelectedDate(defaultDate);
       localStorage.setItem(targetDateStorageKey,defaultDate);
       localStorage.setItem(defaultVersionKey,"1");
-    }else{
-      setSelectedDate(validSavedDate??defaultDate);
     }
-  },[activeId,isRobinhood,isRoth,storageKey,targetDateStorageKey,rows]);
+    setSelectedDate(initialDate);
+
+    const readObject=(key:string)=>{try{const raw=localStorage.getItem(key);return raw?JSON.parse(raw):null;}catch{return null;}};
+    const oldScenarios=readObject(`folio-target-scenarios:${activeId}`);
+    const oldSteps=readObject(`folio-target-pathway:${activeId}`);
+    const oldSelections=readObject(`folio-target-pathway-selection:${activeId}`);
+    const savedScenarios=readObject(storageKey);
+    const savedSteps=readObject(pathwayStorageKey);
+    const savedSelections=readObject(pathwaySelectionStorageKey);
+    setScenariosByDate(savedScenarios??(oldScenarios?{[initialDate]:oldScenarios}:{}));
+    setReinvestmentStepsByDate(savedSteps??(Array.isArray(oldSteps)?{[initialDate]:oldSteps}:{}));
+    setSelectedPathPositionsByDate(savedSelections??(oldSelections?{[initialDate]:oldSelections}:{}));
+    setTargetPriceInputs({});
+    setNewBuyPriceInputs({});
+  },[activeId,isRobinhood,isRoth,storageKey,pathwayStorageKey,pathwaySelectionStorageKey,targetDateStorageKey,rows]);
   useEffect(()=>{if(selectedDate)localStorage.setItem(targetDateStorageKey,selectedDate)},[targetDateStorageKey,selectedDate]);
-  useEffect(()=>{localStorage.setItem(storageKey,JSON.stringify(scenarios))},[storageKey,scenarios]);
-  useEffect(()=>{
-    const raw=localStorage.getItem(pathwayStorageKey);
-    if(raw){
-      try{setReinvestmentSteps(JSON.parse(raw));return;}catch{}
-    }
-    setReinvestmentSteps([]);
-  },[pathwayStorageKey]);
-  useEffect(()=>{localStorage.setItem(pathwayStorageKey,JSON.stringify(reinvestmentSteps))},[pathwayStorageKey,reinvestmentSteps]);
-  useEffect(()=>{
-    const raw=localStorage.getItem(pathwaySelectionStorageKey);
-    if(raw){try{setSelectedPathPositions(JSON.parse(raw));return;}catch{}}
-    setSelectedPathPositions({});
-  },[pathwaySelectionStorageKey]);
-  useEffect(()=>{localStorage.setItem(pathwaySelectionStorageKey,JSON.stringify(selectedPathPositions))},[pathwaySelectionStorageKey,selectedPathPositions]);
+  useEffect(()=>{localStorage.setItem(storageKey,JSON.stringify(scenariosByDate))},[storageKey,scenariosByDate]);
+  useEffect(()=>{localStorage.setItem(pathwayStorageKey,JSON.stringify(reinvestmentStepsByDate))},[pathwayStorageKey,reinvestmentStepsByDate]);
+  useEffect(()=>{localStorage.setItem(pathwaySelectionStorageKey,JSON.stringify(selectedPathPositionsByDate))},[pathwaySelectionStorageKey,selectedPathPositionsByDate]);
+  useEffect(()=>{setTargetPriceInputs({});setNewBuyPriceInputs({});setCashError(null)},[selectedDate]);
+
+  const scenarios=scenariosByDate[selectedDate]??{};
+  const reinvestmentSteps=reinvestmentStepsByDate[selectedDate]??[];
+  const selectedPathPositions=selectedPathPositionsByDate[selectedDate]??{};
 
   if(is401k){
     return <div className="space-y-6">
@@ -143,11 +146,15 @@ export default function TargetPlannerPage(){
   }));
   const totalSaleProceeds=sellSelections.reduce((sum,d)=>sum+d.saleProceeds,0);
   const startingCashPool=finite(totalSaleProceeds+remainingAvailableCash);
-  const pathwayValues=reinvestmentSteps.reduce<Array<ReinvestmentStep & {startValue:number;endValue:number}>>((steps,step)=>{
+  const pathwayValues=reinvestmentSteps.reduce<Array<ReinvestmentStep & {startValue:number;allocationPctValue:number;investedValue:number;uninvestedValue:number;stepProfit:number;endValue:number}>>((steps,step)=>{
     const startValue=steps.length?steps[steps.length-1].endValue:startingCashPool;
+    const allocationPctValue=typeof step.allocationPct==="number"&&Number.isFinite(step.allocationPct)?Math.min(100,Math.max(0,step.allocationPct)):100;
     const returnPct=typeof step.returnPct==="number"&&Number.isFinite(step.returnPct)?step.returnPct:0;
-    const endValue=startValue*(1+returnPct/100);
-    steps.push({...step,startValue,endValue});
+    const investedValue=startValue*(allocationPctValue/100);
+    const uninvestedValue=startValue-investedValue;
+    const stepProfit=investedValue*(returnPct/100);
+    const endValue=startValue+stepProfit;
+    steps.push({...step,startValue,allocationPctValue,investedValue,uninvestedValue,stepProfit,endValue});
     return steps;
   },[]);
   const pathwayFinalValue=pathwayValues.length?pathwayValues[pathwayValues.length-1].endValue:startingCashPool;
@@ -157,11 +164,15 @@ export default function TargetPlannerPage(){
   const pathwayGap=Math.max(0,finite(selectedTarget.target-projectedValue));
   const remainingGap=pathwayGap;
   const targetDateValue=new Date(selectedTarget.date);
-  const update=(k:string,patch:Partial<Scenario>,h:Holding)=>setScenarios(prev=>{ const base=prev[k] ?? { targetPrice:0, newBuyPrice:0, additionalQty:0, gapShare:25 }; return {...prev,[k]:{...base,...patch}}; });
-  const addReinvestmentStep=()=>setReinvestmentSteps(prev=>[...prev,{id:`step-${Date.now()}-${prev.length}`,ticker:"",returnPct:null,date:""}]);
-  const updateReinvestmentStep=(id:string,patch:Partial<ReinvestmentStep>)=>setReinvestmentSteps(prev=>prev.map(step=>step.id===id?{...step,...patch}:step));
-  const removeReinvestmentStep=(id:string)=>setReinvestmentSteps(prev=>prev.filter(step=>step.id!==id));
-  const togglePathPosition=(key:string)=>setSelectedPathPositions(prev=>({...prev,[key]:!prev[key]}));
+  const update=(k:string,patch:Partial<Scenario>,h:Holding)=>setScenariosByDate(prev=>{
+    const dateScenarios=prev[selectedDate]??{};
+    const base=dateScenarios[k] ?? { targetPrice:0, newBuyPrice:0, additionalQty:0, gapShare:25 };
+    return {...prev,[selectedDate]:{...dateScenarios,[k]:{...base,...patch}}};
+  });
+  const addReinvestmentStep=()=>setReinvestmentStepsByDate(prev=>{const current=prev[selectedDate]??[];return {...prev,[selectedDate]:[...current,{id:`step-${Date.now()}-${current.length}`,ticker:"",allocationPct:100,returnPct:null,date:""}]}});
+  const updateReinvestmentStep=(id:string,patch:Partial<ReinvestmentStep>)=>setReinvestmentStepsByDate(prev=>({...prev,[selectedDate]:(prev[selectedDate]??[]).map(step=>step.id===id?{...step,...patch}:step)}));
+  const removeReinvestmentStep=(id:string)=>setReinvestmentStepsByDate(prev=>({...prev,[selectedDate]:(prev[selectedDate]??[]).filter(step=>step.id!==id)}));
+  const togglePathPosition=(key:string)=>setSelectedPathPositionsByDate(prev=>{const current=prev[selectedDate]??{};return {...prev,[selectedDate]:{...current,[key]:!current[key]}}});
   const updateAdditionalQty=(detail:typeof details[number],value:number)=>{
     const nextQty=Math.max(0,Number.isFinite(value)?value:0);
     const nextInvestment=nextQty*Math.max(0,detail.s.newBuyPrice)*detail.multiplier;
@@ -240,10 +251,11 @@ export default function TargetPlannerPage(){
               {pathwayValues.map((step,index)=><div key={step.id} className="flex items-center gap-3">
                 <ArrowRight className="size-5 shrink-0 text-emerald-400"/>
                 <div className="w-72 shrink-0 rounded-2xl border border-emerald-400/20 bg-gradient-to-b from-emerald-400/[.07] to-transparent p-4 shadow-[0_0_28px_rgba(52,211,153,0.04)]">
-                  <div className="flex items-start justify-between gap-3"><div><div className="text-xs font-semibold tracking-wider text-emerald-300">STEP {index+2} · REINVEST</div><div className="mt-1 text-xs text-zinc-500">Invest {money2(step.startValue)}</div></div><button onClick={()=>removeReinvestmentStep(step.id)} className="grid size-8 place-items-center rounded-lg border border-white/10 text-zinc-500 transition hover:border-red-400/30 hover:text-red-300" aria-label="Remove Reinvestment Step"><Trash2 size={14}/></button></div>
+                  <div className="flex items-start justify-between gap-3"><div><div className="text-xs font-semibold tracking-wider text-emerald-300">STEP {index+2} · REINVEST</div><div className="mt-1 text-xs text-zinc-500">Invest {money2(step.investedValue)} Of {money2(step.startValue)}</div></div><button onClick={()=>removeReinvestmentStep(step.id)} className="grid size-8 place-items-center rounded-lg border border-white/10 text-zinc-500 transition hover:border-red-400/30 hover:text-red-300" aria-label="Remove Reinvestment Step"><Trash2 size={14}/></button></div>
                   <label className="mt-4 block"><span className="mb-1.5 block text-xs text-zinc-500">Ticker Or Investment</span><input value={step.ticker} onChange={e=>updateReinvestmentStep(step.id,{ticker:e.target.value.toUpperCase()})} placeholder="NVDA Or New Ticker" className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none focus:border-emerald-400/40"/></label>
-                  <div className="mt-3 grid grid-cols-2 gap-2"><label><span className="mb-1.5 block text-xs text-zinc-500">Target Return</span><div className="relative"><input type="number" step="0.1" value={step.returnPct??""} onChange={e=>updateReinvestmentStep(step.id,{returnPct:e.target.value===""?null:Number(e.target.value)})} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 pr-7 text-sm outline-none focus:border-emerald-400/40"/><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">%</span></div></label><label><span className="mb-1.5 block text-xs text-zinc-500">By Date</span><input type="date" max={Number.isNaN(targetDateValue.getTime())?undefined:targetDateValue.toISOString().slice(0,10)} value={step.date} onChange={e=>updateReinvestmentStep(step.id,{date:e.target.value})} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-xs outline-none focus:border-emerald-400/40"/></label></div>
-                  <div className="mt-4 rounded-xl bg-emerald-400/[.06] p-3"><div className="text-xs text-zinc-500">Estimated Value After Step</div><div className="mt-1 text-lg font-semibold text-emerald-300">{money2(step.endValue)}</div><div className="mt-1 text-xs text-zinc-500">{step.ticker||"Choose Any Ticker"} · Profit {step.endValue-step.startValue>=0?"+":""}{money2(step.endValue-step.startValue)}</div></div>
+                  <div className="mt-3 grid grid-cols-2 gap-2"><label><span className="mb-1.5 block text-xs text-zinc-500">Investment Portion</span><div className="relative"><input type="number" min="0" max="100" step="0.1" value={step.allocationPct??100} onChange={e=>updateReinvestmentStep(step.id,{allocationPct:e.target.value===""?null:Math.min(100,Math.max(0,Number(e.target.value)))})} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 pr-7 text-sm outline-none focus:border-emerald-400/40"/><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">%</span></div></label><label><span className="mb-1.5 block text-xs text-zinc-500">Target Return</span><div className="relative"><input type="number" step="0.1" value={step.returnPct??""} onChange={e=>updateReinvestmentStep(step.id,{returnPct:e.target.value===""?null:Number(e.target.value)})} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 pr-7 text-sm outline-none focus:border-emerald-400/40"/><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">%</span></div></label></div>
+                  <label className="mt-3 block"><span className="mb-1.5 block text-xs text-zinc-500">By Date</span><input type="date" max={Number.isNaN(targetDateValue.getTime())?undefined:targetDateValue.toISOString().slice(0,10)} value={step.date} onChange={e=>updateReinvestmentStep(step.id,{date:e.target.value})} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-xs outline-none focus:border-emerald-400/40"/></label>
+                  <div className="mt-4 rounded-xl bg-emerald-400/[.06] p-3"><div className="flex items-center justify-between gap-3 text-xs text-zinc-500"><span>Amount Invested</span><span className="text-zinc-300">{money2(step.investedValue)}</span></div><div className="mt-1 flex items-center justify-between gap-3 text-xs text-zinc-500"><span>Cash Carried Forward</span><span className="text-zinc-300">{money2(step.uninvestedValue)}</span></div><div className="mt-3 text-xs text-zinc-500">Estimated Value After Step</div><div className="mt-1 text-lg font-semibold text-emerald-300">{money2(step.endValue)}</div><div className="mt-1 text-xs text-zinc-500">{step.ticker||"Choose Any Ticker"} · Profit {step.stepProfit>=0?"+":""}{money2(step.stepProfit)}</div></div>
                 </div>
               </div>)}
 
@@ -257,7 +269,7 @@ export default function TargetPlannerPage(){
             </div>
           </div>
 
-          <div className="rounded-2xl border border-blue-400/15 bg-blue-400/[.04] p-4 text-sm text-zinc-400"><span className="font-medium text-blue-200">How This Path Works:</span> Your available cash is always the starting cash pool. If you select positions for the target path, their estimated sale proceeds are added to that cash. Each reinvestment step then compounds the full cash pool using the return you enter. Reinvestment dates are limited to the selected Target Date. This is a planning scenario, not a market prediction.</div>
+          <div className="rounded-2xl border border-blue-400/15 bg-blue-400/[.04] p-4 text-sm text-zinc-400"><span className="font-medium text-blue-200">How This Path Works:</span> Your available cash is always the starting cash pool. If you select positions for the target path, their estimated sale proceeds are added to that cash. Each reinvestment step uses the percentage of available cash you enter, applies the target return only to that invested portion, and carries the remaining cash into the next step. Reinvestment dates are limited to the selected Target Date. This is a planning scenario, not a market prediction.</div>
         </>
       </div>
     </Card>

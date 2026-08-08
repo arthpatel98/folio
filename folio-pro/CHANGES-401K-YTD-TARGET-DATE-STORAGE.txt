@@ -1,0 +1,9 @@
+Changes in this version
+
+1. Savings and Investments
+- Updated Fidelity 401(k) 2026 YTD performance to 14.65% in both the account summary and YTD performance chart data.
+
+2. Target Scenario Builder
+- Target scenario values are now saved separately for every target date and portfolio.
+- Switching target dates restores that date's target prices, new buy prices, quantities, selected target-path positions, and investment steps.
+- Existing pre-date-specific saved values are migrated into the currently selected/default target date when date-specific storage does not yet exist.
