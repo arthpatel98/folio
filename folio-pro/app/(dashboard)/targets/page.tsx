@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, CalendarDays, CircleDollarSign, Flag, MinusCircle, Plus, Target, Trash2, TrendingUp } from "lucide-react";
+import { CalendarDays, CircleDollarSign, Flag, MinusCircle, Plus, Target, Trash2, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore } from "@/store/portfolio-store";
@@ -25,6 +25,7 @@ type ReinvestmentStep = {
   returnPct: number | null;
   date: string;
   allocationPct?: number | null; // Legacy percentage-based saved steps.
+  source?: "cash" | "previous";
 };
 const finite=(v:number)=>Number.isFinite(v)?v:0;
 const money=(v:number)=>finite(v).toLocaleString("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0});
@@ -153,33 +154,35 @@ export default function TargetPlannerPage(){
   }));
   const totalSaleProceeds=sellSelections.reduce((sum,d)=>sum+d.saleProceeds,0);
   const startingCashPool=finite(totalSaleProceeds+remainingAvailableCash);
-  const pathwayValues=reinvestmentSteps.reduce<Array<ReinvestmentStep & {startValue:number;investedValue:number;uninvestedValue:number;stepProfit:number;endValue:number}>>((steps,step)=>{
-    const startValue=steps.length?steps[steps.length-1].endValue:startingCashPool;
-    const requestedInvestment=typeof step.investmentAmount==="number"&&Number.isFinite(step.investmentAmount)
-      ? Math.max(0,step.investmentAmount)
-      : 0;
-    const investedValue=Math.min(startValue,requestedInvestment);
+  type PathwayValue = ReinvestmentStep & {availableCash:number;investedValue:number;remainingCash:number;stepProfit:number;endingValue:number};
+  let allocatedPrincipal=0;
+  const pathwayValues:PathwayValue[]=reinvestmentSteps.map((step,index)=>{
+    const availableCash=Math.max(0,startingCashPool-allocatedPrincipal);
+    const requestedInvestment=typeof step.investmentAmount==="number"&&Number.isFinite(step.investmentAmount)?Math.max(0,step.investmentAmount):0;
+    const investedValue=Math.min(availableCash,requestedInvestment);
     const returnPct=typeof step.returnPct==="number"&&Number.isFinite(step.returnPct)?step.returnPct:0;
-    const uninvestedValue=Math.max(0,startValue-investedValue);
+    const remainingCash=Math.max(0,availableCash-investedValue);
     const stepProfit=investedValue*(returnPct/100);
-    const endValue=uninvestedValue+investedValue+stepProfit;
-    steps.push({...step,startValue,investedValue,uninvestedValue,stepProfit,endValue});
-    return steps;
-  },[]);
-  const pathwayFinalValue=pathwayValues.length?pathwayValues[pathwayValues.length-1].endValue:startingCashPool;
-  const pathwayRemainingCash=pathwayValues.length?pathwayValues[pathwayValues.length-1].uninvestedValue:startingCashPool;
-  const pathwayProfit=pathwayValues.length?pathwayFinalValue-startingCashPool:0;
+    const endingValue=investedValue+stepProfit;
+    allocatedPrincipal+=investedValue;
+    return {...step,availableCash,investedValue,remainingCash,stepProfit,endingValue};
+  });
+  const pathwayAllocated=finite(pathwayValues.reduce((sum,step)=>sum+step.investedValue,0));
+  const pathwayProfit=finite(pathwayValues.reduce((sum,step)=>sum+step.stepProfit,0));
+  const pathwayRemainingCash=pathwayValues.length?pathwayValues[pathwayValues.length-1].remainingCash:startingCashPool;
+  const pathwayFinalValue=finite(startingCashPool+pathwayProfit);
   const totalProjectedProfit=finite(scenarioProfit+pathwayProfit);
   const projectedValue=finite(currentValue+totalProjectedProfit);
   const pathwayGap=Math.max(0,finite(selectedTarget.target-projectedValue));
   const remainingGap=pathwayGap;
+  const requiredReturnOnRemainingCash=pathwayRemainingCash>0?(pathwayGap/pathwayRemainingCash)*100:0;
   const targetDateValue=new Date(selectedTarget.date);
   const update=(k:string,patch:Partial<Scenario>,h:Holding)=>setScenariosByDate(prev=>{
     const dateScenarios=prev[selectedDate]??{};
     const base=dateScenarios[k] ?? { targetPrice:0, newBuyPrice:0, additionalQty:0, gapShare:25 };
     return {...prev,[selectedDate]:{...dateScenarios,[k]:{...base,...patch}}};
   });
-  const addReinvestmentStep=()=>setReinvestmentStepsByDate(prev=>{const current=prev[selectedDate]??[];return {...prev,[selectedDate]:[...current,{id:`step-${Date.now()}-${current.length}`,ticker:"",investmentAmount:null,returnPct:null,date:""}]}});
+  const addReinvestmentStep=()=>setReinvestmentStepsByDate(prev=>{const current=prev[selectedDate]??[];return {...prev,[selectedDate]:[...current,{id:`step-${Date.now()}-${current.length}`,ticker:"",investmentAmount:null,returnPct:null,date:"",source:"cash"}]}});
   const updateReinvestmentStep=(id:string,patch:Partial<ReinvestmentStep>)=>setReinvestmentStepsByDate(prev=>({...prev,[selectedDate]:(prev[selectedDate]??[]).map(step=>step.id===id?{...step,...patch}:step)}));
   const removeReinvestmentStep=(id:string)=>setReinvestmentStepsByDate(prev=>({...prev,[selectedDate]:(prev[selectedDate]??[]).filter(step=>step.id!==id)}));
   const togglePathPosition=(key:string)=>setSelectedPathPositionsByDate(prev=>{const current=prev[selectedDate]??{};return {...prev,[selectedDate]:{...current,[key]:!current[key]}}});
@@ -231,57 +234,60 @@ export default function TargetPlannerPage(){
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold">Your Path To The Target</h2>
-            <p className="mt-1 text-sm text-zinc-500">Only Positions You Select In Build Your Price-Target Scenarios Are Included. Selected Positions With A Your Target Price Are Combined Into One Cash Pool, Then Reinvested Step By Step Before The Target Date.</p>
+            <p className="mt-1 max-w-4xl text-sm text-zinc-500">Allocate your cash across multiple investment ideas. Each investment is independent, can use the same ticker more than once, and tracks its own amount, expected return, and target date.</p>
           </div>
-          <button type="button" onClick={addReinvestmentStep} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-medium text-emerald-300 transition hover:bg-emerald-400/15"><Plus size={16} className="shrink-0"/>Add Investment Step</button>
+          <button type="button" onClick={addReinvestmentStep} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-medium text-emerald-300 transition hover:bg-emerald-400/15"><Plus size={16}/>Add Investment</button>
         </div>
       </div>
-
       <div className="space-y-5 p-4 sm:p-5">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <PathMetric label="Positions Selected" value={String(sellSelections.length)} />
-          <PathMetric label="Starting Cash Pool" value={money2(startingCashPool)} accent />
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          <PathMetric label="Starting Cash" value={money2(startingCashPool)} accent />
+          <PathMetric label="Total Allocated" value={money2(pathwayAllocated)} />
           <PathMetric label="Remaining Cash" value={money2(pathwayRemainingCash)} />
-          <PathMetric label="Profit From Steps" value={`${pathwayProfit>0?"+":""}${money2(pathwayProfit)}`} accent={pathwayProfit>0} />
-          <PathMetric label="Remaining Gap After Steps" value={money2(pathwayGap)} />
+          <PathMetric label="Expected Profit" value={`${pathwayProfit>0?"+":""}${money2(pathwayProfit)}`} accent={pathwayProfit>0} />
+          <PathMetric label="Expected Ending Value" value={money2(pathwayFinalValue)} accent />
+          <PathMetric label="Remaining Target Gap" value={money2(pathwayGap)} />
         </div>
 
-        <>
-          {sellSelections.length>0&&<div className="rounded-2xl border border-amber-400/20 bg-amber-400/[.04] p-4">
-            <div className="mb-4 flex items-center justify-between gap-3"><div><div className="text-xs font-semibold tracking-wider text-amber-300">STEP 1 · SELL SELECTED POSITIONS</div><div className="mt-1 text-sm text-zinc-400">Estimated Cash Available From Your Available Cash And Selling Every Selected Position At Your Target Price</div></div><div className="text-right"><div className="text-xs text-zinc-500">Combined Cash</div><div className="text-xl font-semibold text-amber-300">{money2(startingCashPool)}</div></div></div>
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">{sellSelections.map(d=><div key={d.k} className="rounded-xl border border-white/[.07] bg-zinc-950/50 p-3"><div className="flex items-start justify-between gap-3"><div><div className="font-medium">{positionLabel(d.h)}</div><div className="mt-1 text-xs text-zinc-500">Sell {d.ownedQty.toLocaleString()} {d.h.assetType==="option"?"Contracts":"Shares"} At {money2(d.s.targetPrice)}</div></div><div className="text-right text-sm font-semibold text-amber-200">{money2(d.saleProceeds)}</div></div></div>)}</div>
-          </div>}
+        <div className="rounded-2xl border border-white/[.07] bg-white/[.02] p-4">
+          <div className="flex items-center justify-between gap-4 text-sm"><span className="font-medium">Cash Allocation</span><span className="text-zinc-400">{startingCashPool>0?Math.min(100,pathwayAllocated/startingCashPool*100).toFixed(1):"0.0"}% planned</span></div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[.06]"><div className="h-full rounded-full bg-emerald-400/70 transition-all" style={{width:`${startingCashPool>0?Math.min(100,pathwayAllocated/startingCashPool*100):0}%`}}/></div>
+          <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-zinc-500"><span>{money2(pathwayAllocated)} allocated</span><span>{money2(pathwayRemainingCash)} unallocated</span></div>
+        </div>
 
-          <div className="overflow-x-auto pb-2">
-            <div className="flex min-w-max items-stretch gap-3">
-              <div className="flex w-72 shrink-0 flex-col justify-between rounded-2xl border border-amber-400/25 bg-gradient-to-b from-amber-400/[.08] to-transparent p-4 shadow-[0_0_28px_rgba(251,191,36,0.05)]">
-                <div><div className="text-xs font-semibold tracking-wider text-amber-300">STARTING CASH POOL</div><div className="mt-3 text-2xl font-semibold">{money2(startingCashPool)}</div><div className="mt-2 text-xs leading-5 text-zinc-500">{money2(remainingAvailableCash)} Available Cash + {money2(totalSaleProceeds)} From {sellSelections.length} Selected Position{sellSelections.length===1?"":"s"}</div></div>
-                <div className="mt-5 text-xs text-zinc-500">Target Completion: <span className="text-zinc-300">{selectedTarget.date}</span></div>
-              </div>
+        {sellSelections.length>0&&<div className="rounded-2xl border border-amber-400/20 bg-amber-400/[.04] p-4">
+          <div className="text-xs font-semibold tracking-wider text-amber-300">OPTIONAL CASH FROM SELECTED POSITIONS</div>
+          <div className="mt-1 text-sm text-zinc-400">Your starting pool includes {money2(remainingAvailableCash)} available cash plus {money2(totalSaleProceeds)} estimated proceeds from {sellSelections.length} selected position{sellSelections.length===1?"":"s"}.</div>
+        </div>}
 
-              {pathwayValues.map((step,index)=><div key={step.id} className="flex items-center gap-3">
-                <ArrowRight className="size-5 shrink-0 text-emerald-400"/>
-                <div className="w-72 shrink-0 rounded-2xl border border-emerald-400/20 bg-gradient-to-b from-emerald-400/[.07] to-transparent p-4 shadow-[0_0_28px_rgba(52,211,153,0.04)]">
-                  <div className="flex items-start justify-between gap-3"><div><div className="text-xs font-semibold tracking-wider text-emerald-300">STEP {index+2} · REINVEST</div><div className="mt-1 text-xs text-zinc-500">Invest {money2(step.investedValue)} Of {money2(step.startValue)}</div></div><button onClick={()=>removeReinvestmentStep(step.id)} className="grid size-8 place-items-center rounded-lg border border-white/10 text-zinc-500 transition hover:border-red-400/30 hover:text-red-300" aria-label="Remove Reinvestment Step"><Trash2 size={14}/></button></div>
-                  <label className="mt-4 block"><span className="mb-1.5 block text-xs text-zinc-500">Ticker Or Investment</span><input value={step.ticker} onChange={e=>updateReinvestmentStep(step.id,{ticker:e.target.value.toUpperCase()})} placeholder="NVDA Or New Ticker" className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none focus:border-emerald-400/40"/></label>
-                  <div className="mt-3 grid grid-cols-2 gap-2"><label><span className="mb-1.5 block text-xs text-zinc-500">Investment Amount</span><div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-emerald-300">$</span><input type="number" min="0" max={step.startValue} step="0.01" value={step.investmentAmount??""} placeholder="0.00" onChange={e=>updateReinvestmentStep(step.id,{investmentAmount:e.target.value===""?null:Math.min(step.startValue,Math.max(0,Number(e.target.value))),allocationPct:null})} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 pl-7 pr-3 text-sm outline-none focus:border-emerald-400/40"/></div></label><label><span className="mb-1.5 block text-xs text-zinc-500">Target Return</span><div className="relative"><input type="number" step="0.1" value={step.returnPct??""} onChange={e=>updateReinvestmentStep(step.id,{returnPct:e.target.value===""?null:Number(e.target.value)})} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 pr-7 text-sm outline-none focus:border-emerald-400/40"/><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">%</span></div></label></div>
-                  <label className="mt-3 block"><span className="mb-1.5 block text-xs text-zinc-500">By Date</span><input type="date" max={Number.isNaN(targetDateValue.getTime())?undefined:targetDateValue.toISOString().slice(0,10)} value={step.date} onChange={e=>updateReinvestmentStep(step.id,{date:e.target.value})} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-xs outline-none focus:border-emerald-400/40"/></label>
-                  <div className="mt-4 rounded-xl bg-emerald-400/[.06] p-3"><div className="flex items-center justify-between gap-3 text-xs text-zinc-500"><span>Amount Invested</span><span className="text-zinc-300">{money2(step.investedValue)}</span></div><div className="mt-1 flex items-center justify-between gap-3 text-xs text-zinc-500"><span>Remaining Cash</span><span className="text-zinc-300">{money2(step.uninvestedValue)}</span></div><div className="mt-3 text-xs text-zinc-500">Estimated Value After Step</div><div className="mt-1 text-lg font-semibold text-emerald-300">{money2(step.endValue)}</div><div className="mt-1 text-xs text-zinc-500">{step.ticker||"Choose Any Ticker"} · Profit {step.stepProfit>=0?"+":""}{money2(step.stepProfit)}</div></div>
-                </div>
-              </div>)}
-
-              <div className="flex items-center gap-3">
-                <ArrowRight className="size-5 shrink-0 text-violet-400"/>
-                <div className={cn("flex w-72 shrink-0 flex-col justify-between rounded-2xl border p-4",pathwayFinalValue>=selectedTarget.target?"border-emerald-400/30 bg-emerald-400/[.06]":"border-violet-400/25 bg-violet-400/[.06]")}>
-                  <div><div className="text-xs font-semibold tracking-wider text-violet-300">FINAL TARGET</div><div className="mt-3 text-sm text-zinc-400">Remaining Gap Before Steps · Required By {selectedTarget.date}</div><div className="mt-1 text-2xl font-semibold text-violet-200">{money2(remainingGapBeforeSteps)}</div></div>
-                  <div className="mt-5"><div className="text-xs text-zinc-500">Profit From All Steps</div><div className={cn("mt-1 text-lg font-semibold",pathwayProfit>=0?"text-emerald-300":"text-red-300")}>{pathwayProfit>0?"+":""}{money2(pathwayProfit)}</div><div className="mt-3 text-xs text-zinc-500">Remaining After Steps</div><div className={cn("mt-1 text-base font-semibold",pathwayGap===0?"text-emerald-300":"text-white")}>{money2(pathwayGap)}</div><div className="mt-1 text-xs text-zinc-500">{pathwayGap===0?"Target Reached In This Scenario":`${money2(pathwayGap)} Still Needed`}</div></div>
-                </div>
-              </div>
+        {reinvestmentSteps.length===0?<div className="rounded-2xl border border-dashed border-white/10 p-8 text-center"><div className="text-sm font-medium text-zinc-300">No investments planned yet</div><div className="mt-1 text-xs text-zinc-500">Add investments to divide your cash across tickers and dates.</div></div>:
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {pathwayValues.map((step,index)=><div key={step.id} className="rounded-2xl border border-emerald-400/20 bg-gradient-to-b from-emerald-400/[.07] to-transparent p-4">
+            <div className="flex items-start justify-between gap-3"><div><div className="text-xs font-semibold tracking-wider text-emerald-300">INVESTMENT {index+1}</div><div className="mt-1 text-xs text-zinc-500">Available before allocation: {money2(step.availableCash)}</div></div><button onClick={()=>removeReinvestmentStep(step.id)} className="grid size-8 place-items-center rounded-lg border border-white/10 text-zinc-500 hover:border-red-400/30 hover:text-red-300" aria-label="Remove Investment"><Trash2 size={14}/></button></div>
+            <label className="mt-4 block"><span className="mb-1.5 block text-xs text-zinc-500">Ticker Or Investment</span><input value={step.ticker} onChange={e=>updateReinvestmentStep(step.id,{ticker:e.target.value.toUpperCase()})} placeholder="NVDA, AMZN, DCA..." className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none focus:border-emerald-400/40"/></label>
+            <div className="mt-3 grid grid-cols-2 gap-2"><label><span className="mb-1.5 block text-xs text-zinc-500">Investment Amount</span><div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-emerald-300">$</span><input type="number" min="0" max={step.availableCash} step="0.01" value={step.investmentAmount??""} placeholder="0.00" onChange={e=>updateReinvestmentStep(step.id,{investmentAmount:e.target.value===""?null:Math.min(step.availableCash,Math.max(0,Number(e.target.value)))})} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 pl-7 pr-3 text-sm outline-none focus:border-emerald-400/40"/></div></label><label><span className="mb-1.5 block text-xs text-zinc-500">Expected Return</span><div className="relative"><input type="number" step="0.1" value={step.returnPct??""} placeholder="0" onChange={e=>updateReinvestmentStep(step.id,{returnPct:e.target.value===""?null:Number(e.target.value)})} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 pr-7 text-sm outline-none focus:border-emerald-400/40"/><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">%</span></div></label></div>
+            <label className="mt-3 block"><span className="mb-1.5 block text-xs text-zinc-500">Exit / Target Date</span><input type="date" max={Number.isNaN(targetDateValue.getTime())?undefined:targetDateValue.toISOString().slice(0,10)} value={step.date} onChange={e=>updateReinvestmentStep(step.id,{date:e.target.value})} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-xs outline-none focus:border-emerald-400/40"/></label>
+            <div className="mt-4 rounded-xl bg-emerald-400/[.06] p-3">
+              <div className="flex justify-between gap-3 text-xs text-zinc-500"><span>Expected Profit</span><span className={step.stepProfit>=0?"text-emerald-300":"text-red-300"}>{step.stepProfit>=0?"+":""}{money2(step.stepProfit)}</span></div>
+              <div className="mt-2 flex justify-between gap-3 text-xs text-zinc-500"><span>Expected Investment Value</span><span className="text-zinc-200">{money2(step.endingValue)}</span></div>
+              <div className="mt-2 flex justify-between gap-3 text-xs text-zinc-500"><span>Cash Remaining After Allocation</span><span className="text-zinc-200">{money2(step.remainingCash)}</span></div>
             </div>
-          </div>
+          </div>)}
+        </div>}
 
-          <div className="rounded-2xl border border-blue-400/15 bg-blue-400/[.04] p-4 text-sm text-zinc-400"><span className="font-medium text-blue-200">How This Path Works:</span> Your available cash is always the starting cash pool. If you select positions for the target path, their estimated sale proceeds are added to that cash. Each reinvestment step subtracts the dollar amount you enter from the cash available at that step, applies the target return only to the invested amount, and clearly carries the remaining cash into the next step. Reinvestment dates are limited to the selected Target Date. This is a planning scenario, not a market prediction.</div>
-        </>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-2xl border border-violet-400/20 bg-violet-400/[.05] p-4">
+            <div className="text-xs font-semibold tracking-wider text-violet-300">TARGET CHECK</div>
+            <div className="mt-3 grid grid-cols-2 gap-4"><div><div className="text-xs text-zinc-500">Profit From Cash Plan</div><div className="mt-1 text-lg font-semibold text-emerald-300">{pathwayProfit>=0?"+":""}{money2(pathwayProfit)}</div></div><div><div className="text-xs text-zinc-500">Remaining Gap</div><div className="mt-1 text-lg font-semibold">{money2(pathwayGap)}</div></div></div>
+            <div className="mt-4 text-xs text-zinc-500">{pathwayGap===0?"Target reached in this scenario.":`The plan still needs ${money2(pathwayGap)} of additional profit.`}</div>
+          </div>
+          <div className="rounded-2xl border border-blue-400/20 bg-blue-400/[.04] p-4">
+            <div className="text-xs font-semibold tracking-wider text-blue-300">REQUIRED RETURN</div>
+            {pathwayGap>0&&pathwayRemainingCash>0?<><div className="mt-3 text-2xl font-semibold text-blue-200">{pct(requiredReturnOnRemainingCash)}</div><div className="mt-1 text-xs leading-5 text-zinc-500">Approximate return required on the remaining {money2(pathwayRemainingCash)} cash to close the remaining target gap.</div></>:pathwayGap===0?<div className="mt-3 text-sm font-medium text-emerald-300">No additional return required — target reached.</div>:<div className="mt-3 text-sm text-zinc-500">Allocate cash to see the return required to close the gap.</div>}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-blue-400/15 bg-blue-400/[.04] p-4 text-sm text-zinc-400"><span className="font-medium text-blue-200">How This Planner Works:</span> Starting cash is divided across independent investment ideas. Each card can use any ticker—including the same ticker multiple times—with its own amount, expected return, and date. Expected profits are combined with your price-target scenario profit above. Unallocated cash stays available. This is a planning scenario, not a market prediction.</div>
       </div>
     </Card>
 

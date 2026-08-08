@@ -1,0 +1,11 @@
+Target Planner cash allocation redesign
+- Your Path To The Target now supports independent parallel investments.
+- Each investment has ticker/name, dollar amount, expected return %, and exit/target date.
+- Same ticker may be entered multiple times as separate investments.
+- Cash allocation summary shows starting cash, total allocated, remaining cash, expected profit, expected ending value, and remaining target gap.
+- Allocation progress bar prevents accidental over-allocation.
+- Expected profit and expected investment value are calculated per investment.
+- Cash remaining updates as investment principal is allocated.
+- Cash-plan profit continues to feed Projected Profit / Projected Portfolio / Remaining Gap.
+- Required Return shows the approximate return needed on remaining unallocated cash to close the target gap.
+- Existing target-date-specific persistence remains in place, so each target date retains its own investment cards.
