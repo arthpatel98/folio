@@ -1,0 +1,9 @@
+Target Planner and Savings updates
+
+- Replaced Investment Portion (%) with Investment Amount ($) for every target pathway step.
+- New investment amount fields default to zero but display as blank until entered.
+- Investment amounts are capped at the cash available for that step.
+- Each step displays Remaining Cash after subtracting the entered amount.
+- Remaining cash and the invested amount plus profit flow into the next step.
+- Legacy percentage-based saved steps remain readable and convert to a dollar amount until edited.
+- Updated all active Fidelity 401(k) 2026 YTD calculations and chart fallbacks to 14.65%.

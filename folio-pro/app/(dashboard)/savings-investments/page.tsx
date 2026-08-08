@@ -64,7 +64,7 @@ export default function SavingsInvestmentsPage() {
         ? current / 83745 - 1
         : account.name === "Fidelity Roth IRA"
           ? current / 16452 - 1
-          : 0.205;
+          : 0.1465;
 
       return { ...account, current, gain, totalReturn, cagr, ytd };
     });
@@ -190,7 +190,7 @@ export default function SavingsInvestmentsPage() {
   const dynamicYtd = useMemo(() => ({
     Robinhood: accounts.find((account) => account.name === "Robinhood")?.ytd ?? 0,
     "Fidelity Roth IRA": accounts.find((account) => account.name === "Fidelity Roth IRA")?.ytd ?? 0,
-    "Fidelity 401(k)": 0.205,
+    "Fidelity 401(k)": 0.1465,
   }), [accounts]);
 
   const selectedVisual = activeId === "robinhood"
@@ -198,7 +198,7 @@ export default function SavingsInvestmentsPage() {
     : activeId === "fidelity-roth"
       ? <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={rothQuarterly}/>
       : activeId === "fidelity-401k"
-        ? <YtdAccountChart account="Fidelity 401(k)" data={ytdPerformance.find((row) => row.account === "401(k) IRA") ?? { account: "401(k) IRA", "2024": 0, "2025": 0, "2026": 0.205 }} currentYtd={dynamicYtd["Fidelity 401(k)"]}/>
+        ? <YtdAccountChart account="Fidelity 401(k)" data={ytdPerformance.find((row) => row.account === "401(k) IRA") ?? { account: "401(k) IRA", "2024": 0, "2025": 0, "2026": 0.1465 }} currentYtd={dynamicYtd["Fidelity 401(k)"]}/>
         : <IncomeTotalsChart data={brokerageIncomeTotals}/>;
 
   return <div className="space-y-6">
