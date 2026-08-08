@@ -26,6 +26,7 @@ type ReinvestmentStep = {
   date: string;
   allocationPct?: number | null; // Legacy percentage-based saved steps.
   source?: "cash" | "previous";
+  parentId?: string | null;
 };
 const finite=(v:number)=>Number.isFinite(v)?v:0;
 const money=(v:number)=>finite(v).toLocaleString("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0});
@@ -154,22 +155,36 @@ export default function TargetPlannerPage(){
   }));
   const totalSaleProceeds=sellSelections.reduce((sum,d)=>sum+d.saleProceeds,0);
   const startingCashPool=finite(totalSaleProceeds+remainingAvailableCash);
-  type PathwayValue = ReinvestmentStep & {availableCash:number;investedValue:number;remainingCash:number;stepProfit:number;endingValue:number};
-  let allocatedPrincipal=0;
-  const pathwayValues:PathwayValue[]=reinvestmentSteps.map((step,index)=>{
-    const availableCash=Math.max(0,startingCashPool-allocatedPrincipal);
+  type PathwayValue = ReinvestmentStep & {availableCash:number;investedValue:number;remainingCash:number;stepProfit:number;endingValue:number;fundingLabel:string};
+  const resultById=new Map<string,PathwayValue>();
+  let startingCashAllocated=0;
+  const pathwayValues:PathwayValue[]=reinvestmentSteps.map((step)=>{
+    const parent=step.parentId?resultById.get(step.parentId):undefined;
+    const siblingAllocated=step.parentId?reinvestmentSteps
+      .filter(candidate=>candidate.parentId===step.parentId&&candidate.id!==step.id)
+      .reduce((sum,candidate)=>{
+        const prior=resultById.get(candidate.id);
+        return sum+(prior?.investedValue??0);
+      },0):0;
+    const availableCash=parent
+      ? Math.max(0,parent.endingValue-siblingAllocated)
+      : Math.max(0,startingCashPool-startingCashAllocated);
     const requestedInvestment=typeof step.investmentAmount==="number"&&Number.isFinite(step.investmentAmount)?Math.max(0,step.investmentAmount):0;
     const investedValue=Math.min(availableCash,requestedInvestment);
     const returnPct=typeof step.returnPct==="number"&&Number.isFinite(step.returnPct)?step.returnPct:0;
     const remainingCash=Math.max(0,availableCash-investedValue);
     const stepProfit=investedValue*(returnPct/100);
     const endingValue=investedValue+stepProfit;
-    allocatedPrincipal+=investedValue;
-    return {...step,availableCash,investedValue,remainingCash,stepProfit,endingValue};
+    if(!parent)startingCashAllocated+=investedValue;
+    const fundingLabel=parent?`${parent.ticker||"Investment"} proceeds`:"Starting Cash";
+    const result={...step,availableCash,investedValue,remainingCash,stepProfit,endingValue,fundingLabel};
+    resultById.set(step.id,result);
+    return result;
   });
-  const pathwayAllocated=finite(pathwayValues.reduce((sum,step)=>sum+step.investedValue,0));
+  const stageOneValues=pathwayValues.filter(step=>!step.parentId);
+  const pathwayAllocated=finite(stageOneValues.reduce((sum,step)=>sum+step.investedValue,0));
   const pathwayProfit=finite(pathwayValues.reduce((sum,step)=>sum+step.stepProfit,0));
-  const pathwayRemainingCash=pathwayValues.length?pathwayValues[pathwayValues.length-1].remainingCash:startingCashPool;
+  const pathwayRemainingCash=Math.max(0,startingCashPool-pathwayAllocated);
   const pathwayFinalValue=finite(startingCashPool+pathwayProfit);
   const totalProjectedProfit=finite(scenarioProfit+pathwayProfit);
   const projectedValue=finite(currentValue+totalProjectedProfit);
@@ -185,6 +200,7 @@ export default function TargetPlannerPage(){
   const addReinvestmentStep=()=>setReinvestmentStepsByDate(prev=>{const current=prev[selectedDate]??[];return {...prev,[selectedDate]:[...current,{id:`step-${Date.now()}-${current.length}`,ticker:"",investmentAmount:null,returnPct:null,date:"",source:"cash"}]}});
   const updateReinvestmentStep=(id:string,patch:Partial<ReinvestmentStep>)=>setReinvestmentStepsByDate(prev=>({...prev,[selectedDate]:(prev[selectedDate]??[]).map(step=>step.id===id?{...step,...patch}:step)}));
   const removeReinvestmentStep=(id:string)=>setReinvestmentStepsByDate(prev=>({...prev,[selectedDate]:(prev[selectedDate]??[]).filter(step=>step.id!==id)}));
+  const addChildInvestment=(parentId:string)=>setReinvestmentStepsByDate(prev=>{const current=prev[selectedDate]??[];const parentIndex=current.findIndex(step=>step.id===parentId);if(parentIndex<0)return prev;const child={id:`step-${Date.now()}-${current.length}`,ticker:"",investmentAmount:null,returnPct:null,date:"",source:"previous" as const,parentId};const next=[...current];let insertAt=parentIndex+1;while(insertAt<next.length&&next[insertAt].parentId===parentId)insertAt++;next.splice(insertAt,0,child);return {...prev,[selectedDate]:next};});
   const togglePathPosition=(key:string)=>setSelectedPathPositionsByDate(prev=>{const current=prev[selectedDate]??{};return {...prev,[selectedDate]:{...current,[key]:!current[key]}}});
   const updateAdditionalQty=(detail:typeof details[number],value:number)=>{
     const nextQty=Math.max(0,Number.isFinite(value)?value:0);
@@ -234,7 +250,7 @@ export default function TargetPlannerPage(){
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold">Your Path To The Target</h2>
-            <p className="mt-1 max-w-4xl text-sm text-zinc-500">Allocate your cash across multiple investment ideas. Each investment is independent, can use the same ticker more than once, and tracks its own amount, expected return, and target date.</p>
+            <p className="mt-1 max-w-4xl text-sm text-zinc-500">Allocate your cash across multiple investment ideas. Create independent investments from starting cash, then use Reinvest Proceeds to build Stage 2 and later investments funded by a prior investment's expected ending value.</p>
           </div>
           <button type="button" onClick={addReinvestmentStep} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-medium text-emerald-300 transition hover:bg-emerald-400/15"><Plus size={16}/>Add Investment</button>
         </div>
@@ -263,7 +279,7 @@ export default function TargetPlannerPage(){
         {reinvestmentSteps.length===0?<div className="rounded-2xl border border-dashed border-white/10 p-8 text-center"><div className="text-sm font-medium text-zinc-300">No investments planned yet</div><div className="mt-1 text-xs text-zinc-500">Add investments to divide your cash across tickers and dates.</div></div>:
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {pathwayValues.map((step,index)=><div key={step.id} className="rounded-2xl border border-emerald-400/20 bg-gradient-to-b from-emerald-400/[.07] to-transparent p-4">
-            <div className="flex items-start justify-between gap-3"><div><div className="text-xs font-semibold tracking-wider text-emerald-300">INVESTMENT {index+1}</div><div className="mt-1 text-xs text-zinc-500">Available before allocation: {money2(step.availableCash)}</div></div><button onClick={()=>removeReinvestmentStep(step.id)} className="grid size-8 place-items-center rounded-lg border border-white/10 text-zinc-500 hover:border-red-400/30 hover:text-red-300" aria-label="Remove Investment"><Trash2 size={14}/></button></div>
+            <div className="flex items-start justify-between gap-3"><div><div className="text-xs font-semibold tracking-wider text-emerald-300">INVESTMENT {index+1}</div><div className="mt-1 text-xs text-zinc-500">Funding Source: <span className={step.parentId?"text-violet-300":"text-zinc-300"}>{step.fundingLabel}</span></div><div className="mt-1 text-xs text-zinc-500">Available to invest: {money2(step.availableCash)}</div></div><button onClick={()=>removeReinvestmentStep(step.id)} className="grid size-8 place-items-center rounded-lg border border-white/10 text-zinc-500 hover:border-red-400/30 hover:text-red-300" aria-label="Remove Investment"><Trash2 size={14}/></button></div>
             <label className="mt-4 block"><span className="mb-1.5 block text-xs text-zinc-500">Ticker Or Investment</span><input value={step.ticker} onChange={e=>updateReinvestmentStep(step.id,{ticker:e.target.value.toUpperCase()})} placeholder="NVDA, AMZN, DCA..." className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none focus:border-emerald-400/40"/></label>
             <div className="mt-3 grid grid-cols-2 gap-2"><label><span className="mb-1.5 block text-xs text-zinc-500">Investment Amount</span><div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-emerald-300">$</span><input type="number" min="0" max={step.availableCash} step="0.01" value={step.investmentAmount??""} placeholder="0.00" onChange={e=>updateReinvestmentStep(step.id,{investmentAmount:e.target.value===""?null:Math.min(step.availableCash,Math.max(0,Number(e.target.value)))})} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 pl-7 pr-3 text-sm outline-none focus:border-emerald-400/40"/></div></label><label><span className="mb-1.5 block text-xs text-zinc-500">Expected Return</span><div className="relative"><input type="number" step="0.1" value={step.returnPct??""} placeholder="0" onChange={e=>updateReinvestmentStep(step.id,{returnPct:e.target.value===""?null:Number(e.target.value)})} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 pr-7 text-sm outline-none focus:border-emerald-400/40"/><span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">%</span></div></label></div>
             <label className="mt-3 block"><span className="mb-1.5 block text-xs text-zinc-500">Exit / Target Date</span><input type="date" max={Number.isNaN(targetDateValue.getTime())?undefined:targetDateValue.toISOString().slice(0,10)} value={step.date} onChange={e=>updateReinvestmentStep(step.id,{date:e.target.value})} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-xs outline-none focus:border-emerald-400/40"/></label>
@@ -272,6 +288,7 @@ export default function TargetPlannerPage(){
               <div className="mt-2 flex justify-between gap-3 text-xs text-zinc-500"><span>Expected Investment Value</span><span className="text-zinc-200">{money2(step.endingValue)}</span></div>
               <div className="mt-2 flex justify-between gap-3 text-xs text-zinc-500"><span>Cash Remaining After Allocation</span><span className="text-zinc-200">{money2(step.remainingCash)}</span></div>
             </div>
+            <button type="button" onClick={()=>addChildInvestment(step.id)} className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-violet-400/20 bg-violet-400/[.06] text-xs font-medium text-violet-300 transition hover:bg-violet-400/[.1]"><Plus size={14}/>Reinvest Proceeds</button>
           </div>)}
         </div>}
 
@@ -287,7 +304,7 @@ export default function TargetPlannerPage(){
           </div>
         </div>
 
-        <div className="rounded-2xl border border-blue-400/15 bg-blue-400/[.04] p-4 text-sm text-zinc-400"><span className="font-medium text-blue-200">How This Planner Works:</span> Starting cash is divided across independent investment ideas. Each card can use any ticker—including the same ticker multiple times—with its own amount, expected return, and date. Expected profits are combined with your price-target scenario profit above. Unallocated cash stays available. This is a planning scenario, not a market prediction.</div>
+        <div className="rounded-2xl border border-blue-400/15 bg-blue-400/[.04] p-4 text-sm text-zinc-400"><span className="font-medium text-blue-200">How This Planner Works:</span> Starting-cash investments allocate only your original cash. Reinvest Proceeds creates a child investment funded by that parent's expected ending value, so Stage 2 does not subtract from original cash again. Multiple children can split one parent's proceeds, and the same ticker can appear in any number of stages. Expected profits from all stages are combined with your price-target scenario profit above. This is a planning scenario, not a market prediction.</div>
       </div>
     </Card>
 
