@@ -150,6 +150,7 @@ type State = {
   updateHolding: (originalHolding: Holding, holding: Holding) => void;
   removeHolding: (holding: Holding) => void;
   addTransaction: (transaction: Transaction) => void;
+  addCashTransaction: (entry: { type: "dividend" | "interest" | "deposit" | "withdrawal" | "transfer" | "cash-adjustment"; amount: number; date?: string; symbol?: string; notes?: string }) => void;
   executeTrade: (trade: { action: "buy" | "sell"; holding: Holding; quantity: number; price: number; tradeDate?: string; fees?: number }) => { ok: boolean; message?: string };
   updateStockQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>, portfolioId?: DataPortfolioId) => void;
   updateOptionQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>, portfolioId?: DataPortfolioId) => void;
@@ -214,9 +215,32 @@ export const usePortfolioStore = create<State>()(
             ),
           ];
           const holdingsByPortfolio = { ...state.holdingsByPortfolio, [target]: updated };
+          const transaction: Transaction = {
+            id: `position-added-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            symbol: normalized.symbol,
+            type: "position-added",
+            quantity: Math.abs(normalized.shares),
+            price: normalized.averageCost,
+            amount: Math.abs(normalized.shares) * normalized.averageCost * (normalized.assetType === "option" ? 100 : 1),
+            date: new Date().toISOString().slice(0, 10),
+            fees: 0,
+            assetType: normalized.assetType,
+            optionType: normalized.optionType,
+            optionExpiry: normalized.optionExpiry,
+            optionStrike: normalized.optionStrike,
+            optionSymbol: normalized.optionSymbol,
+            notes: "Position added to Holdings",
+            source: "Holdings",
+            cashImpact: 0,
+          };
+          const transactionsByPortfolio = {
+            ...state.transactionsByPortfolio,
+            [target]: [transaction, ...state.transactionsByPortfolio[target]],
+          };
           return {
             holdingsByPortfolio,
-            ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, state.cashByPortfolio),
+            transactionsByPortfolio,
+            ...visibleState(state.activePortfolioId, holdingsByPortfolio, transactionsByPortfolio, state.cashByPortfolio),
           };
         }),
       updateHolding: (originalHolding, holding) =>
@@ -233,9 +257,32 @@ export const usePortfolioStore = create<State>()(
             }),
           ];
           const holdingsByPortfolio = { ...state.holdingsByPortfolio, [target]: updated };
+          const transaction: Transaction = {
+            id: `correction-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            symbol: normalized.symbol,
+            type: "correction",
+            quantity: Math.abs(normalized.shares),
+            price: normalized.averageCost,
+            amount: 0,
+            date: new Date().toISOString().slice(0, 10),
+            fees: 0,
+            assetType: normalized.assetType,
+            optionType: normalized.optionType,
+            optionExpiry: normalized.optionExpiry,
+            optionStrike: normalized.optionStrike,
+            optionSymbol: normalized.optionSymbol,
+            notes: "Position details edited in Holdings",
+            source: "Holdings",
+            cashImpact: 0,
+          };
+          const transactionsByPortfolio = {
+            ...state.transactionsByPortfolio,
+            [target]: [transaction, ...state.transactionsByPortfolio[target]],
+          };
           return {
             holdingsByPortfolio,
-            ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, state.cashByPortfolio),
+            transactionsByPortfolio,
+            ...visibleState(state.activePortfolioId, holdingsByPortfolio, transactionsByPortfolio, state.cashByPortfolio),
           };
         }),
       removeHolding: (holding) =>
@@ -262,10 +309,33 @@ export const usePortfolioStore = create<State>()(
             ...state.cashByPortfolio,
             [target]: target === "fidelity-401k" ? 0 : state.cashByPortfolio[target] + cashDelta,
           };
+          const transaction: Transaction = {
+            id: `position-removed-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            symbol: removedHolding?.symbol ?? holding.symbol,
+            type: "position-removed",
+            quantity: contracts,
+            price: closePrice,
+            amount: contracts * closePrice * (assetType === "option" ? 100 : 1),
+            date: new Date().toISOString().slice(0, 10),
+            fees: 0,
+            assetType,
+            optionType: removedHolding?.optionType,
+            optionExpiry: removedHolding?.optionExpiry,
+            optionStrike: removedHolding?.optionStrike,
+            optionSymbol: removedHolding?.optionSymbol,
+            notes: isShortOption ? "Position removed from Holdings; short-option close cost applied" : "Position removed from Holdings",
+            source: "Holdings",
+            cashImpact: cashDelta,
+          };
+          const transactionsByPortfolio = {
+            ...state.transactionsByPortfolio,
+            [target]: [transaction, ...state.transactionsByPortfolio[target]],
+          };
           return {
             holdingsByPortfolio,
             cashByPortfolio,
-            ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, cashByPortfolio),
+            transactionsByPortfolio,
+            ...visibleState(state.activePortfolioId, holdingsByPortfolio, transactionsByPortfolio, cashByPortfolio),
           };
         }),
       addTransaction: (transaction) =>
@@ -276,6 +346,46 @@ export const usePortfolioStore = create<State>()(
           return {
             transactionsByPortfolio,
             ...visibleState(state.activePortfolioId, state.holdingsByPortfolio, transactionsByPortfolio, state.cashByPortfolio),
+          };
+        }),
+      addCashTransaction: (entry) =>
+        set((state) => {
+          const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
+          const rawAmount = Number.isFinite(entry.amount) ? entry.amount : 0;
+          const amount = Math.abs(rawAmount);
+          const positiveTypes = new Set(["dividend", "interest", "deposit"]);
+          const negativeTypes = new Set(["withdrawal"]);
+          const signedCashImpact = positiveTypes.has(entry.type)
+            ? amount
+            : negativeTypes.has(entry.type)
+              ? -amount
+              : entry.type === "cash-adjustment"
+                ? rawAmount
+                : 0;
+          const cashImpact = target === "fidelity-401k" ? 0 : signedCashImpact;
+          const transaction: Transaction = {
+            id: `cash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            symbol: entry.symbol?.trim().toUpperCase() || undefined,
+            type: entry.type,
+            amount,
+            date: entry.date || new Date().toISOString().slice(0, 10),
+            fees: 0,
+            notes: entry.notes?.trim() || undefined,
+            source: "Transactions",
+            cashImpact,
+          };
+          const transactionsByPortfolio = {
+            ...state.transactionsByPortfolio,
+            [target]: [transaction, ...state.transactionsByPortfolio[target]],
+          };
+          const cashByPortfolio = {
+            ...state.cashByPortfolio,
+            [target]: target === "fidelity-401k" ? 0 : state.cashByPortfolio[target] + cashImpact,
+          };
+          return {
+            transactionsByPortfolio,
+            cashByPortfolio,
+            ...visibleState(state.activePortfolioId, state.holdingsByPortfolio, transactionsByPortfolio, cashByPortfolio),
           };
         }),
       updateStockQuotes: (quotes, portfolioId) =>
@@ -445,6 +555,8 @@ export const usePortfolioStore = create<State>()(
             optionStrike: holding.optionStrike,
             optionSymbol: holding.optionSymbol,
             notes: `${action === "buy" ? "Bought" : "Sold"} from Holdings${fees > 0 ? " | Platform Fee" : ""}`,
+            source: "Holdings",
+            cashImpact: cashChange,
             realizedGain,
             realizedCostBasis: closedQuantity > 0 ? realizedCostBasis : undefined,
             realizedProceeds: closedQuantity > 0 ? realizedProceeds : undefined,

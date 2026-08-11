@@ -43,16 +43,35 @@ export interface Holding {
   updatedAt: string;
 }
 
+export type TransactionType =
+  | "buy"
+  | "sell"
+  | "dividend"
+  | "interest"
+  | "split"
+  | "deposit"
+  | "withdrawal"
+  | "transfer"
+  | "cash-adjustment"
+  | "position-added"
+  | "position-removed"
+  | "correction"
+  | "option-expired"
+  | "option-assigned"
+  | "option-exercised";
+
 export interface Transaction {
   id: string;
   symbol?: string;
-  type: "buy" | "sell" | "dividend" | "split" | "deposit" | "withdrawal" | "transfer";
+  type: TransactionType;
   quantity?: number;
   price?: number;
   amount: number;
   date: string;
   fees: number;
   notes?: string;
+  source?: string;
+  cashImpact?: number;
   assetType?: AssetType;
   optionType?: OptionType;
   optionExpiry?: string;
