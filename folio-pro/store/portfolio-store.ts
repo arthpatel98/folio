@@ -5,7 +5,7 @@ import { persist } from "zustand/middleware";
 import { AssetType, Holding, Transaction } from "@/types/portfolio";
 import { holdings as robinhoodHoldings, transactions as robinhoodTransactions } from "@/lib/data/mock";
 import { buildOptionSymbol } from "@/lib/options";
-import { consumeStockLots, recordStockTrade, removeDcaPosition } from "@/lib/dca-storage";
+import { consumeStockLots, recordStockTrade, removeDcaPosition, type TaxLotMethod } from "@/lib/dca-storage";
 import { mergeKnownRothRecovery, mergeKnownRothTransactions, RECOVERY_VERSION, restoreKnownRobinhoodIfEmpty } from "@/lib/recovery-data";
 import { migrateLegacyPortfolioState, PORTFOLIO_ID_SCHEMA_VERSION } from "@/lib/portfolio-id-migration";
 
@@ -151,7 +151,7 @@ type State = {
   removeHolding: (holding: Holding) => void;
   addTransaction: (transaction: Transaction) => void;
   addCashTransaction: (entry: { type: "dividend" | "interest" | "deposit" | "withdrawal" | "transfer" | "cash-adjustment"; amount: number; date?: string; symbol?: string; notes?: string }) => void;
-  executeTrade: (trade: { action: "buy" | "sell"; holding: Holding; quantity: number; price: number; tradeDate?: string; fees?: number }) => { ok: boolean; message?: string };
+  executeTrade: (trade: { action: "buy" | "sell"; holding: Holding; quantity: number; price: number; tradeDate?: string; fees?: number; taxLotMethod?: TaxLotMethod; customTaxLots?: Record<string, number> }) => { ok: boolean; message?: string };
   updateStockQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>, portfolioId?: DataPortfolioId) => void;
   updateOptionQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>, portfolioId?: DataPortfolioId) => void;
 };
@@ -434,7 +434,7 @@ export const usePortfolioStore = create<State>()(
           }, { ...state.holdingsByPortfolio });
           return { holdingsByPortfolio, ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, state.cashByPortfolio) };
         }),
-      executeTrade: ({ action, holding, quantity, price, tradeDate, fees = 0 }) => {
+      executeTrade: ({ action, holding, quantity, price, tradeDate, fees = 0, taxLotMethod, customTaxLots }) => {
         const state = get();
         const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
         const assetType = holding.assetType ?? "stock";
@@ -469,8 +469,15 @@ export const usePortfolioStore = create<State>()(
         }
 
         const fifoSale = assetType === "stock" && action === "sell"
-          ? consumeStockLots(target, holding.symbol, quantity)
+          ? consumeStockLots(target, holding.symbol, quantity, {
+              method: taxLotMethod ?? "fifo",
+              customSelection: customTaxLots,
+              saleDate: tradeDate,
+            })
           : null;
+        if (assetType === "stock" && action === "sell" && taxLotMethod && !fifoSale) {
+          return { ok: false, message: taxLotMethod === "custom" ? "Custom tax-lot shares must exactly match the shares being sold." : "Simulator tax lots do not contain enough shares for this sale." };
+        }
 
         set((latest) => {
           const existing = latest.holdingsByPortfolio[target].find((item) => holdingKey(item) === key);
@@ -487,6 +494,12 @@ export const usePortfolioStore = create<State>()(
                 ? (price - (existing?.averageCost ?? holding.averageCost)) * closedQuantity * multiplier * Math.sign(oldQuantityForRealized)
                 : realizedProceeds - realizedCostBasis)
             : undefined;
+          const selectedTaxLots = closesStock && fifoSale ? fifoSale.selectedLots.map((lot) => ({
+            ...lot,
+            realizedGain: lot.quantity * price - lot.costBasis,
+          })) : undefined;
+          const realizedShortTermGain = selectedTaxLots?.filter((lot) => lot.term === "short-term").reduce((sum, lot) => sum + (lot.realizedGain ?? 0), 0);
+          const realizedLongTermGain = selectedTaxLots?.filter((lot) => lot.term === "long-term").reduce((sum, lot) => sum + (lot.realizedGain ?? 0), 0);
           let nextHoldings: Holding[];
           if (assetType === "option") {
             const oldQuantity = existing?.shares ?? 0;
@@ -560,6 +573,10 @@ export const usePortfolioStore = create<State>()(
             realizedGain,
             realizedCostBasis: closedQuantity > 0 ? realizedCostBasis : undefined,
             realizedProceeds: closedQuantity > 0 ? realizedProceeds : undefined,
+            taxLotMethod: closesStock && fifoSale ? (taxLotMethod ?? "fifo") : undefined,
+            taxLots: selectedTaxLots,
+            realizedShortTermGain,
+            realizedLongTermGain,
           };
           const transactionsByPortfolio = { ...latest.transactionsByPortfolio, [target]: [transaction, ...latest.transactionsByPortfolio[target]] };
           return {

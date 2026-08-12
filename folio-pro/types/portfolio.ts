@@ -80,6 +80,19 @@ export interface Transaction {
   realizedGain?: number;
   realizedCostBasis?: number;
   realizedProceeds?: number;
+  taxLotMethod?: "fifo" | "lifo" | "highest-cost" | "custom";
+  taxLots?: Array<{
+    lotId: string;
+    positionId?: string;
+    date: string;
+    quantity: number;
+    costPerShare: number;
+    costBasis: number;
+    realizedGain?: number;
+    term?: "short-term" | "long-term";
+  }>;
+  realizedShortTermGain?: number;
+  realizedLongTermGain?: number;
 }
 
 export interface PerformancePoint {

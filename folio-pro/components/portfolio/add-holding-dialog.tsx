@@ -5,9 +5,11 @@ import { FormEvent, useMemo, useState } from "react";
 import { Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { usePortfolioStore } from "@/store/portfolio-store";
+import { usePortfolioStore, type DataPortfolioId } from "@/store/portfolio-store";
 import { toast } from "sonner";
 import { AssetType, Holding, OptionType, Sector } from "@/types/portfolio";
+import { getStockTaxLots, type StockTaxLot, type TaxLotMethod } from "@/lib/dca-storage";
+import { cn, money } from "@/lib/utils";
 
 const NEW_POSITION = "__new_position__";
 
@@ -70,6 +72,9 @@ export function AddHoldingDialog() {
   const [form, setForm] = useState<FormState>(() => createInitialForm());
   const [stockSelection, setStockSelection] = useState(NEW_POSITION);
   const [error, setError] = useState("");
+  const activePortfolioId = usePortfolioStore((state) => state.activePortfolioId);
+  const [taxLotMethod,setTaxLotMethod]=useState<TaxLotMethod>("fifo");
+  const [customTaxLots,setCustomTaxLots]=useState<Record<string,string>>({});
 
   const ownedStocks = useMemo(() => holdings
     .filter((holding) => (holding.assetType ?? "stock") === "stock" && holding.shares > 0)
@@ -85,6 +90,33 @@ export function AddHoldingDialog() {
       && holding.symbol.toUpperCase() === form.symbol.trim().toUpperCase());
   }, [form.action, form.assetType, form.selectedContractKey, form.symbol, holdings]);
 
+  const stockTaxLots = useMemo<StockTaxLot[]>(() => {
+    if (form.action !== "sell" || form.assetType !== "stock" || !form.symbol || activePortfolioId === "all") return [];
+    return getStockTaxLots(activePortfolioId as DataPortfolioId, form.symbol);
+  }, [activePortfolioId, form.action, form.assetType, form.symbol]);
+
+  const saleQuantity = Math.max(0, Number(form.quantity) || 0);
+  const salePrice = Math.max(0, Number(form.tradePrice) || 0);
+  const autoLotAllocation = useMemo(() => {
+    const lots=stockTaxLots.slice();
+    if(taxLotMethod==="lifo")lots.sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
+    else if(taxLotMethod==="highest-cost")lots.sort((a,b)=>b.price-a.price||Date.parse(a.date)-Date.parse(b.date));
+    else lots.sort((a,b)=>Date.parse(a.date)-Date.parse(b.date));
+    let remaining=saleQuantity;
+    const allocation:Record<string,number>={};
+    if(taxLotMethod==="custom"){
+      stockTaxLots.forEach(lot=>allocation[lot.id]=Math.max(0,Math.min(lot.shares,Number(customTaxLots[lot.id])||0)));
+      return allocation;
+    }
+    lots.forEach(lot=>{const qty=Math.min(lot.shares,remaining);if(qty>0)allocation[lot.id]=qty;remaining-=qty;});
+    return allocation;
+  },[customTaxLots,saleQuantity,stockTaxLots,taxLotMethod]);
+
+  const selectedTaxLotShares=Object.values(autoLotAllocation).reduce((sum,value)=>sum+value,0);
+  const selectedTaxLotCost=stockTaxLots.reduce((sum,lot)=>sum+(autoLotAllocation[lot.id]||0)*lot.price,0);
+  const selectedTaxLotProceeds=selectedTaxLotShares*salePrice;
+  const selectedTaxLotGain=selectedTaxLotProceeds-selectedTaxLotCost;
+
   const resetForSelection = (field: "action" | "assetType", value: string) => {
     setError("");
     const next = createInitialForm(
@@ -93,9 +125,12 @@ export function AddHoldingDialog() {
     );
     setForm(next);
     setStockSelection(NEW_POSITION);
+    setTaxLotMethod("fifo");
+    setCustomTaxLots({});
   };
 
   const update = (field: keyof FormState, value: string) => {
+    if(field==="symbol"){setTaxLotMethod("fifo");setCustomTaxLots({});}
     setForm((current) => {
       const next = { ...current, [field]: field === "symbol" ? value.toUpperCase() : value } as FormState;
       if (field === "symbol") {
@@ -165,6 +200,8 @@ export function AddHoldingDialog() {
     if (!Number.isFinite(tradePrice) || tradePrice < 0 || (!isRemoveOption && tradePrice === 0)) return setError(isOption ? (isRemoveOption ? "Enter A Valid Sell Price." : "Contract Cost Is Required.") : (isRemoveStock ? "Sell Price Is Required." : "Share Price Is Required."));
     if (!matching && !sector) return setError("Select Sector Is Required.");
     if (isOption && form.action === "buy" && !form.optionExpiry) return setError("Option Expiry Is Required.");
+    if (isRemoveStock && stockTaxLots.length > 0 && selectedTaxLotShares + 1e-6 < quantity) return setError("Simulator Tax Lots Do Not Contain Enough Shares For This Sale.");
+    if (isRemoveStock && taxLotMethod === "custom" && Math.abs(selectedTaxLotShares - quantity) > 1e-6) return setError("Custom Tax-Lot Shares Must Exactly Match The Shares Being Sold.");
 
     const optionQuantity = isRemoveOption
       ? ((matching?.shares ?? 0) > 0 ? -Math.abs(quantity) : Math.abs(quantity))
@@ -175,6 +212,10 @@ export function AddHoldingDialog() {
       price: tradePrice,
       tradeDate: form.tradeDate,
       fees: platformFees,
+      taxLotMethod: isRemoveStock && stockTaxLots.length > 0 ? taxLotMethod : undefined,
+      customTaxLots: isRemoveStock && taxLotMethod === "custom"
+        ? Object.fromEntries(Object.entries(customTaxLots).map(([id,value])=>[id,Math.max(0,Number(value)||0)]))
+        : undefined,
       holding: {
         assetType: form.assetType, symbol, company, shares: quantity, averageCost: tradePrice,
         currentPrice: matching?.currentPrice ?? tradePrice, previousClose: matching?.previousClose ?? tradePrice,
@@ -189,6 +230,8 @@ export function AddHoldingDialog() {
     toast.success(form.action === "buy" ? "Position Added Successfully" : "Position Removed Successfully");
     setForm(createInitialForm());
     setStockSelection(NEW_POSITION);
+    setTaxLotMethod("fifo");
+    setCustomTaxLots({});
     setOpen(false);
   }
 
@@ -199,7 +242,7 @@ export function AddHoldingDialog() {
   return (
     <Dialog.Root open={open} onOpenChange={(nextOpen) => {
       setOpen(nextOpen);
-      if (!nextOpen) { setForm(createInitialForm()); setStockSelection(NEW_POSITION); setError(""); }
+      if (!nextOpen) { setForm(createInitialForm()); setStockSelection(NEW_POSITION); setTaxLotMethod("fifo"); setCustomTaxLots({}); setError(""); }
     }}>
       <Dialog.Trigger asChild><Button aria-label="Update Position" title="Update Position" className="size-10 rounded-lg p-0"><Pencil size={17} /></Button></Dialog.Trigger>
       <Dialog.Portal>
@@ -228,6 +271,35 @@ export function AddHoldingDialog() {
               <Field label="Sell Price"><Input required type="number" min="0.000001" step="any" value={form.tradePrice} onChange={(e) => update("tradePrice", e.target.value)} /></Field>
               <DateField label="Sell Date" value={form.tradeDate} onChange={(value) => update("tradeDate", value)} />
               <MoneyField label="Platform Fees" value={form.platformFees} onChange={(value) => update("platformFees", value)} />
+              <div className="sm:col-span-2">
+                {stockTaxLots.length>0?<div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[.04] p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div><div className="text-sm font-semibold">Tax Lot Selection</div><div className="mt-1 text-xs font-normal text-zinc-500">Uses the purchase lots saved on Position Simulator for {form.symbol}.</div></div>
+                    <label className="block min-w-44"><span className="mb-1.5 block text-xs font-medium text-zinc-500">Sell Method</span><select value={taxLotMethod} onChange={e=>{setTaxLotMethod(e.target.value as TaxLotMethod);setCustomTaxLots({});}} className="field-select"><option value="fifo">FIFO · Oldest First</option><option value="lifo">LIFO · Newest First</option><option value="highest-cost">Highest Cost First</option><option value="custom">Custom Lots</option></select></label>
+                  </div>
+                  <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
+                    <table className="min-w-full text-xs">
+                      <thead className="bg-zinc-50 text-zinc-500 dark:bg-white/[.035]"><tr><th className="px-3 py-2 text-left">Buy Date</th><th className="px-3 py-2 text-right">Available</th><th className="px-3 py-2 text-right">Cost</th><th className="px-3 py-2 text-right">Gain / Loss</th><th className="px-3 py-2 text-right">Term</th><th className="px-3 py-2 text-right">Sell Shares</th></tr></thead>
+                      <tbody>{stockTaxLots.slice().sort((a,b)=>Date.parse(a.date)-Date.parse(b.date)).map(lot=>{
+                        const selected=autoLotAllocation[lot.id]||0;
+                        const gain=(salePrice-lot.price)*selected;
+                        const buy=new Date(`${lot.date}T12:00:00`);
+                        const sell=new Date(`${form.tradeDate}T12:00:00`);
+                        const oneYearLater=new Date(buy);oneYearLater.setFullYear(oneYearLater.getFullYear()+1);
+                        const term=!Number.isNaN(buy.getTime())&&!Number.isNaN(sell.getTime())&&sell.getTime()>oneYearLater.getTime()?"Long":"Short";
+                        return <tr key={lot.id} className={cn("border-t border-zinc-200 dark:border-white/10",selected>0&&"bg-emerald-500/[.04]")}><td className="whitespace-nowrap px-3 py-2">{formatTradeDate(lot.date)}</td><td className="px-3 py-2 text-right">{lot.shares.toLocaleString(undefined,{maximumFractionDigits:6})}</td><td className="px-3 py-2 text-right">{money(lot.price)}</td><td className={cn("px-3 py-2 text-right font-medium",gain>0?"text-emerald-500":gain<0?"text-rose-500":"text-zinc-500")}>{selected>0?`${gain>=0?"+":""}${money(gain)}`:"—"}</td><td className="px-3 py-2 text-right"><span className={cn("rounded-md px-1.5 py-0.5",term==="Long"?"bg-emerald-500/10 text-emerald-500":"bg-amber-500/10 text-amber-500")}>{term}</span></td><td className="px-3 py-2 text-right">{taxLotMethod==="custom"?<input type="number" min="0" max={lot.shares} step="any" value={customTaxLots[lot.id]??""} onChange={e=>{const raw=e.target.value;const next=raw===""?"":String(Math.max(0,Math.min(lot.shares,Number(raw)||0)));setCustomTaxLots(current=>({...current,[lot.id]:next}));}} placeholder="0" className="h-8 w-24 rounded-lg border border-zinc-200 bg-white px-2 text-right outline-none dark:border-white/10 dark:bg-zinc-950"/>:<span className={cn("font-semibold",selected>0?"text-emerald-500":"text-zinc-500")}>{selected?selected.toLocaleString(undefined,{maximumFractionDigits:6}):"—"}</span>}</td></tr>
+                      })}</tbody>
+                    </table>
+                  </div>
+                  <div className="mt-4 grid gap-2 sm:grid-cols-4">
+                    <TaxLotMetric label="Shares Selected" value={`${selectedTaxLotShares.toLocaleString(undefined,{maximumFractionDigits:6})} / ${saleQuantity.toLocaleString(undefined,{maximumFractionDigits:6})}`} />
+                    <TaxLotMetric label="Cost Basis" value={money(selectedTaxLotCost)} />
+                    <TaxLotMetric label="Sale Proceeds" value={money(selectedTaxLotProceeds)} />
+                    <TaxLotMetric label="Est. Realized P/L" value={`${selectedTaxLotGain>=0?"+":""}${money(selectedTaxLotGain)}`} tone={selectedTaxLotGain>=0?"good":"bad"} />
+                  </div>
+                  {taxLotMethod==="custom"&&Math.abs(selectedTaxLotShares-saleQuantity)>1e-6&&<p className="mt-3 text-xs font-medium text-amber-500">Select exactly {saleQuantity.toLocaleString(undefined,{maximumFractionDigits:6})} shares across the lots above. Currently selected: {selectedTaxLotShares.toLocaleString(undefined,{maximumFractionDigits:6})}.</p>}
+                </div>:form.symbol&&<div className="rounded-xl border border-amber-500/20 bg-amber-500/[.05] p-3 text-xs font-normal text-amber-600 dark:text-amber-300">No Position Simulator tax lots were found for {form.symbol}. This sale will use the position average cost for realized P/L.</div>}
+              </div>
             </> : isRemoveOption ? <>
               <Field label="Contract Details"><select required value={form.selectedContractKey} onChange={(e) => selectOptionContract(e.target.value)} className="field-select" autoFocus><option value="">Select Contract</option>{ownedOptions.map((holding) => <option key={optionContractKey(holding)} value={optionContractKey(holding)}>{holding.company}</option>)}</select></Field>
               <Field label="Contracts"><Input required type="number" min="1" step="1" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /></Field>
@@ -261,6 +333,10 @@ export function AddHoldingDialog() {
       </Dialog.Portal>
     </Dialog.Root>
   );
+}
+
+function TaxLotMetric({label,value,tone}:{label:string;value:string;tone?:"good"|"bad"}) {
+  return <div className="rounded-xl border border-zinc-200 bg-white/60 p-3 dark:border-white/10 dark:bg-white/[.025]"><div className="text-[11px] font-normal text-zinc-500">{label}</div><div className={cn("mt-1 text-sm font-semibold",tone==="good"?"text-emerald-500":tone==="bad"?"text-rose-500":"text-zinc-800 dark:text-zinc-200")}>{value}</div></div>;
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

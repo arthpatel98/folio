@@ -1,5 +1,6 @@
 export type NumericValue = number | "";
 export type DcaLot = {
+  id?: string;
   amount: number;
   shares: NumericValue;
   price: NumericValue;
