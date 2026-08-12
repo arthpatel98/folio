@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { AssetType, Holding, Transaction } from "@/types/portfolio";
-import { holdings as robinhoodHoldings, transactions as robinhoodTransactions } from "@/lib/data/mock";
+import { holdings as robinhoodHoldings } from "@/lib/data/mock";
 import { buildOptionSymbol } from "@/lib/options";
 import { consumeStockLots, recordStockTrade, removeDcaPosition, type TaxLotMethod } from "@/lib/dca-storage";
 import { mergeKnownRothRecovery, mergeKnownRothTransactions, RECOVERY_VERSION, restoreKnownRobinhoodIfEmpty } from "@/lib/recovery-data";
@@ -63,7 +63,10 @@ const initialHoldingsByPortfolio: Record<DataPortfolioId, Holding[]> = {
 };
 
 const initialTransactionsByPortfolio: Record<DataPortfolioId, Transaction[]> = {
-  robinhood: robinhoodTransactions.map((transaction) => ({ ...transaction })),
+  // Do not seed the transaction ledger with demo/sample trades. The ledger should
+  // contain only activity created by the user's Holdings/Transactions workflows
+  // plus explicitly recovered user transactions.
+  robinhood: [],
   "fidelity-401k": [],
   "fidelity-roth": [],
 };

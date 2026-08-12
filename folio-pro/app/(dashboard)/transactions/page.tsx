@@ -86,6 +86,18 @@ const transactionPositionKey=(tx:Transaction)=>{
   if(tx.assetType!=="option")return `stock:${symbol}`;
   return `option:${tx.optionSymbol||[symbol,tx.optionType||"",tx.optionExpiry||"",tx.optionStrike??""].join("|")}`;
 };
+const isActualPortfolioTransaction=(tx:Transaction)=>{
+  const id=String(tx.id||"");
+  // Folio-generated user activity uses these IDs. Recovery transactions explicitly
+  // supplied by the user also use the trade-* format. This intentionally excludes
+  // demo/seed rows and unexplained legacy records that were never created by a real
+  // portfolio action.
+  const generatedId=/^(?:trade|cash|position-added|position-removed|correction)-/.test(id);
+  const knownSource=tx.source==="Holdings"||tx.source==="Transactions";
+  const holdingsNote=/\b(?:Bought|Sold) from Holdings\b/i.test(tx.notes||"");
+  return generatedId||knownSource||holdingsNote;
+};
+
 const categoryFor=(tx:Transaction):Exclude<Category,"all">=>{
   if(tx.type==="dividend"||tx.type==="interest") return "income";
   if(["deposit","withdrawal","transfer","cash-adjustment"].includes(tx.type)) return "cash";
@@ -111,7 +123,7 @@ export default function TransactionsPage(){
   const allRows=useMemo<TransactionRow[]>(()=>{
     const ids:DataPortfolioId[]=activeId==="all"?["robinhood","fidelity-roth","fidelity-401k"]:[activeId];
     return ids.flatMap(portfolioId=>(transactionsByPortfolio[portfolioId]??[])
-      .filter(transaction=>transaction.date>="2026-07-11")
+      .filter(transaction=>transaction.date>="2026-07-11"&&isActualPortfolioTransaction(transaction))
       .map(transaction=>({transaction,portfolioId})))
       .sort((a,b)=>b.transaction.date.localeCompare(a.transaction.date)||b.transaction.id.localeCompare(a.transaction.id));
   },[activeId,transactionsByPortfolio]);
@@ -120,7 +132,10 @@ export default function TransactionsPage(){
     const result=new Map<string,number>();
     const ids:DataPortfolioId[]=["robinhood","fidelity-roth","fidelity-401k"];
     ids.forEach(portfolioId=>{
-      const ledger=(transactionsByPortfolio[portfolioId]??[]).slice().sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
+      const ledger=(transactionsByPortfolio[portfolioId]??[])
+        .filter(isActualPortfolioTransaction)
+        .slice()
+        .sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
       const lotsByPosition=new Map<string,Array<{date:string;quantity:number}>>();
       ledger.forEach(tx=>{
         const exact=exactAverageDaysHeld(tx);
@@ -249,7 +264,7 @@ export default function TransactionsPage(){
           })}</tbody>
         </table>
       </div>
-      <div className="border-t border-white/[.06] px-4 py-3 text-xs text-zinc-600">{filteredRows.length.toLocaleString()} transaction{filteredRows.length===1?"":"s"} shown from Jul 11, 2026 onward. Trade transactions are created automatically from Holdings; deleting a holding does not erase its history.</div>
+      <div className="border-t border-white/[.06] px-4 py-3 text-xs text-zinc-600">{filteredRows.length.toLocaleString()} actual transaction{filteredRows.length===1?"":"s"} shown from Jul 11, 2026 onward. Demo/seed records are excluded. Trade transactions are created automatically from Holdings; deleting a holding does not erase its history.</div>
     </Card>
 
     {showAdd&&<div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
