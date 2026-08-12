@@ -56,6 +56,30 @@ const transactionCashImpact=(tx:Transaction)=>{
   if(tx.type==="buy"||tx.type==="withdrawal") return -amount-(tx.fees||0);
   return 0;
 };
+
+const realizedPlPct=(tx:Transaction)=>{
+  const gain=tx.realizedGain;
+  const basis=tx.realizedCostBasis;
+  if(typeof gain!=="number"||typeof basis!=="number"||!Number.isFinite(basis)||basis<=0)return null;
+  return gain/basis*100;
+};
+
+const averageDaysHeld=(tx:Transaction)=>{
+  if(!tx.taxLots?.length||!tx.date)return null;
+  const sellDate=new Date(`${tx.date}T12:00:00`);
+  if(Number.isNaN(sellDate.getTime()))return null;
+  let weightedDays=0;
+  let totalQuantity=0;
+  tx.taxLots.forEach(lot=>{
+    const buyDate=new Date(`${lot.date}T12:00:00`);
+    const quantity=Math.max(0,Number(lot.quantity)||0);
+    if(Number.isNaN(buyDate.getTime())||quantity<=0)return;
+    const days=Math.max(0,Math.round((sellDate.getTime()-buyDate.getTime())/86_400_000));
+    weightedDays+=days*quantity;
+    totalQuantity+=quantity;
+  });
+  return totalQuantity>0?weightedDays/totalQuantity:null;
+};
 const categoryFor=(tx:Transaction):Exclude<Category,"all">=>{
   if(tx.type==="dividend"||tx.type==="interest") return "income";
   if(["deposit","withdrawal","transfer","cash-adjustment"].includes(tx.type)) return "cash";
@@ -149,10 +173,12 @@ export default function TransactionsPage(){
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1120px] text-sm">
-          <thead className="bg-white/[.025] text-left text-xs tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Date</th>{activeId==="all"&&<th className="px-4 py-3">Portfolio</th>}<th className="px-4 py-3">Type</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Quantity</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Cash Impact</th><th className="px-4 py-3">Realized P/L</th></tr></thead>
-          <tbody>{filteredRows.length===0?<tr><td colSpan={activeId==="all"?9:8} className="px-4 py-16 text-center text-zinc-500"><ReceiptText className="mx-auto mb-3 size-8 opacity-40"/><div>No transactions match these filters.</div></td></tr>:filteredRows.map(({transaction:tx,portfolioId})=>{
+        <table className="w-full min-w-[1320px] text-sm">
+          <thead className="bg-white/[.025] text-left text-xs tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Date</th>{activeId==="all"&&<th className="px-4 py-3">Portfolio</th>}<th className="px-4 py-3">Type</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Quantity</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Cash Impact</th><th className="px-4 py-3">Realized P/L</th><th className="px-4 py-3">Realized P/L %</th><th className="px-4 py-3">Avg. Days Held</th></tr></thead>
+          <tbody>{filteredRows.length===0?<tr><td colSpan={activeId==="all"?11:10} className="px-4 py-16 text-center text-zinc-500"><ReceiptText className="mx-auto mb-3 size-8 opacity-40"/><div>No transactions match these filters.</div></td></tr>:filteredRows.map(({transaction:tx,portfolioId})=>{
             const cashImpact=transactionCashImpact(tx);
+            const realizedPct=realizedPlPct(tx);
+            const avgDays=averageDaysHeld(tx);
             return <tr key={`${portfolioId}:${tx.id}`} className="border-t border-white/[.06] align-top hover:bg-white/[.018]">
               <td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateLabel(tx.date)}</td>
               {activeId==="all"&&<td className="whitespace-nowrap px-4 py-3 text-xs text-zinc-400">{PORTFOLIO_NAMES[portfolioId]}</td>}
@@ -163,6 +189,8 @@ export default function TransactionsPage(){
               <td className="px-4 py-3">{tx.amount?money(tx.amount):"—"}</td>
               <td className={cn("px-4 py-3 font-medium",cashImpact>0?"text-emerald-400":cashImpact<0?"text-red-400":"text-zinc-500")}>{cashImpact?signedMoney(cashImpact):"—"}</td>
               <td className={cn("px-4 py-3 font-medium",(tx.realizedGain||0)>0?"text-emerald-400":(tx.realizedGain||0)<0?"text-red-400":"text-zinc-500")}>{typeof tx.realizedGain==="number"?signedMoney(tx.realizedGain):"—"}</td>
+              <td className={cn("whitespace-nowrap px-4 py-3 font-medium",realizedPct!==null&&realizedPct>0?"text-emerald-400":realizedPct!==null&&realizedPct<0?"text-red-400":"text-zinc-500")}>{realizedPct!==null?`${realizedPct>=0?"+":""}${realizedPct.toFixed(2)}%`:"—"}</td>
+              <td className="whitespace-nowrap px-4 py-3 font-medium text-zinc-400">{avgDays!==null?`${Math.round(avgDays).toLocaleString()} days`:"—"}</td>
             </tr>
           })}</tbody>
         </table>
