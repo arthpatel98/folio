@@ -14,7 +14,7 @@ const items = [
   ["/targets", "Targets", Target],
   ["/realized", "Realized", Landmark],
   ["/transactions", "Txns", ReceiptText],
-  ["/savings-investments", "Wealth", PiggyBank],
+  ["/savings-investments", "Performance", PiggyBank],
 ] as const;
 
 export function MobileNav() {

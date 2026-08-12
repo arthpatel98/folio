@@ -188,7 +188,7 @@ export default function TargetPlannerPage(){
   const pathwayFinalValue=finite(startingCashPool+pathwayProfit);
   const totalProjectedProfit=finite(scenarioProfit+pathwayProfit);
   const projectedValue=finite(currentValue+totalProjectedProfit);
-  // Match the Savings & Investments formulas, but substitute the projected portfolio value.
+  // Match the Portfolio Performance formulas, but substitute the projected portfolio value.
   const projectedMonthFraction=(new Date().getMonth())/12;
   const projectedYtd=isRobinhood
     ? projectedValue/83745-1
@@ -200,8 +200,8 @@ export default function TargetPlannerPage(){
   const projectedCagr=projectedInvested>0&&projectedValue>0
     ? Math.pow(projectedValue/projectedInvested,1/projectedCagrYears)-1
     : 0;
-  const projectedPerformanceSubtle=(isRobinhood||isRoth)
-    ? `YTD ${projectedYtd>=0?"+":""}${(projectedYtd*100).toFixed(2)}% · CAGR ${projectedCagr>=0?"+":""}${(projectedCagr*100).toFixed(2)}%`
+  const projectedPerformance=(isRobinhood||isRoth)
+    ? {ytd:projectedYtd*100,cagr:projectedCagr*100}
     : undefined;
   const pathwayGap=Math.max(0,finite(selectedTarget.target-projectedValue));
   const remainingGap=pathwayGap;
@@ -234,7 +234,7 @@ export default function TargetPlannerPage(){
       <Metric icon={Target} label="Selected Target" value={money(selectedTarget.target)} accent/>
       <Metric icon={TrendingUp} label="Profit Needed" value={money(baseGap)} />
       <Metric icon={TrendingUp} label="Projected Profit" value={`${totalProjectedProfit>=0?"+":""}${money2(totalProjectedProfit)}`} good={totalProjectedProfit>=0}/>
-      <Metric icon={Flag} label="Projected Portfolio" value={money2(projectedValue)} subtle={projectedPerformanceSubtle} accent={projectedValue>=selectedTarget.target}/>
+      <Metric icon={Flag} label="Projected Portfolio" value={money2(projectedValue)} performance={projectedPerformance} accent={projectedValue>=selectedTarget.target}/>
       <Metric icon={CalendarDays} label="Remaining Gap" value={money(remainingGap)} subtle={`${baseGap?Math.min(100,Math.max(0,totalProjectedProfit/baseGap*100)).toFixed(1):100}% Covered`}/>
       <Metric icon={CircleDollarSign} label="New Capital Required" value={money2(totalInvestment)}/>
     </div>
@@ -319,7 +319,6 @@ export default function TargetPlannerPage(){
           </div>
         </div>
 
-        <div className="rounded-2xl border border-blue-400/15 bg-blue-400/[.04] p-4 text-sm text-zinc-400"><span className="font-medium text-blue-200">How This Planner Works:</span> Starting-cash investments allocate only your original cash. Reinvest Proceeds creates a child investment funded by that parent's expected ending value, so Stage 2 does not subtract from original cash again. Multiple children can split one parent's proceeds, and the same ticker can appear in any number of stages. Expected profits from all stages are combined with your price-target scenario profit above. This is a planning scenario, not a market prediction.</div>
       </div>
     </Card>
 
@@ -328,4 +327,4 @@ export default function TargetPlannerPage(){
 
 function PathMetric({label,value,accent=false}:{label:string;value:string;accent?:boolean}){return <div className="rounded-xl border border-white/[.07] bg-white/[.025] p-3"><div className="text-xs text-zinc-500">{label}</div><div className={cn("mt-2 text-lg font-semibold",accent&&"text-emerald-300")}>{value}</div></div>}
 
-function Metric({icon:Icon,label,value,subtle,accent=false,good=false}:{icon:any;label:string;value:string;subtle?:string;accent?:boolean;good?:boolean}){return <Card className="min-w-0 p-3 sm:p-4"><div className="flex min-w-0 items-center gap-2 text-xs text-zinc-500"><span className={cn("grid size-8 place-items-center rounded-lg",accent||good?"bg-emerald-400/15 text-emerald-400":"bg-blue-400/15 text-blue-300")}><Icon size={16}/></span>{label}</div><div className={cn("mt-3 break-words text-lg font-semibold sm:text-xl",(accent||good)&&"text-emerald-400")}>{value}</div>{subtle&&<div className="mt-1 text-xs text-zinc-500">{subtle}</div>}</Card>}
+function Metric({icon:Icon,label,value,subtle,performance,accent=false,good=false}:{icon:any;label:string;value:string;subtle?:string;performance?:{ytd:number;cagr:number};accent?:boolean;good?:boolean}){return <Card className="min-w-0 p-3 sm:p-4"><div className="flex min-w-0 items-center gap-2 text-xs text-zinc-500"><span className={cn("grid size-8 place-items-center rounded-lg",accent||good?"bg-emerald-400/15 text-emerald-400":"bg-blue-400/15 text-blue-300")}><Icon size={16}/></span>{label}</div><div className={cn("mt-3 break-words text-lg font-semibold sm:text-xl",(accent||good)&&"text-emerald-400")}>{value}</div>{performance&&<div className="mt-3 flex flex-wrap gap-2"><span className={cn("rounded-lg border px-2 py-1 text-[11px] font-semibold",performance.ytd>=0?"border-emerald-400/20 bg-emerald-400/[.08] text-emerald-300":"border-rose-400/20 bg-rose-400/[.08] text-rose-300")}>YTD {performance.ytd>=0?"+":""}{performance.ytd.toFixed(2)}%</span><span className={cn("rounded-lg border px-2 py-1 text-[11px] font-semibold",performance.cagr>=0?"border-blue-400/20 bg-blue-400/[.08] text-blue-300":"border-rose-400/20 bg-rose-400/[.08] text-rose-300")}>CAGR {performance.cagr>=0?"+":""}{performance.cagr.toFixed(2)}%</span></div>}{subtle&&<div className="mt-1 text-xs text-zinc-500">{subtle}</div>}</Card>}

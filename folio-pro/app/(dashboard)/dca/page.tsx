@@ -385,9 +385,6 @@ export default function DcaPage() {
   const remainingCostBasis = Math.max(totals.amount - consumedCostBasis, 0);
   const remainingAverageCost = remainingShares ? remainingCostBasis / remainingShares : 0;
   const isShortOption = isOption && optionDirection < 0;
-  const rangeFloor = isShortOption ? 0 : Math.max(0, baseAverage * 0.4);
-  const rangeCeiling = isShortOption ? Math.max(baseAverage * 2, 0.01) : Math.max(rangeFloor, baseAverage * 1.6);
-  const sliderValue = sellPrice === "" ? baseAverage : Math.min(Math.max(targetPrice, rangeFloor), rangeCeiling);
 
   const saveLot = () => {
     const shares = toNumber(lotDraft.shares), price = toNumber(lotDraft.price), cost = toNumber(lotDraft.cost);
@@ -554,15 +551,18 @@ export default function DcaPage() {
     </section>
     </>}
 
-    <div className={cn("grid gap-4", !isOption && "xl:grid-cols-2")}>
-      <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
-        <h2 className="flex items-center gap-2 font-semibold">Price Range Simulator <InfoTip text="Move the slider from 60% below to 60% above average cost to test different potential selling prices." /></h2>
-        <div className="mt-6 grid grid-cols-3 text-sm"><div><p className="font-semibold text-rose-400">{money(rangeFloor)}</p><p className="mt-1 text-xs text-zinc-500">{isShortOption ? "-100.00%" : "-60.00%"}</p></div><div className="text-center"><p className="font-semibold">{money(baseAverage)}</p><p className="mt-1 text-xs text-zinc-500">{isOption ? "Average Premium" : "Average Cost"}</p></div><div className="text-right"><p className="font-semibold text-emerald-400">{money(rangeCeiling)}</p><p className="mt-1 text-xs text-zinc-500">{isShortOption ? "+100.00%" : "+60.00%"}</p></div></div>
-        <input aria-label="Potential Selling Price" type="range" min={rangeFloor} max={rangeCeiling} step={Math.max((rangeCeiling-rangeFloor)/300,0.01)} value={sliderValue} onChange={(event) => setSellPrice(Number(event.target.value).toFixed(2))} className="mt-5 w-full accent-emerald-400"/>
-        <p className="mt-3 text-center text-sm text-emerald-400">Potential Sell Price: {money(sellPrice === "" ? baseAverage : targetPrice)}</p>
+    {isOption ? (
+      <div className="grid gap-4 xl:grid-cols-2">
+        <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
+        <h2 className="flex items-center gap-2 font-semibold">Target Return Calculator <InfoTip text="Enter a desired return percentage to calculate the selling price needed for this DCA position." /></h2>
+        <label className="mt-4 block text-sm text-zinc-400">Target Return (%)</label><div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={targetReturn} type="number" step="any" onChange={(e)=>setTargetReturn(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span>%</span></div>
+        <div className="mt-4 rounded-xl border border-emerald-500/35 bg-emerald-500/[.07] p-5 text-center"><p className="text-sm text-zinc-300">Required Selling Price</p><p className="mt-2 text-3xl font-semibold text-emerald-400">{money(requiredSellingPrice)}</p><p className="mt-2 text-sm text-emerald-400">Potential Return: {signedMoney(targetPotentialProfit)} ({toNumber(targetReturn).toFixed(2)}%)</p></div>
       </section>
-
-      {!isOption && <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
+      </div>
+    ) : (
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)] xl:items-start">
+        <div className="grid gap-4">
+          <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
         <h2 className="font-semibold">Before DCA Vs. After DCA</h2>
         <div className="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-black/15">
           <div className="grid md:grid-cols-[1fr_auto_1fr] md:items-stretch">
@@ -571,24 +571,23 @@ export default function DcaPage() {
             <div className={cn("p-5", totals.avg < totals.oldAvg ? "bg-emerald-500/[.06]" : totals.avg > totals.oldAvg ? "bg-rose-500/[.06]" : "")}><p className="text-sm font-medium text-zinc-400">After DCA</p><p className="mt-1 text-xs text-zinc-600">New Average Price</p><div className="mt-4 flex items-end justify-between gap-4"><p className="text-3xl font-semibold">{totals.avg ? money(totals.avg) : "—"}</p>{totals.oldAvg > 0 && totals.avg > 0 && (() => { const difference = totals.avg - totals.oldAvg; const percent = difference / totals.oldAvg * 100; const Icon = difference > 0 ? ArrowUp : difference < 0 ? ArrowDown : ArrowRight; return <div className={cn("flex items-center gap-1.5 text-sm font-semibold", difference < 0 ? "text-emerald-400" : difference > 0 ? "text-rose-400" : "text-zinc-400")}><Icon size={17}/><span>{signedMoney(difference)} · {Math.abs(percent).toFixed(2)}%</span></div>; })()}</div></div>
           </div>
         </div>
-      </section>}
-    </div>
-
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
+      </section>
+          <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
         <h2 className="flex items-center gap-2 font-semibold">Target Return Calculator <InfoTip text="Enter a desired return percentage to calculate the selling price needed for this DCA position." /></h2>
         <label className="mt-4 block text-sm text-zinc-400">Target Return (%)</label><div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={targetReturn} type="number" step="any" onChange={(e)=>setTargetReturn(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span>%</span></div>
         <div className="mt-4 rounded-xl border border-emerald-500/35 bg-emerald-500/[.07] p-5 text-center"><p className="text-sm text-zinc-300">Required Selling Price</p><p className="mt-2 text-3xl font-semibold text-emerald-400">{money(requiredSellingPrice)}</p><p className="mt-2 text-sm text-emerald-400">Potential Return: {signedMoney(targetPotentialProfit)} ({toNumber(targetReturn).toFixed(2)}%)</p></div>
       </section>
-      {!isOption && <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
+        </div>
+        <div className="min-w-0">
+          <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
         <h2 className="flex items-center gap-2 font-semibold">Partial Sale Calculator <InfoTip text="Uses FIFO purchase lots, selling the oldest available shares first." /></h2>
         <label className="mt-4 block text-sm text-zinc-400">Shares To Sell</label><div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={sharesToSell} min={0} max={totals.shares} type="number" step="any" onChange={(e)=>setSharesToSell(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span className="whitespace-nowrap text-sm text-zinc-400">Of {formatShares(totals.shares)}</span></div>
         {fifoRows.length>0 && <div className="mt-5 max-h-44 overflow-auto rounded-xl border border-white/10"><table className="min-w-full text-xs"><thead className="bg-white/[.04] text-zinc-400"><tr><th className="px-3 py-2 text-left">Buy Date Lot</th><th className="px-3 py-2 text-right">Shares</th><th className="px-3 py-2 text-right">Buy</th><th className="px-3 py-2 text-right">Return</th></tr></thead><tbody>{fifoRows.map((row,index)=><tr key={`${row.date}-${index}`} className="border-t border-white/10"><td className="px-3 py-2">{row.date}</td><td className="px-3 py-2 text-right">{formatShares(row.shares)}</td><td className="px-3 py-2 text-right">{money(row.buyPrice)}</td><td className={cn("px-3 py-2 text-right",row.returnValue>=0?"text-emerald-400":"text-rose-400")}>{signedMoney(row.returnValue)}</td></tr>)}</tbody></table></div>}
         <div className="mt-5 space-y-3 text-sm"><div className="flex justify-between"><span className="text-zinc-400">Proceeds</span><span>{money(partialProceeds)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Net Realized Return</span><span className={partialProfit>=0?"text-emerald-400":"text-rose-400"}>{signedMoney(partialProfit)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Remaining Shares</span><span>{formatShares(remainingShares)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Remaining Cost Basis</span><span>{money(remainingCostBasis)}</span></div><div className="flex justify-between"><span className="text-zinc-400">New Average Cost</span><span>{money(remainingAverageCost)}</span></div></div>
-      </section>}
-
-
-    </div>
+      </section>
+        </div>
+      </div>
+    )}
 
 
   </div>;
