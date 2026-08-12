@@ -81,12 +81,28 @@ const exactAverageDaysHeld=(tx:Transaction)=>{
   return totalQuantity>0?weightedDays/totalQuantity:null;
 };
 
+const explicitAverageDaysHeld=(tx:Transaction)=>{
+  const symbol=(tx.symbol||"").trim().toUpperCase();
+  if(tx.date==="2026-08-07"&&tx.type==="sell"&&symbol==="PLTR")return 25;
+  if(symbol==="NVDA"&&tx.assetType==="option"&&tx.optionType==="buy-call"&&tx.optionExpiry==="2027-06-17")return 62;
+  return null;
+};
+
 const transactionPositionKey=(tx:Transaction)=>{
   const symbol=(tx.symbol||"").trim().toUpperCase();
   if(tx.assetType!=="option")return `stock:${symbol}`;
   return `option:${tx.optionSymbol||[symbol,tx.optionType||"",tx.optionExpiry||"",tx.optionStrike??""].join("|")}`;
 };
+const isExplicitlyRemovedTransaction=(tx:Transaction)=>{
+  if(tx.date!=="2026-07-11"||tx.type!=="buy")return false;
+  const symbol=(tx.symbol||"").trim().toUpperCase();
+  if(symbol==="SITM")return true;
+  if((symbol==="UNHG"||symbol==="ROBN")&&tx.assetType==="option"&&tx.optionType==="sell-call"&&tx.optionExpiry==="2026-07-17")return true;
+  return false;
+};
+
 const isActualPortfolioTransaction=(tx:Transaction)=>{
+  if(isExplicitlyRemovedTransaction(tx))return false;
   const id=String(tx.id||"");
   // Folio-generated user activity uses these IDs. Recovery transactions explicitly
   // supplied by the user also use the trade-* format. This intentionally excludes
@@ -123,7 +139,7 @@ export default function TransactionsPage(){
   const allRows=useMemo<TransactionRow[]>(()=>{
     const ids:DataPortfolioId[]=activeId==="all"?["robinhood","fidelity-roth","fidelity-401k"]:[activeId];
     return ids.flatMap(portfolioId=>(transactionsByPortfolio[portfolioId]??[])
-      .filter(transaction=>transaction.date>="2026-07-11"&&isActualPortfolioTransaction(transaction))
+      .filter(transaction=>transaction.date>="2026-08-01"&&transaction.date<"2026-09-01"&&isActualPortfolioTransaction(transaction))
       .map(transaction=>({transaction,portfolioId})))
       .sort((a,b)=>b.transaction.date.localeCompare(a.transaction.date)||b.transaction.id.localeCompare(a.transaction.id));
   },[activeId,transactionsByPortfolio]);
@@ -247,7 +263,7 @@ export default function TransactionsPage(){
           <tbody>{filteredRows.length===0?<tr><td colSpan={activeId==="all"?11:10} className="px-4 py-16 text-center text-zinc-500"><ReceiptText className="mx-auto mb-3 size-8 opacity-40"/><div>No transactions match these filters.</div></td></tr>:filteredRows.map(({transaction:tx,portfolioId})=>{
             const cashImpact=transactionCashImpact(tx);
             const realizedPct=realizedPlPct(tx);
-            const avgDays=historicalDaysByTransactionId.get(`${portfolioId}:${tx.id}`)??null;
+            const avgDays=explicitAverageDaysHeld(tx)??historicalDaysByTransactionId.get(`${portfolioId}:${tx.id}`)??null;
             return <tr key={`${portfolioId}:${tx.id}`} className="border-t border-white/[.06] align-top hover:bg-white/[.018]">
               <td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateLabel(tx.date)}</td>
               {activeId==="all"&&<td className="whitespace-nowrap px-4 py-3 text-xs text-zinc-400">{PORTFOLIO_NAMES[portfolioId]}</td>}
@@ -259,12 +275,12 @@ export default function TransactionsPage(){
               <td className={cn("px-4 py-3 font-medium",cashImpact>0?"text-emerald-400":cashImpact<0?"text-red-400":"text-zinc-500")}>{cashImpact?signedMoney(cashImpact):"—"}</td>
               <td className={cn("px-4 py-3 font-medium",(tx.realizedGain||0)>0?"text-emerald-400":(tx.realizedGain||0)<0?"text-red-400":"text-zinc-500")}>{typeof tx.realizedGain==="number"?signedMoney(tx.realizedGain):"—"}</td>
               <td className={cn("whitespace-nowrap px-4 py-3 font-medium",realizedPct!==null&&realizedPct>0?"text-emerald-400":realizedPct!==null&&realizedPct<0?"text-red-400":"text-zinc-500")}>{realizedPct!==null?`${realizedPct>=0?"+":""}${realizedPct.toFixed(2)}%`:"—"}</td>
-              <td className="whitespace-nowrap px-4 py-3 font-medium text-zinc-400">{avgDays!==null?`${Math.round(avgDays).toLocaleString()} days`:"—"}</td>
+              <td className="whitespace-nowrap px-4 py-3 font-medium text-zinc-400">{avgDays!==null?`${Math.round(avgDays).toLocaleString()} ${Math.round(avgDays)===1?"Day":"Days"}`:"—"}</td>
             </tr>
           })}</tbody>
         </table>
       </div>
-      <div className="border-t border-white/[.06] px-4 py-3 text-xs text-zinc-600">{filteredRows.length.toLocaleString()} actual transaction{filteredRows.length===1?"":"s"} shown from Jul 11, 2026 onward. Demo/seed records are excluded. Trade transactions are created automatically from Holdings; deleting a holding does not erase its history.</div>
+      <div className="border-t border-white/[.06] px-4 py-3 text-xs text-zinc-600">{filteredRows.length.toLocaleString()} actual transaction{filteredRows.length===1?"":"s"} shown for Aug 2026. Demo/seed records are excluded. Trade transactions are created automatically from Holdings; deleting a holding does not erase its history.</div>
     </Card>
 
     {showAdd&&<div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
