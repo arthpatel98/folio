@@ -64,7 +64,7 @@ const realizedPlPct=(tx:Transaction)=>{
   return gain/basis*100;
 };
 
-const averageDaysHeld=(tx:Transaction)=>{
+const exactAverageDaysHeld=(tx:Transaction)=>{
   if(!tx.taxLots?.length||!tx.date)return null;
   const sellDate=new Date(`${tx.date}T12:00:00`);
   if(Number.isNaN(sellDate.getTime()))return null;
@@ -79,6 +79,12 @@ const averageDaysHeld=(tx:Transaction)=>{
     totalQuantity+=quantity;
   });
   return totalQuantity>0?weightedDays/totalQuantity:null;
+};
+
+const transactionPositionKey=(tx:Transaction)=>{
+  const symbol=(tx.symbol||"").trim().toUpperCase();
+  if(tx.assetType!=="option")return `stock:${symbol}`;
+  return `option:${tx.optionSymbol||[symbol,tx.optionType||"",tx.optionExpiry||"",tx.optionStrike??""].join("|")}`;
 };
 const categoryFor=(tx:Transaction):Exclude<Category,"all">=>{
   if(tx.type==="dividend"||tx.type==="interest") return "income";
@@ -109,6 +115,54 @@ export default function TransactionsPage(){
       .map(transaction=>({transaction,portfolioId})))
       .sort((a,b)=>b.transaction.date.localeCompare(a.transaction.date)||b.transaction.id.localeCompare(a.transaction.id));
   },[activeId,transactionsByPortfolio]);
+
+  const historicalDaysByTransactionId=useMemo(()=>{
+    const result=new Map<string,number>();
+    const ids:DataPortfolioId[]=["robinhood","fidelity-roth","fidelity-401k"];
+    ids.forEach(portfolioId=>{
+      const ledger=(transactionsByPortfolio[portfolioId]??[]).slice().sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
+      const lotsByPosition=new Map<string,Array<{date:string;quantity:number}>>();
+      ledger.forEach(tx=>{
+        const exact=exactAverageDaysHeld(tx);
+        if(exact!==null)result.set(`${portfolioId}:${tx.id}`,exact);
+        if(!tx.symbol||(tx.type!=="buy"&&tx.type!=="sell"))return;
+        const key=transactionPositionKey(tx);
+        const quantity=Math.abs(Number(tx.quantity)||0);
+        if(quantity<=0)return;
+        const lots=lotsByPosition.get(key)??[];
+        if(tx.type==="buy"){
+          lots.push({date:tx.date,quantity});
+          lotsByPosition.set(key,lots);
+          return;
+        }
+
+        let remaining=quantity;
+        let weightedDays=0;
+        let matchedQuantity=0;
+        // Historical transactions that predate explicit tax-lot metadata are
+        // reconstructed FIFO, matching Folio's original stock-sale behavior.
+        while(remaining>1e-9&&lots.length){
+          const lot=lots[0];
+          const used=Math.min(lot.quantity,remaining);
+          const buyDate=new Date(`${lot.date}T12:00:00`);
+          const sellDate=new Date(`${tx.date}T12:00:00`);
+          if(!Number.isNaN(buyDate.getTime())&&!Number.isNaN(sellDate.getTime())){
+            const days=Math.max(0,Math.round((sellDate.getTime()-buyDate.getTime())/86_400_000));
+            weightedDays+=days*used;
+            matchedQuantity+=used;
+          }
+          lot.quantity-=used;
+          remaining-=used;
+          if(lot.quantity<=1e-9)lots.shift();
+        }
+        lotsByPosition.set(key,lots);
+        if(exact===null&&matchedQuantity>0&&remaining<=1e-6&&typeof tx.realizedGain==="number"){
+          result.set(`${portfolioId}:${tx.id}`,weightedDays/matchedQuantity);
+        }
+      });
+    });
+    return result;
+  },[transactionsByPortfolio]);
 
   const filteredRows=useMemo(()=>allRows.filter(({transaction:tx,portfolioId})=>{
     if(category!=="all"&&categoryFor(tx)!==category)return false;
@@ -178,7 +232,7 @@ export default function TransactionsPage(){
           <tbody>{filteredRows.length===0?<tr><td colSpan={activeId==="all"?11:10} className="px-4 py-16 text-center text-zinc-500"><ReceiptText className="mx-auto mb-3 size-8 opacity-40"/><div>No transactions match these filters.</div></td></tr>:filteredRows.map(({transaction:tx,portfolioId})=>{
             const cashImpact=transactionCashImpact(tx);
             const realizedPct=realizedPlPct(tx);
-            const avgDays=averageDaysHeld(tx);
+            const avgDays=historicalDaysByTransactionId.get(`${portfolioId}:${tx.id}`)??null;
             return <tr key={`${portfolioId}:${tx.id}`} className="border-t border-white/[.06] align-top hover:bg-white/[.018]">
               <td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateLabel(tx.date)}</td>
               {activeId==="all"&&<td className="whitespace-nowrap px-4 py-3 text-xs text-zinc-400">{PORTFOLIO_NAMES[portfolioId]}</td>}
