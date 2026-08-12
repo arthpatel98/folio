@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, BarChart3, Info, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Info, Pencil, Plus, Trash2, X } from "lucide-react";
 import { cn, money } from "@/lib/utils";
 import { DcaLot, DcaPosition, NumericValue } from "@/lib/dca-data";
 import { DCA_SELECTED_POSITION_KEY, DCA_UPDATED_EVENT, loadDcaPositions, saveDcaPositions, upsertDcaPosition } from "@/lib/dca-storage";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore } from "@/store/portfolio-store";
-import { holdingMetrics, portfolioSummary } from "@/lib/calculations/portfolio";
+import { holdingMetrics } from "@/lib/calculations/portfolio";
 
 const toNumber = (value: NumericValue | string) => value === "" || !Number.isFinite(Number(value)) ? 0 : Number(value);
 const parseNumericInput = (value: string): NumericValue => value === "" ? "" : Number(value);
@@ -78,7 +78,6 @@ export default function DcaPage() {
   const { activeId } = useActivePortfolio();
   const holdingsByPortfolio = usePortfolioStore((state) => state.holdingsByPortfolio);
   const activeHoldings = usePortfolioStore((state) => state.holdings);
-  const activeCash = usePortfolioStore((state) => state.cash);
   const [allPositions, setAllPositions] = useState<DcaPosition[]>([]);
   const [positionId, setPositionId] = useState("");
   const positionIdRef = useRef("");
@@ -389,10 +388,6 @@ export default function DcaPage() {
   const rangeFloor = isShortOption ? 0 : Math.max(0, baseAverage * 0.4);
   const rangeCeiling = isShortOption ? Math.max(baseAverage * 2, 0.01) : Math.max(rangeFloor, baseAverage * 1.6);
   const sliderValue = sellPrice === "" ? baseAverage : Math.min(Math.max(targetPrice, rangeFloor), rangeCeiling);
-  const portfolio = useMemo(() => portfolioSummary(activeHoldings, activeCash), [activeHoldings, activeCash]);
-  const selectedProfit = isOption ? optionPotentialProfit : totals.profit;
-  const projectedPortfolio = portfolio.value + selectedProfit;
-  const portfolioImpact = portfolio.value ? selectedProfit / portfolio.value * 100 : 0;
 
   const saveLot = () => {
     const shares = toNumber(lotDraft.shares), price = toNumber(lotDraft.price), cost = toNumber(lotDraft.cost);
@@ -465,7 +460,7 @@ export default function DcaPage() {
 
   return <div className="space-y-5">
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Position Simulator</h1><p className="mt-1 text-sm text-zinc-500">Simulate Potential Prices, Returns, And Portfolio Impact For Your Stock And Option Positions.</p>
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Position Simulator</h1><p className="mt-1 text-sm text-zinc-500">Simulate Potential Prices And Returns For Your Stock And Option Positions.</p>
     </div>
 
     {showAddPosition && <section className="rounded-2xl border border-white/10 bg-zinc-950/50 p-5">
@@ -592,11 +587,7 @@ export default function DcaPage() {
         <div className="mt-5 space-y-3 text-sm"><div className="flex justify-between"><span className="text-zinc-400">Proceeds</span><span>{money(partialProceeds)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Net Realized Return</span><span className={partialProfit>=0?"text-emerald-400":"text-rose-400"}>{signedMoney(partialProfit)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Remaining Shares</span><span>{formatShares(remainingShares)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Remaining Cost Basis</span><span>{money(remainingCostBasis)}</span></div><div className="flex justify-between"><span className="text-zinc-400">New Average Cost</span><span>{money(remainingAverageCost)}</span></div></div>
       </section>}
 
-      <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
-        <h2 className="flex items-center gap-2 font-semibold">Portfolio Impact <InfoTip text="Estimates how the full-position profit or loss at the potential sell price changes the active portfolio value." /></h2>
-        <p className="mt-4 text-sm text-zinc-400">If You Sell At {money(targetPrice)}</p><div className="mt-5 space-y-3 text-sm"><div className="flex justify-between"><span className="text-zinc-400">Current Portfolio Value</span><span>{money(portfolio.value)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Change In Value</span><span className={selectedProfit>=0?"text-emerald-400":"text-rose-400"}>{signedMoney(selectedProfit)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Projected Portfolio Value</span><span>{money(projectedPortfolio)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Portfolio Return Impact</span><span className={totals.profit>=0?"text-emerald-400":"text-rose-400"}>{pct(portfolioImpact)}</span></div></div>
-        <div className={cn("mt-5 flex gap-3 rounded-xl border p-4 text-sm",selectedProfit>=0?"border-emerald-500/25 bg-emerald-500/[.06] text-emerald-400":"border-rose-500/25 bg-rose-500/[.06] text-rose-400")}><BarChart3 className="shrink-0" size={20}/><p>This Sale Would {selectedProfit>=0?"Increase":"Decrease"} Your Portfolio Value By {money(Math.abs(selectedProfit))} ({Math.abs(portfolioImpact).toFixed(2)}%).</p></div>
-      </section>
+
     </div>
 
 

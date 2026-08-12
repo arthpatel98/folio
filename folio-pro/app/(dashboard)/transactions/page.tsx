@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, Banknote, CalendarDays, CircleDollarSign, Plus, ReceiptText, Search, TrendingUp, X } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CalendarDays, CircleDollarSign, Plus, ReceiptText, Search, TrendingUp, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore, type DataPortfolioId } from "@/store/portfolio-store";
@@ -80,7 +80,9 @@ export default function TransactionsPage(){
 
   const allRows=useMemo<TransactionRow[]>(()=>{
     const ids:DataPortfolioId[]=activeId==="all"?["robinhood","fidelity-roth","fidelity-401k"]:[activeId];
-    return ids.flatMap(portfolioId=>(transactionsByPortfolio[portfolioId]??[]).map(transaction=>({transaction,portfolioId})))
+    return ids.flatMap(portfolioId=>(transactionsByPortfolio[portfolioId]??[])
+      .filter(transaction=>transaction.date>="2026-07-11")
+      .map(transaction=>({transaction,portfolioId})))
       .sort((a,b)=>b.transaction.date.localeCompare(a.transaction.date)||b.transaction.id.localeCompare(a.transaction.id));
   },[activeId,transactionsByPortfolio]);
 
@@ -94,15 +96,14 @@ export default function TransactionsPage(){
   }),[allRows,category,typeFilter,fromDate,toDate,query]);
 
   const totals=useMemo(()=>{
-    let buys=0,sells=0,income=0,realized=0,netCash=0;
+    let buys=0,sells=0,income=0,realized=0;
     filteredRows.forEach(({transaction:tx})=>{
       if(tx.type==="buy")buys+=Math.abs(tx.amount||0);
       if(tx.type==="sell")sells+=Math.abs(tx.amount||0);
       if(tx.type==="dividend"||tx.type==="interest")income+=Math.abs(tx.amount||0);
       realized+=tx.realizedGain||0;
-      netCash+=transactionCashImpact(tx);
     });
-    return {buys,sells,income,realized,netCash};
+    return {buys,sells,income,realized};
   },[filteredRows]);
 
   const recordEntry=()=>{
@@ -129,10 +130,9 @@ export default function TransactionsPage(){
       {activeId!=="all"&&<button type="button" onClick={()=>setShowAdd(true)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-medium text-emerald-300 transition hover:bg-emerald-400/15"><Plus size={16}/>Record Cash / Income</button>}
     </div>
 
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Summary icon={ArrowDownLeft} label="Total Buys" value={money(totals.buys)}/>
       <Summary icon={ArrowUpRight} label="Total Sells" value={money(totals.sells)}/>
-      <Summary icon={Banknote} label="Net Cash Flow" value={signedMoney(totals.netCash)} good={totals.netCash>=0}/>
       <Summary icon={TrendingUp} label="Realized P/L" value={signedMoney(totals.realized)} good={totals.realized>=0}/>
       <Summary icon={CircleDollarSign} label="Dividends + Interest" value={money(totals.income)} good/>
     </div>
@@ -150,8 +150,8 @@ export default function TransactionsPage(){
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1120px] text-sm">
-          <thead className="bg-white/[.025] text-left text-xs tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Date</th>{activeId==="all"&&<th className="px-4 py-3">Portfolio</th>}<th className="px-4 py-3">Type</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Quantity</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Cash Impact</th><th className="px-4 py-3">Realized P/L</th><th className="px-4 py-3">Source / Notes</th></tr></thead>
-          <tbody>{filteredRows.length===0?<tr><td colSpan={activeId==="all"?10:9} className="px-4 py-16 text-center text-zinc-500"><ReceiptText className="mx-auto mb-3 size-8 opacity-40"/><div>No transactions match these filters.</div></td></tr>:filteredRows.map(({transaction:tx,portfolioId})=>{
+          <thead className="bg-white/[.025] text-left text-xs tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Date</th>{activeId==="all"&&<th className="px-4 py-3">Portfolio</th>}<th className="px-4 py-3">Type</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Quantity</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Cash Impact</th><th className="px-4 py-3">Realized P/L</th></tr></thead>
+          <tbody>{filteredRows.length===0?<tr><td colSpan={activeId==="all"?9:8} className="px-4 py-16 text-center text-zinc-500"><ReceiptText className="mx-auto mb-3 size-8 opacity-40"/><div>No transactions match these filters.</div></td></tr>:filteredRows.map(({transaction:tx,portfolioId})=>{
             const cashImpact=transactionCashImpact(tx);
             return <tr key={`${portfolioId}:${tx.id}`} className="border-t border-white/[.06] align-top hover:bg-white/[.018]">
               <td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateLabel(tx.date)}</td>
@@ -163,12 +163,11 @@ export default function TransactionsPage(){
               <td className="px-4 py-3">{tx.amount?money(tx.amount):"—"}</td>
               <td className={cn("px-4 py-3 font-medium",cashImpact>0?"text-emerald-400":cashImpact<0?"text-red-400":"text-zinc-500")}>{cashImpact?signedMoney(cashImpact):"—"}</td>
               <td className={cn("px-4 py-3 font-medium",(tx.realizedGain||0)>0?"text-emerald-400":(tx.realizedGain||0)<0?"text-red-400":"text-zinc-500")}>{typeof tx.realizedGain==="number"?signedMoney(tx.realizedGain):"—"}</td>
-              <td className="max-w-80 px-4 py-3"><div className="text-xs text-zinc-400">{tx.source||"Imported / Legacy"}</div>{tx.notes&&<div className="mt-1 text-xs leading-5 text-zinc-600">{tx.notes}</div>}</td>
             </tr>
           })}</tbody>
         </table>
       </div>
-      <div className="border-t border-white/[.06] px-4 py-3 text-xs text-zinc-600">{filteredRows.length.toLocaleString()} transaction{filteredRows.length===1?"":"s"} shown. Trade transactions are created automatically from Holdings; deleting a holding does not erase its history.</div>
+      <div className="border-t border-white/[.06] px-4 py-3 text-xs text-zinc-600">{filteredRows.length.toLocaleString()} transaction{filteredRows.length===1?"":"s"} shown from Jul 11, 2026 onward. Trade transactions are created automatically from Holdings; deleting a holding does not erase its history.</div>
     </Card>
 
     {showAdd&&<div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">

@@ -188,6 +188,21 @@ export default function TargetPlannerPage(){
   const pathwayFinalValue=finite(startingCashPool+pathwayProfit);
   const totalProjectedProfit=finite(scenarioProfit+pathwayProfit);
   const projectedValue=finite(currentValue+totalProjectedProfit);
+  // Match the Savings & Investments formulas, but substitute the projected portfolio value.
+  const projectedMonthFraction=(new Date().getMonth())/12;
+  const projectedYtd=isRobinhood
+    ? projectedValue/83745-1
+    : isRoth
+      ? projectedValue/16452-1
+      : 0;
+  const projectedInvested=isRobinhood?74500:isRoth?19000:0;
+  const projectedCagrYears=(isRoth?1.0833:2)+projectedMonthFraction;
+  const projectedCagr=projectedInvested>0&&projectedValue>0
+    ? Math.pow(projectedValue/projectedInvested,1/projectedCagrYears)-1
+    : 0;
+  const projectedPerformanceSubtle=(isRobinhood||isRoth)
+    ? `YTD ${projectedYtd>=0?"+":""}${(projectedYtd*100).toFixed(2)}% · CAGR ${projectedCagr>=0?"+":""}${(projectedCagr*100).toFixed(2)}%`
+    : undefined;
   const pathwayGap=Math.max(0,finite(selectedTarget.target-projectedValue));
   const remainingGap=pathwayGap;
   const requiredReturnOnRemainingCash=pathwayRemainingCash>0?(pathwayGap/pathwayRemainingCash)*100:0;
@@ -219,7 +234,7 @@ export default function TargetPlannerPage(){
       <Metric icon={Target} label="Selected Target" value={money(selectedTarget.target)} accent/>
       <Metric icon={TrendingUp} label="Profit Needed" value={money(baseGap)} />
       <Metric icon={TrendingUp} label="Projected Profit" value={`${totalProjectedProfit>=0?"+":""}${money2(totalProjectedProfit)}`} good={totalProjectedProfit>=0}/>
-      <Metric icon={Flag} label="Projected Portfolio" value={money2(projectedValue)} accent={projectedValue>=selectedTarget.target}/>
+      <Metric icon={Flag} label="Projected Portfolio" value={money2(projectedValue)} subtle={projectedPerformanceSubtle} accent={projectedValue>=selectedTarget.target}/>
       <Metric icon={CalendarDays} label="Remaining Gap" value={money(remainingGap)} subtle={`${baseGap?Math.min(100,Math.max(0,totalProjectedProfit/baseGap*100)).toFixed(1):100}% Covered`}/>
       <Metric icon={CircleDollarSign} label="New Capital Required" value={money2(totalInvestment)}/>
     </div>
