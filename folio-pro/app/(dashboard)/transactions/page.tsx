@@ -81,8 +81,8 @@ const transactionCashImpact=(tx:Transaction)=>{
       : tx.type==="buy"||tx.type==="withdrawal"
         ? -amount-(tx.fees||0)
         : 0;
-  // Closing a short option is a debit: cash is spent to buy the contract back.
-  return optionTradeDisplay(tx)==="Buy to Close" ? -Math.abs(regular||amount) : regular;
+  // Closing a short option is a debit: gross closing cost plus fees both reduce cash.
+  return optionTradeDisplay(tx)==="Buy to Close" ? -(amount + Math.abs(tx.fees||0)) : regular;
 };
 
 const realizedPlPct=(tx:Transaction)=>{

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BarChart3, Landmark, TrendingUp, WalletCards } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -15,6 +15,37 @@ import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore, type DataPortfolioId } from "@/store/portfolio-store";
 
 const pct = (value: number) => `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
+
+type ExtraRow = { id: string; label: string; amount: number; lastPostedDate: string };
+type ExtrasByPortfolio = Record<"robinhood"|"fidelity-roth", ExtraRow[]>;
+const EXTRAS_STORAGE_KEY = "folio-portfolio-performance-extras-v1";
+const DEFAULT_EXTRAS: ExtrasByPortfolio = {
+  robinhood: [
+    { id:"rg-interest", label:"RG Interest", amount:651.71, lastPostedDate:"2026-07-31" },
+    { id:"rg-deposit-boost", label:"RG Deposit Boost", amount:197.71, lastPostedDate:"2026-07-31" },
+    { id:"rg-membership", label:"RG Membership", amount:-93.32, lastPostedDate:"2026-03-04" },
+  ],
+  "fidelity-roth": [
+    { id:"spaxx-dividend", label:"SPAXX Dividend", amount:159.89, lastPostedDate:"2026-07-31" },
+    { id:"mags-short-term-cap-gain", label:"MAGS Short - Term Cap Gain", amount:0.86, lastPostedDate:"2024-12-31" },
+  ],
+};
+
+function ExtrasTable({rows,onSave}:{rows:ExtraRow[];onSave:(rows:ExtraRow[])=>void}) {
+  const [draft,setDraft]=useState(rows);
+  const [saved,setSaved]=useState(false);
+  useEffect(()=>setDraft(rows),[rows]);
+  const total=draft.reduce((sum,row)=>sum+(Number(row.amount)||0),0);
+  const update=(id:string,field:"amount"|"lastPostedDate",value:string)=>setDraft(current=>current.map(row=>row.id===id?{...row,[field]:field==="amount"?(value===""?0:Number(value)||0):value}:row));
+  return <Card className="overflow-hidden">
+    <CardHeader className="flex-row items-center justify-between gap-3"><h2 className="font-medium">Extras</h2><button type="button" onClick={()=>{onSave(draft);setSaved(true);window.setTimeout(()=>setSaved(false),1400);}} className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium transition hover:bg-zinc-100 dark:border-white/10 dark:hover:bg-white/[.06]">{saved?"Saved":"Save"}</button></CardHeader>
+    <CardContent><div className="overflow-hidden rounded-xl border border-dashed border-zinc-300/80 dark:border-white/15"><table className="w-full table-fixed border-collapse text-xs sm:text-sm">
+      <thead><tr className="text-left text-[11px] text-zinc-500 sm:text-xs"><th className="w-[42%] border-b border-r border-dashed border-zinc-300/70 p-3 font-medium dark:border-white/10">Extras</th><th className="w-[25%] border-b border-r border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">Amount</th><th className="w-[33%] border-b border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">Last Posted Date</th></tr></thead>
+      <tbody>{draft.map((row,index)=><tr key={row.id}><td className={cn("border-r border-dashed border-zinc-300/60 p-3 font-medium dark:border-white/10",index<draft.length-1&&"border-b")}>{row.label}</td><td className={cn("border-r border-dashed border-zinc-300/60 p-2 text-right dark:border-white/10",index<draft.length-1&&"border-b")}><input type="number" step="0.01" value={row.amount===0?"":row.amount} placeholder="0.00" onChange={e=>update(row.id,"amount",e.target.value)} className={cn("h-9 w-full rounded-lg border border-zinc-200 bg-transparent px-2 text-right font-medium tabular-nums outline-none dark:border-white/10",row.amount<0?"negative":"positive")}/></td><td className={cn("p-2 text-right",index<draft.length-1&&"border-b border-dashed border-zinc-300/60 dark:border-white/10")}><input type="date" value={row.lastPostedDate} onChange={e=>update(row.id,"lastPostedDate",e.target.value)} className="h-9 w-full rounded-lg border border-zinc-200 bg-transparent px-2 text-right text-xs font-medium outline-none dark:border-white/10"/></td></tr>)}
+      <tr className="font-semibold"><td className="border-r border-t border-dashed border-zinc-300/70 p-3 dark:border-white/10">Total</td><td className={cn("border-r border-t border-dashed border-zinc-300/70 p-3 text-right tabular-nums dark:border-white/10",total<0?"negative":"positive")}>{money(total)}</td><td className="border-t border-dashed border-zinc-300/70 p-3"/></tr></tbody>
+    </table></div></CardContent>
+  </Card>;
+}
 
 // The workbook/manual July 2026 Robinhood baseline is $3,669.10. Only Holdings
 // sales created after this build are layered onto that baseline so existing
@@ -37,6 +68,26 @@ const accountPortfolioIds: Record<string, DataPortfolioId> = {
 
 export default function SavingsInvestmentsPage() {
   const { activeId } = useActivePortfolio();
+  const [extras,setExtras]=useState<ExtrasByPortfolio>(DEFAULT_EXTRAS);
+  useEffect(()=>{
+    try{
+      const saved=window.localStorage.getItem(EXTRAS_STORAGE_KEY);
+      if(saved){
+        const parsed=JSON.parse(saved) as Partial<ExtrasByPortfolio>;
+        setExtras({
+          robinhood:Array.isArray(parsed.robinhood)?parsed.robinhood:DEFAULT_EXTRAS.robinhood,
+          "fidelity-roth":Array.isArray(parsed["fidelity-roth"])?parsed["fidelity-roth"]:DEFAULT_EXTRAS["fidelity-roth"],
+        });
+      }
+    }catch{}
+  },[]);
+  const saveExtras=(portfolioId:"robinhood"|"fidelity-roth",rows:ExtraRow[])=>{
+    setExtras(current=>{
+      const next={...current,[portfolioId]:rows};
+      try{window.localStorage.setItem(EXTRAS_STORAGE_KEY,JSON.stringify(next));}catch{}
+      return next;
+    });
+  };
   const holdingsByPortfolio = usePortfolioStore((state) => state.holdingsByPortfolio);
   const cashByPortfolio = usePortfolioStore((state) => state.cashByPortfolio);
   const transactionsByPortfolio = usePortfolioStore((state) => state.transactionsByPortfolio);
@@ -248,32 +299,36 @@ export default function SavingsInvestmentsPage() {
         </CardContent>
       </Card>
 
-      <Card className="overflow-hidden">
-        <CardHeader><h2 className="font-medium">YTD Performance</h2></CardHeader>
-        <CardContent>
-          <div className="overflow-hidden rounded-xl border border-dashed border-zinc-300/80 dark:border-white/15">
-            <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
-              <thead><tr className="text-left text-[11px] text-zinc-500 sm:text-xs">
-                <th className="w-[43%] border-b border-r border-dashed border-zinc-300/70 p-3 font-medium dark:border-white/10">Account</th>
-                <th className="w-[19%] border-b border-r border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">2024</th>
-                <th className="w-[19%] border-b border-r border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">2025</th>
-                <th className="w-[19%] border-b border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">2026</th>
-              </tr></thead>
-              <tbody>{ytdPerformance.map((row, index)=>{
-                const displayAccount = row.account === "Roth IRA" ? "Fidelity Roth IRA" : row.account === "401(k) IRA" ? "Fidelity 401(k)" : row.account;
-                const currentYtd = dynamicYtd[displayAccount as keyof typeof dynamicYtd];
-                const rowBorder = index < ytdPerformance.length - 1 ? "border-b border-dashed border-zinc-300/60 dark:border-white/10" : "";
-                return <tr key={row.account}>
-                  <td className={cn("break-words border-r border-dashed border-zinc-300/60 p-3 font-medium leading-tight dark:border-white/10", rowBorder)}>{displayAccount}</td>
-                  <td className={cn("border-r border-dashed border-zinc-300/60 p-3 text-right font-medium tabular-nums dark:border-white/10", rowBorder,row["2024"]>=0?"positive":"negative")}>{pct(row["2024"])}</td>
-                  <td className={cn("border-r border-dashed border-zinc-300/60 p-3 text-right font-medium tabular-nums dark:border-white/10", rowBorder,row["2025"]>=0?"positive":"negative")}>{pct(row["2025"])}</td>
-                  <td className={cn("p-3 text-right font-medium tabular-nums", rowBorder,currentYtd>=0?"positive":"negative")}>{pct(currentYtd)}</td>
-                </tr>;
-              })}</tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        <Card className="overflow-hidden">
+          <CardHeader><h2 className="font-medium">YTD Performance</h2></CardHeader>
+          <CardContent>
+            <div className="overflow-hidden rounded-xl border border-dashed border-zinc-300/80 dark:border-white/15">
+              <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
+                <thead><tr className="text-left text-[11px] text-zinc-500 sm:text-xs">
+                  <th className="w-[43%] border-b border-r border-dashed border-zinc-300/70 p-3 font-medium dark:border-white/10">Account</th>
+                  <th className="w-[19%] border-b border-r border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">2024</th>
+                  <th className="w-[19%] border-b border-r border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">2025</th>
+                  <th className="w-[19%] border-b border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">2026</th>
+                </tr></thead>
+                <tbody>{ytdPerformance.map((row, index)=>{
+                  const displayAccount = row.account === "Roth IRA" ? "Fidelity Roth IRA" : row.account === "401(k) IRA" ? "Fidelity 401(k)" : row.account;
+                  const currentYtd = dynamicYtd[displayAccount as keyof typeof dynamicYtd];
+                  const rowBorder = index < ytdPerformance.length - 1 ? "border-b border-dashed border-zinc-300/60 dark:border-white/10" : "";
+                  return <tr key={row.account}>
+                    <td className={cn("break-words border-r border-dashed border-zinc-300/60 p-3 font-medium leading-tight dark:border-white/10", rowBorder)}>{displayAccount}</td>
+                    <td className={cn("border-r border-dashed border-zinc-300/60 p-3 text-right font-medium tabular-nums dark:border-white/10", rowBorder,row["2024"]>=0?"positive":"negative")}>{pct(row["2024"])}</td>
+                    <td className={cn("border-r border-dashed border-zinc-300/60 p-3 text-right font-medium tabular-nums dark:border-white/10", rowBorder,row["2025"]>=0?"positive":"negative")}>{pct(row["2025"])}</td>
+                    <td className={cn("p-3 text-right font-medium tabular-nums", rowBorder,currentYtd>=0?"positive":"negative")}>{pct(currentYtd)}</td>
+                  </tr>;
+                })}</tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+        {activeId==="robinhood"&&<ExtrasTable rows={extras.robinhood} onSave={rows=>saveExtras("robinhood",rows)}/>}
+        {activeId==="fidelity-roth"&&<ExtrasTable rows={extras["fidelity-roth"]} onSave={rows=>saveExtras("fidelity-roth",rows)}/>}
+      </div>
     </div>
   </div>;
 }
