@@ -196,6 +196,15 @@ function derivedPatNeeded(pat: number | null, loss: number | null) {
   return loss - pat;
 }
 
+function shouldAutoCalculatePat(loss: number | null, tickerComment: string) {
+  return typeof loss === "number" && loss > 0 && !/^Dividend Included\b/i.test(tickerComment.trim());
+}
+
+function calculatedPat(position: RealizedPosition, tickerComment: string) {
+  if (!shouldAutoCalculatePat(position.loss, tickerComment)) return position.pat;
+  return (position.amount + (position.loss ?? 0)) * 0.65;
+}
+
 function normalizeOptionalMoney(value: unknown) {
   if (value === null || value === undefined || String(value).trim() === "") return null;
   const parsed = parseMoney(value);
@@ -519,20 +528,25 @@ export default function Page() {
   const groups = useMemo<PositionGroup[]>(() => {
     const map = new Map<string, RealizedPosition[]>();
     visiblePositions.forEach((position) => map.set(position.symbol, [...(map.get(position.symbol) ?? []), position]));
-    return Array.from(map.entries()).map(([symbol, items]) => ({
-      symbol,
-      positions: [...items].sort((a, b) => b.amount - a.amount),
-      amount: items.reduce((sum, item) => sum + item.amount, 0),
-      fees: items.reduce((sum, item) => sum + item.fees, 0),
-      patNeeded: derivedPatNeeded(items.reduce((sum, item) => sum + (item.pat ?? 0), 0), items.reduce((sum, item) => sum + (item.loss ?? 0), 0)) ?? 0,
-      latestDate: [...items].sort((a, b) => new Date(b.lastSellDate).getTime() - new Date(a.lastSellDate).getTime())[0]?.lastSellDate ?? "",
-      stockCount: items.filter((item) => item.type === "stock").length,
-      optionCount: items.filter((item) => item.type === "option").length,
-      dividendAmount: items.reduce((sum, item) => sum + item.dividendAmount, 0),
-      dividendNraWithholding: items.reduce((sum, item) => sum + item.dividendNraWithholding, 0),
-      lastDividendDate: [...items].filter((item) => item.lastDividendDate).sort((a, b) => new Date(b.lastDividendDate).getTime() - new Date(a.lastDividendDate).getTime())[0]?.lastDividendDate ?? "",
-      comment: tickerCommentFor(symbol) || Array.from(new Set(items.map((item) => item.comment.trim()).filter(Boolean))).join(" · "),
-    }));
+    return Array.from(map.entries()).map(([symbol, items]) => {
+      const comment = tickerCommentFor(symbol) || Array.from(new Set(items.map((item) => item.comment.trim()).filter(Boolean))).join(" · ");
+      const totalPat = items.reduce((sum, item) => sum + (calculatedPat(item, comment) ?? 0), 0);
+      const totalLoss = items.reduce((sum, item) => sum + (item.loss ?? 0), 0);
+      return {
+        symbol,
+        positions: [...items].sort((a, b) => b.amount - a.amount),
+        amount: items.reduce((sum, item) => sum + item.amount, 0),
+        fees: items.reduce((sum, item) => sum + item.fees, 0),
+        patNeeded: derivedPatNeeded(totalPat, totalLoss) ?? 0,
+        latestDate: [...items].sort((a, b) => new Date(b.lastSellDate).getTime() - new Date(a.lastSellDate).getTime())[0]?.lastSellDate ?? "",
+        stockCount: items.filter((item) => item.type === "stock").length,
+        optionCount: items.filter((item) => item.type === "option").length,
+        dividendAmount: items.reduce((sum, item) => sum + item.dividendAmount, 0),
+        dividendNraWithholding: items.reduce((sum, item) => sum + item.dividendNraWithholding, 0),
+        lastDividendDate: [...items].filter((item) => item.lastDividendDate).sort((a, b) => new Date(b.lastDividendDate).getTime() - new Date(a.lastDividendDate).getTime())[0]?.lastDividendDate ?? "",
+        comment,
+      };
+    });
   }, [activePortfolioId, tickerCommentsByPortfolio, visiblePositions]);
 
   const totalPatNeeded = groups.reduce((sum, group) => sum + group.patNeeded, 0);
@@ -584,7 +598,7 @@ export default function Page() {
     const header = ["Ticker", "Type", "Realized P/L", "Fees", "Last Sell Date", "PAT", "Loss", "PAT Needed", "Dividend Amount", "Dividend NRA Withholding", "Last Dividend Date", "Comment"];
     const rows = visiblePositions.map((item) => [
       item.symbol, item.type === "option" ? "Option" : "Stock", item.amount.toFixed(2), item.fees.toFixed(2),
-      item.lastSellDate, item.pat ?? "-", item.loss ?? "-", derivedPatNeeded(item.pat, item.loss) ?? "-", item.dividendAmount.toFixed(2), item.dividendNraWithholding.toFixed(2), item.lastDividendDate || "-", item.comment || "-",
+      item.lastSellDate, calculatedPat(item, tickerCommentFor(item.symbol)) ?? "-", item.loss ?? "-", derivedPatNeeded(calculatedPat(item, tickerCommentFor(item.symbol)), item.loss) ?? "-", item.dividendAmount.toFixed(2), item.dividendNraWithholding.toFixed(2), item.lastDividendDate || "-", item.comment || "-",
     ]);
     const csv = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
@@ -870,7 +884,7 @@ export default function Page() {
                                     <td className={`px-3 py-3 font-medium tabular-nums ${position.amount < 0 ? "text-red-500" : "text-emerald-500"}`}>{money(position.amount)}</td>
                                     <td className="px-3 py-3 tabular-nums text-zinc-500">{money(position.fees)}</td>
                                     <td className="whitespace-nowrap px-3 py-3 text-zinc-500">{position.lastSellDate || "—"}</td>
-                                    <td className="px-3 py-3 tabular-nums text-emerald-500">{optionalMoney(position.pat)}</td>
+                                    <td className="px-3 py-3 tabular-nums text-emerald-500">{optionalMoney(calculatedPat(position, group.comment))}</td>
                                     <td className="px-3 py-3 tabular-nums text-red-500">{optionalMoney(position.loss)}</td>
                                     <td className="px-3 py-3 tabular-nums">-</td>
                                     <td className="px-3 py-3 tabular-nums text-emerald-500">{position.dividendAmount ? money(position.dividendAmount) : "-"}</td>
@@ -946,9 +960,9 @@ export default function Page() {
               <label className="space-y-2 text-sm font-medium">Last Sell Date<Input type="date" value={dateInputValue(editingPosition.lastSellDate)} onChange={(e) => setEditingPosition({ ...editingPosition, lastSellDate: e.target.value })} /></label>
               <label className="space-y-2 text-sm font-medium">Realized P/L<Input type="number" inputMode="decimal" step="0.01" value={editingPosition.amount === 0 ? "" : editingPosition.amount} onChange={(e) => editNumber("amount", e.target.value)} /></label>
               <label className="space-y-2 text-sm font-medium">Fees<Input type="number" inputMode="decimal" step="0.01" value={editingPosition.fees === 0 ? "" : editingPosition.fees} onChange={(e) => editNumber("fees", e.target.value)} /></label>
-              <label className="space-y-2 text-sm font-medium">PAT<Input type="number" step="0.01" placeholder="-" value={editingPosition.pat ?? ""} onChange={(e) => editOptionalMoney("pat", e.target.value)} /></label>
+              <label className="space-y-2 text-sm font-medium">PAT<Input type="text" readOnly={shouldAutoCalculatePat(editingPosition.loss, tickerCommentFor(editingPosition.symbol))} placeholder="-" value={shouldAutoCalculatePat(editingPosition.loss, tickerCommentFor(editingPosition.symbol)) ? money(calculatedPat(editingPosition, tickerCommentFor(editingPosition.symbol)) ?? 0) : (editingPosition.pat ?? "")} onChange={(e) => { if(!shouldAutoCalculatePat(editingPosition.loss, tickerCommentFor(editingPosition.symbol))) editOptionalMoney("pat", e.target.value); }} className={shouldAutoCalculatePat(editingPosition.loss, tickerCommentFor(editingPosition.symbol)) ? "cursor-not-allowed bg-zinc-500/5 text-emerald-500" : ""} /></label>
               <label className="space-y-2 text-sm font-medium">Loss<Input type="number" step="0.01" placeholder="-" value={editingPosition.loss ?? ""} onChange={(e) => editOptionalMoney("loss", e.target.value)} /></label>
-              <label className="space-y-2 text-sm font-medium">PAT Needed<Input readOnly placeholder="-" value={derivedPatNeeded(editingPosition.pat, editingPosition.loss) === null ? "" : money(derivedPatNeeded(editingPosition.pat, editingPosition.loss) ?? 0)} className="cursor-not-allowed bg-zinc-500/5 text-zinc-500" /></label>
+              <label className="space-y-2 text-sm font-medium">PAT Needed<Input readOnly placeholder="-" value={derivedPatNeeded(calculatedPat(editingPosition, tickerCommentFor(editingPosition.symbol)), editingPosition.loss) === null ? "" : money(derivedPatNeeded(calculatedPat(editingPosition, tickerCommentFor(editingPosition.symbol)), editingPosition.loss) ?? 0)} className="cursor-not-allowed bg-zinc-500/5 text-zinc-500" /></label>
               <label className="space-y-2 text-sm font-medium">Dividend Amount<div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">$</span><Input type="number" step="0.01" min="0" className="pl-7" value={editingPosition.dividendAmount === 0 ? "" : editingPosition.dividendAmount} onChange={(e) => editNumber("dividendAmount", e.target.value)} /></div></label>
               <label className="space-y-2 text-sm font-medium">Dividend NRA Withholding<div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">$</span><Input type="number" step="0.01" min="0" className="pl-7" value={editingPosition.dividendNraWithholding === 0 ? "" : editingPosition.dividendNraWithholding} onChange={(e) => editNumber("dividendNraWithholding", e.target.value)} /></div></label>
               <label className="space-y-2 text-sm font-medium">Last Dividend Date<Input type="date" value={dateInputValue(editingPosition.lastDividendDate)} onChange={(e) => setEditingPosition({ ...editingPosition, lastDividendDate: e.target.value })} /></label>

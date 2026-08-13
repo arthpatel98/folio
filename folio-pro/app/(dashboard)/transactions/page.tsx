@@ -49,12 +49,40 @@ const optionLabel=(tx:Transaction)=>{
   const expiry=tx.optionExpiry?` · ${dateLabel(tx.optionExpiry)}`:"";
   return `${tx.symbol||"Option"}${strike} ${side}${expiry}`;
 };
+type OptionTradeDisplay = "Buy to Open" | "Sell to Open" | "Buy to Close" | "Sell to Close";
+
+const optionTradeDisplay=(tx:Transaction):OptionTradeDisplay|null=>{
+  if(tx.assetType!=="option"||(tx.type!=="buy"&&tx.type!=="sell"))return null;
+  const isShort=tx.optionType==="sell-call"||tx.optionType==="sell-put";
+  if(isShort)return tx.type==="buy"?"Sell to Open":"Buy to Close";
+  return tx.type==="buy"?"Buy to Open":"Sell to Close";
+};
+
+const displayType=(tx:Transaction)=>optionTradeDisplay(tx)??TYPE_LABELS[tx.type];
+
+const typeBadgeClass=(tx:Transaction)=>{
+  const optionDisplay=optionTradeDisplay(tx);
+  if(optionDisplay==="Buy to Open")return "border-emerald-400/25 bg-emerald-400/[.09] text-emerald-300";
+  if(optionDisplay==="Sell to Open")return "border-violet-400/25 bg-violet-400/[.09] text-violet-300";
+  if(optionDisplay==="Buy to Close")return "border-amber-400/25 bg-amber-400/[.09] text-amber-300";
+  if(optionDisplay==="Sell to Close")return "border-blue-400/25 bg-blue-400/[.09] text-blue-300";
+  if(tx.type==="buy"||tx.type==="position-added")return "border-blue-400/20 bg-blue-400/[.07] text-blue-300";
+  if(tx.type==="sell"||tx.type==="position-removed")return "border-amber-400/20 bg-amber-400/[.07] text-amber-300";
+  if(tx.type==="dividend"||tx.type==="interest")return "border-emerald-400/20 bg-emerald-400/[.07] text-emerald-300";
+  return "border-white/10 bg-white/[.03] text-zinc-400";
+};
+
 const transactionCashImpact=(tx:Transaction)=>{
-  if(typeof tx.cashImpact==="number") return tx.cashImpact;
   const amount=Math.abs(tx.amount||0);
-  if(tx.type==="sell"||tx.type==="dividend"||tx.type==="interest"||tx.type==="deposit") return amount-(tx.fees||0);
-  if(tx.type==="buy"||tx.type==="withdrawal") return -amount-(tx.fees||0);
-  return 0;
+  const regular=typeof tx.cashImpact==="number"
+    ? tx.cashImpact
+    : tx.type==="sell"||tx.type==="dividend"||tx.type==="interest"||tx.type==="deposit"
+      ? amount-(tx.fees||0)
+      : tx.type==="buy"||tx.type==="withdrawal"
+        ? -amount-(tx.fees||0)
+        : 0;
+  // Closing a short option is a debit: cash is spent to buy the contract back.
+  return optionTradeDisplay(tx)==="Buy to Close" ? -Math.abs(regular||amount) : regular;
 };
 
 const realizedPlPct=(tx:Transaction)=>{
@@ -200,7 +228,7 @@ export default function TransactionsPage(){
     if(typeFilter!=="all"&&tx.type!==typeFilter)return false;
     if(fromDate&&tx.date<fromDate)return false;
     if(toDate&&tx.date>toDate)return false;
-    const haystack=[tx.symbol,TYPE_LABELS[tx.type],tx.notes,tx.source,PORTFOLIO_NAMES[portfolioId],optionLabel(tx)].filter(Boolean).join(" ").toLowerCase();
+    const haystack=[tx.symbol,displayType(tx),tx.notes,tx.source,PORTFOLIO_NAMES[portfolioId],optionLabel(tx)].filter(Boolean).join(" ").toLowerCase();
     return !query.trim()||haystack.includes(query.trim().toLowerCase());
   }),[allRows,category,typeFilter,fromDate,toDate,query]);
 
@@ -267,7 +295,7 @@ export default function TransactionsPage(){
             return <tr key={`${portfolioId}:${tx.id}`} className="border-t border-white/[.06] align-top hover:bg-white/[.018]">
               <td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateLabel(tx.date)}</td>
               {activeId==="all"&&<td className="whitespace-nowrap px-4 py-3 text-xs text-zinc-400">{PORTFOLIO_NAMES[portfolioId]}</td>}
-              <td className="px-4 py-3"><span className={cn("inline-flex rounded-lg border px-2 py-1 text-xs font-medium",tx.type==="buy"||tx.type==="position-added"?"border-blue-400/20 bg-blue-400/[.07] text-blue-300":tx.type==="sell"||tx.type==="position-removed"?"border-amber-400/20 bg-amber-400/[.07] text-amber-300":tx.type==="dividend"||tx.type==="interest"?"border-emerald-400/20 bg-emerald-400/[.07] text-emerald-300":"border-white/10 bg-white/[.03] text-zinc-400")}>{TYPE_LABELS[tx.type]}</span></td>
+              <td className="px-4 py-3"><span className={cn("inline-flex whitespace-nowrap rounded-lg border px-2 py-1 text-xs font-medium",typeBadgeClass(tx))}>{displayType(tx)}</span></td>
               <td className="max-w-64 px-4 py-3 font-medium">{optionLabel(tx)}</td>
               <td className="px-4 py-3">{typeof tx.quantity==="number"?Math.abs(tx.quantity).toLocaleString():"—"}</td>
               <td className="px-4 py-3">{typeof tx.price==="number"?money(tx.price):"—"}</td>

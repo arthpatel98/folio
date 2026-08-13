@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowRight, ArrowUp, Info, Pencil, Plus, Trash2, X } from "lucide-react";
 import { cn, money } from "@/lib/utils";
 import { DcaLot, DcaPosition, NumericValue } from "@/lib/dca-data";
-import { DCA_SELECTED_POSITION_KEY, DCA_UPDATED_EVENT, loadDcaPositions, saveDcaPositions, upsertDcaPosition } from "@/lib/dca-storage";
+import { DCA_SELECTED_POSITION_KEY, DCA_UPDATED_EVENT, loadDcaPositions, saveDcaPositions, upsertDcaPosition, type TaxLotMethod } from "@/lib/dca-storage";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore } from "@/store/portfolio-store";
 import { holdingMetrics } from "@/lib/calculations/portfolio";
@@ -100,6 +100,8 @@ export default function DcaPage() {
   const [newBuyDate, setNewBuyDate] = useState("");
   const [targetReturn, setTargetReturn] = useState<NumericValue>("");
   const [sharesToSell, setSharesToSell] = useState<NumericValue>("");
+  const [partialTaxLotMethod, setPartialTaxLotMethod] = useState<TaxLotMethod>("fifo");
+  const [partialCustomLots, setPartialCustomLots] = useState<Record<string, string>>({});
   const [editingOptionDays, setEditingOptionDays] = useState(false);
   const [optionBuyDateDraft, setOptionBuyDateDraft] = useState("");
 
@@ -229,6 +231,9 @@ export default function DcaPage() {
       setPositionId("");
       setLots([]);
       setSellPrice("");
+      setSharesToSell("");
+      setPartialTaxLotMethod("fifo");
+      setPartialCustomLots({});
       return;
     }
     const copy = clonePosition(position);
@@ -236,6 +241,9 @@ export default function DcaPage() {
     positionIdentityRef.current = positionIdentity(copy);
     setPositionId(copy.id);
     setLots(sortLots(copy.lots));
+    setSharesToSell("");
+    setPartialTaxLotMethod("fifo");
+    setPartialCustomLots({});
     // Potential Sell Price always starts from the latest Holdings price whenever a
     // position is selected/reselected. A temporary manual scenario price is not reused
     // after switching to another ticker and coming back.
@@ -366,24 +374,53 @@ export default function DcaPage() {
     ? (requiredSellingPrice - baseAverage) * baseQuantity * optionDirection
     : totals.shares * (requiredSellingPrice - totals.avg);
   const safeSharesToSell = Math.min(Math.max(toNumber(sharesToSell), 0), totals.shares);
-  const fifoRows = useMemo(() => {
-    let remaining = safeSharesToSell;
-    const rows: Array<{ date: string; shares: number; buyPrice: number; returnValue: number; costBasis: number }> = [];
-    for (const lot of sortLots(lots.filter((item) => !item.future && toNumber(item.shares) > 0))) {
-      if (remaining <= 0) break;
-      const used = Math.min(toNumber(lot.shares), remaining);
-      rows.push({ date: formatDate(lot.date), shares: used, buyPrice: toNumber(lot.price), returnValue: used * (targetPrice - toNumber(lot.price)), costBasis: used * toNumber(lot.price) });
-      remaining -= used;
+  const partialLotKey = (lot:DcaLot,index:number) => lot.id || `partial-${lot.date}-${toNumber(lot.price)}-${index}`;
+  const partialAvailableLots = useMemo(() => lots
+    .map((lot,index)=>({lot,index,key:partialLotKey(lot,index),shares:toNumber(lot.shares),buyPrice:toNumber(lot.price)}))
+    .filter(item=>!item.lot.future&&item.shares>0),[lots]);
+
+  const partialLotAllocation = useMemo(() => {
+    const allocation:Record<string,number>={};
+    if(partialTaxLotMethod==="custom"){
+      partialAvailableLots.forEach(item=>{
+        allocation[item.key]=Math.max(0,Math.min(item.shares,Number(partialCustomLots[item.key])||0));
+      });
+      return allocation;
     }
-    if (remaining > 0) rows.push({ date: "Average Cost Remainder", shares: remaining, buyPrice: totals.avg, returnValue: remaining * (targetPrice - totals.avg), costBasis: remaining * totals.avg });
-    return rows;
-  }, [lots, safeSharesToSell, targetPrice, totals.avg]);
-  const partialProfit = fifoRows.reduce((sum, row) => sum + row.returnValue, 0);
-  const partialProceeds = safeSharesToSell * targetPrice;
-  const consumedCostBasis = fifoRows.reduce((sum, row) => sum + row.costBasis, 0);
-  const remainingShares = Math.max(totals.shares - safeSharesToSell, 0);
-  const remainingCostBasis = Math.max(totals.amount - consumedCostBasis, 0);
-  const remainingAverageCost = remainingShares ? remainingCostBasis / remainingShares : 0;
+    const ordered=partialAvailableLots.slice();
+    if(partialTaxLotMethod==="lifo")ordered.sort((a,b)=>new Date(b.lot.date).getTime()-new Date(a.lot.date).getTime());
+    else if(partialTaxLotMethod==="highest-cost")ordered.sort((a,b)=>b.buyPrice-a.buyPrice||new Date(a.lot.date).getTime()-new Date(b.lot.date).getTime());
+    else ordered.sort((a,b)=>new Date(a.lot.date).getTime()-new Date(b.lot.date).getTime());
+    let remaining=safeSharesToSell;
+    ordered.forEach(item=>{
+      const used=Math.min(item.shares,remaining);
+      if(used>0)allocation[item.key]=used;
+      remaining-=used;
+    });
+    return allocation;
+  },[partialAvailableLots,partialCustomLots,partialTaxLotMethod,safeSharesToSell]);
+
+  const partialSelectedShares=Object.values(partialLotAllocation).reduce<number>((sum,value)=>sum+Number(value||0),0);
+  const partialLotRows=useMemo(() => partialAvailableLots
+    .slice()
+    .sort((a,b)=>new Date(a.lot.date).getTime()-new Date(b.lot.date).getTime())
+    .map(item=>{
+      const used=partialLotAllocation[item.key]||0;
+      return {
+        ...item,
+        used,
+        date:formatDate(item.lot.date),
+        returnValue:used*(targetPrice-item.buyPrice),
+        costBasis:used*item.buyPrice,
+      };
+    }),[partialAvailableLots,partialLotAllocation,targetPrice]);
+
+  const partialProfit = partialLotRows.reduce((sum,row)=>sum+row.returnValue,0);
+  const partialProceeds = partialSelectedShares*targetPrice;
+  const consumedCostBasis = partialLotRows.reduce((sum,row)=>sum+row.costBasis,0);
+  const remainingShares = Math.max(totals.shares-partialSelectedShares,0);
+  const remainingCostBasis = Math.max(totals.amount-consumedCostBasis,0);
+  const remainingAverageCost = remainingShares?remainingCostBasis/remainingShares:0;
   const isShortOption = isOption && optionDirection < 0;
 
   const saveLot = () => {
@@ -580,10 +617,22 @@ export default function DcaPage() {
         </div>
         <div className="min-w-0">
           <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
-        <h2 className="flex items-center gap-2 font-semibold">Partial Sale Calculator <InfoTip text="Uses FIFO purchase lots, selling the oldest available shares first." /></h2>
-        <label className="mt-4 block text-sm text-zinc-400">Shares To Sell</label><div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={sharesToSell} min={0} max={totals.shares} type="number" step="any" onChange={(e)=>setSharesToSell(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span className="whitespace-nowrap text-sm text-zinc-400">Of {formatShares(totals.shares)}</span></div>
-        {fifoRows.length>0 && <div className="mt-5 max-h-44 overflow-auto rounded-xl border border-white/10"><table className="min-w-full text-xs"><thead className="bg-white/[.04] text-zinc-400"><tr><th className="px-3 py-2 text-left">Buy Date Lot</th><th className="px-3 py-2 text-right">Shares</th><th className="px-3 py-2 text-right">Buy</th><th className="px-3 py-2 text-right">Return</th></tr></thead><tbody>{fifoRows.map((row,index)=><tr key={`${row.date}-${index}`} className="border-t border-white/10"><td className="px-3 py-2">{row.date}</td><td className="px-3 py-2 text-right">{formatShares(row.shares)}</td><td className="px-3 py-2 text-right">{money(row.buyPrice)}</td><td className={cn("px-3 py-2 text-right",row.returnValue>=0?"text-emerald-400":"text-rose-400")}>{signedMoney(row.returnValue)}</td></tr>)}</tbody></table></div>}
-        <div className="mt-5 space-y-3 text-sm"><div className="flex justify-between"><span className="text-zinc-400">Proceeds</span><span>{money(partialProceeds)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Net Realized Return</span><span className={partialProfit>=0?"text-emerald-400":"text-rose-400"}>{signedMoney(partialProfit)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Remaining Shares</span><span>{formatShares(remainingShares)}</span></div><div className="flex justify-between"><span className="text-zinc-400">Remaining Cost Basis</span><span>{money(remainingCostBasis)}</span></div><div className="flex justify-between"><span className="text-zinc-400">New Average Cost</span><span>{money(remainingAverageCost)}</span></div></div>
+        <h2 className="flex items-center gap-2 font-semibold">Partial Sale Calculator <InfoTip text="Choose which purchase lots would be sold and preview the resulting realized return and remaining cost basis." /></h2>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="block text-sm text-zinc-400">Shares To Sell<div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={sharesToSell} min={0} max={totals.shares} type="number" step="any" onChange={(e)=>setSharesToSell(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span className="whitespace-nowrap text-sm text-zinc-400">Of {formatShares(totals.shares)}</span></div></label>
+          <label className="block text-sm text-zinc-400">Tax Lot Method<select value={partialTaxLotMethod} onChange={e=>{setPartialTaxLotMethod(e.target.value as TaxLotMethod);setPartialCustomLots({});}} className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm text-zinc-200 outline-none"><option value="fifo">FIFO · Oldest First</option><option value="lifo">LIFO · Newest First</option><option value="highest-cost">Highest Cost First</option><option value="custom">Custom Lots</option></select></label>
+        </div>
+        {partialLotRows.length>0&&<div className="mt-5 max-h-64 overflow-auto rounded-xl border border-white/10"><table className="min-w-full text-xs"><thead className="sticky top-0 bg-zinc-950 text-zinc-400"><tr><th className="px-3 py-2 text-left">Buy Date Lot</th><th className="px-3 py-2 text-right">Available</th><th className="px-3 py-2 text-right">Buy</th><th className="px-3 py-2 text-right">Sell Shares</th><th className="px-3 py-2 text-right">Return</th></tr></thead><tbody>{partialLotRows.map(row=><tr key={row.key} className={cn("border-t border-white/10",row.used>0&&"bg-emerald-500/[.035]")}><td className="px-3 py-2">{row.date}</td><td className="px-3 py-2 text-right">{formatShares(row.shares)}</td><td className="px-3 py-2 text-right">{money(row.buyPrice)}</td><td className="px-3 py-2 text-right">{partialTaxLotMethod==="custom"?<input type="number" min={0} max={row.shares} step="any" value={partialCustomLots[row.key]??""} onChange={e=>{const raw=e.target.value;const value=raw===""?"":String(Math.max(0,Math.min(row.shares,Number(raw)||0)));setPartialCustomLots(current=>({...current,[row.key]:value}));}} placeholder="0" className="h-8 w-20 rounded-lg border border-white/10 bg-black/20 px-2 text-right outline-none"/>:<span className={row.used>0?"font-medium text-emerald-400":"text-zinc-600"}>{row.used>0?formatShares(row.used):"—"}</span>}</td><td className={cn("px-3 py-2 text-right",row.returnValue>0?"text-emerald-400":row.returnValue<0?"text-rose-400":"text-zinc-600")}>{row.used>0?signedMoney(row.returnValue):"—"}</td></tr>)}</tbody></table></div>}
+        {partialTaxLotMethod==="custom"&&<div className={cn("mt-3 rounded-xl border px-3 py-2 text-xs",Math.abs(partialSelectedShares-safeSharesToSell)<=1e-6?"border-emerald-500/20 bg-emerald-500/[.05] text-emerald-400":"border-amber-500/20 bg-amber-500/[.05] text-amber-400")}>Selected {formatShares(partialSelectedShares)} of {formatShares(safeSharesToSell)} requested shares.</div>}
+        <div className="mt-5 space-y-3 text-sm">
+          <div className="flex justify-between"><span className="text-zinc-400">Selected Shares</span><span>{formatShares(partialSelectedShares)}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-400">Cost Basis</span><span>{money(consumedCostBasis)}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-400">Proceeds</span><span>{money(partialProceeds)}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-400">Net Realized Return</span><span className={partialProfit>=0?"text-emerald-400":"text-rose-400"}>{signedMoney(partialProfit)}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-400">Remaining Shares</span><span>{formatShares(remainingShares)}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-400">Remaining Cost Basis</span><span>{money(remainingCostBasis)}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-400">New Average Cost</span><span>{money(remainingAverageCost)}</span></div>
+        </div>
       </section>
         </div>
       </div>
