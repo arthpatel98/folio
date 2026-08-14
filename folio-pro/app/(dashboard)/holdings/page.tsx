@@ -45,16 +45,29 @@ export default function Page() {
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = useMemo(() => {
     if (!normalizedQuery) return holdings;
+    const compactQuery = normalizedQuery.replace(/[^a-z0-9]/g, "");
     return holdings.filter((holding) => {
-      const optionLabel = [
-        holding.optionSymbol,
-        holding.optionType?.replace("-", " "),
-        holding.optionExpiry,
-        holding.optionStrike != null ? String(holding.optionStrike) : "",
-      ].filter(Boolean).join(" ").toLowerCase();
-      return holding.symbol.toLowerCase().includes(normalizedQuery) ||
-        holding.company.toLowerCase().includes(normalizedQuery) ||
-        optionLabel.includes(normalizedQuery);
+      const optionTypeText = holding.optionType
+        ? holding.optionType.replace(/-/g, " ")
+        : "";
+      const strikeText = holding.optionStrike != null
+        ? `${holding.optionStrike} $${holding.optionStrike}`
+        : "";
+      const searchable = [
+        holding.symbol,
+        holding.company,
+        holding.sector,
+        holding.optionSymbol ?? "",
+        optionTypeText,
+        holding.optionType?.includes("call") ? "call" : "",
+        holding.optionType?.includes("put") ? "put" : "",
+        strikeText,
+        holding.optionExpiry ?? "",
+        holding.assetType === "option" ? "option contract" : "stock",
+      ].join(" ").toLowerCase();
+      const compactSearchable = searchable.replace(/[^a-z0-9]/g, "");
+      return searchable.includes(normalizedQuery) ||
+        (compactQuery.length > 0 && compactSearchable.includes(compactQuery));
     });
   }, [holdings, normalizedQuery]);
 

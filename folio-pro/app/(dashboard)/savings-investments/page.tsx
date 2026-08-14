@@ -15,6 +15,12 @@ import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore, type DataPortfolioId } from "@/store/portfolio-store";
 
 const pct = (value: number) => `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
+const wholeDollar = (value: number) => new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+}).format(Math.round(value));
 
 type ExtraRow = { id: string; label: string; amount: number; lastPostedDate: string };
 type ExtrasByPortfolio = Record<"robinhood"|"fidelity-roth", ExtraRow[]>;
@@ -334,7 +340,7 @@ export default function SavingsInvestmentsPage() {
             const ath=allTimeHighs[portfolioId];
             return <div className="flex items-start justify-between gap-4"><span className="pt-2">All-Time High</span>{editingAllTimeHigh?.portfolioId===portfolioId
               ? <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-2"><input autoFocus type="number" step="0.01" value={ath.value||""} onChange={e=>updateAllTimeHigh(portfolioId,"value",e.target.value)} className="h-8 w-28 rounded-lg border border-white/10 bg-transparent px-2 text-right font-medium text-zinc-200 outline-none"/><input type="date" value={ath.date} onChange={e=>updateAllTimeHigh(portfolioId,"date",e.target.value)} onKeyDown={e=>{if(e.key==="Enter")setEditingAllTimeHigh(null);}} className="h-8 w-36 rounded-lg border border-white/10 bg-transparent px-2 text-right text-zinc-300 outline-none"/><button type="button" onClick={()=>setEditingAllTimeHigh(null)} className="h-8 rounded-lg border border-white/10 px-2 text-zinc-400 hover:bg-white/[.04]">Done</button></div>
-              : <button type="button" onClick={()=>setEditingAllTimeHigh({portfolioId,field:"value"})} className="whitespace-nowrap rounded-md px-2 py-1 text-right text-zinc-400 transition hover:bg-white/[.04]" title="Click To Edit All-Time High">{money(ath.value)} On {formatDisplayDate(ath.date)}</button>}</div>;
+              : <button type="button" onClick={()=>setEditingAllTimeHigh({portfolioId,field:"value"})} className="whitespace-nowrap rounded-md px-2 py-1 text-right text-zinc-400 transition hover:bg-white/[.04]" title="Click To Edit All-Time High">{wholeDollar(ath.value)} On {formatDisplayDate(ath.date)}</button>}</div>;
           })()}
         </div>
       </Card>)}

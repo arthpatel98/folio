@@ -4,10 +4,11 @@ import Link from "next/link";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Bell, ChevronDown, Search, Settings } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
-export function Topbar() {
+export function Topbar({ reserveSidebarToggle = false }: { reserveSidebarToggle?: boolean }) {
   return <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-zinc-200 bg-white/80 px-4 text-zinc-900 backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/70 dark:text-zinc-100 md:px-7">
-    <div className="relative ml-14 hidden max-w-sm flex-1 md:block lg:ml-0"><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={17}/><Input className="pl-10" placeholder="Search stocks, transactions, insights..."/></div>
+    <div className={cn("relative hidden max-w-sm flex-1 md:block", reserveSidebarToggle && "lg:ml-16")}><Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={17}/><Input className="pl-10" placeholder="Search stocks, transactions, insights..."/></div>
     <div className="ml-auto flex items-center gap-3">
       <button className="grid size-10 place-items-center rounded-xl border border-zinc-200 bg-white dark:border-white/10 dark:bg-white/[.03]"><Bell size={17}/></button>
       <DropdownMenu.Root>

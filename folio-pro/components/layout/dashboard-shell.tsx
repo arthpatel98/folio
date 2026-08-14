@@ -29,7 +29,7 @@ export function DashboardShell({children}:{children:React.ReactNode}){
     {sidebarOpen&&<Sidebar onCollapse={()=>setOpen(false)}/>}
     {!sidebarOpen&&<button type="button" onClick={()=>setOpen(true)} aria-label="Show Sidebar" title="Show Sidebar" className="fixed left-3 top-3 z-50 hidden size-10 place-items-center rounded-xl border border-zinc-200 bg-white/95 text-zinc-600 shadow-lg backdrop-blur-xl transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:bg-zinc-950/95 dark:text-zinc-400 dark:hover:bg-white/[.06] dark:hover:text-white lg:grid"><PanelLeftOpen size={18}/></button>}
     <div className={cn("min-h-screen transition-[padding] duration-200",sidebarOpen?"lg:pl-72":"lg:pl-0")}>
-      <Topbar/>
+      <Topbar reserveSidebarToggle={!sidebarOpen}/>
       <main className={cn("mx-auto px-3 py-4 pb-20 transition-[max-width] duration-200 sm:px-4 md:p-7",sidebarOpen?"max-w-[1600px]":"max-w-[1840px]")}>
         <PortfolioGate>{children}</PortfolioGate>
       </main>
