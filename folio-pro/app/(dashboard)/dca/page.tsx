@@ -561,7 +561,7 @@ export default function DcaPage() {
         <table className="w-full table-fixed text-xs xl:text-sm">
           <colgroup>{lotColumns.map((column) => <col key={column.key} />)}</colgroup>
           <thead className="bg-white/[.025] text-left text-xs tracking-wide text-zinc-500">
-            <tr>{lotColumns.map((column) => <th key={column.key} className={cn("relative whitespace-normal break-words px-2 py-3 font-medium xl:px-3", column.key === "actions" && "text-right")}>
+            <tr>{lotColumns.map((column) => <th key={column.key} className={cn("relative px-2 py-3 font-medium xl:px-3", column.key === "returnPct" ? "whitespace-nowrap" : "whitespace-normal break-words", column.key === "actions" && "text-right")}>
               {column.label}
             </th>)}</tr>
           </thead>

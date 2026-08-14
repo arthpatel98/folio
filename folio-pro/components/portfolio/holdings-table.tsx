@@ -70,11 +70,13 @@ export function HoldingsTable({
   const storageKey = `folio-column-widths-${assetType}`;
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
   const [todayBuyPriceBySymbol, setTodayBuyPriceBySymbol] = useState<Record<string, number>>({});
+  const [todayOptionSymbols, setTodayOptionSymbols] = useState<Set<string>>(new Set());
   useEffect(() => {
     const refreshTodayBuyPrices = () => {
       const now = new Date();
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
       const next: Record<string, number> = {};
+      const nextTodayOptionSymbols = new Set<string>();
       const positions = loadDcaPositions().filter((position) => (!portfolioId || portfolioId === "all" || position.portfolioId === portfolioId) && !position.id.includes("-option-"));
       positions.forEach((position) => {
         const activeLots = position.lots.filter((lot) => lot.date && lot.date !== "Future" && Number(lot.shares) > 0);
@@ -84,6 +86,7 @@ export function HoldingsTable({
         if (shares > 0 && cost > 0) next[position.symbol.trim().toUpperCase()] = cost / shares;
       });
       setTodayBuyPriceBySymbol(next);
+      setTodayOptionSymbols(nextTodayOptionSymbols);
     };
     refreshTodayBuyPrices();
     window.addEventListener(DCA_UPDATED_EVENT, refreshTodayBuyPrices);
@@ -93,11 +96,18 @@ export function HoldingsTable({
 
   const dayMetrics = (holding: Holding) => {
     const metrics = holdingMetrics(holding);
-    const todayBuyPrice = todayBuyPriceBySymbol[holding.symbol.trim().toUpperCase()];
-    if (!todayBuyPrice || (holding.assetType ?? "stock") !== "stock") return { gain: metrics.todayGain, pct: metrics.todayPct };
+    const symbol = holding.symbol.trim().toUpperCase();
+    const isOption = holding.assetType === "option";
+    const todayBuyPrice = isOption && todayOptionSymbols.has(symbol)
+      ? holding.averageCost
+      : todayBuyPriceBySymbol[symbol];
+    if (!todayBuyPrice) return { gain: metrics.todayGain, pct: metrics.todayPct };
+    const multiplier = isOption ? 100 : 1;
+    const shortOption = isOption && (holding.optionType === "sell-call" || holding.optionType === "sell-put");
+    const rawGain = (holding.currentPrice - todayBuyPrice) * holding.shares * multiplier;
     return {
-      gain: (holding.currentPrice - todayBuyPrice) * holding.shares,
-      pct: todayBuyPrice ? ((holding.currentPrice - todayBuyPrice) / todayBuyPrice) * 100 : 0,
+      gain: shortOption ? -rawGain : rawGain,
+      pct: ((holding.currentPrice - todayBuyPrice) / todayBuyPrice) * 100,
     };
   };
   useEffect(() => {
@@ -234,7 +244,7 @@ export function HoldingsTable({
         </div>
       ),
     },
-  ], [allocationBase, assetType, todayBuyPriceBySymbol]);
+  ], [allocationBase, assetType, todayBuyPriceBySymbol, todayOptionSymbols]);
 
   const subtotal = useMemo(() => {
     const totals = data.reduce((acc, holding) => {
@@ -251,7 +261,7 @@ export function HoldingsTable({
       totalGain: totals.marketValue - totals.costBasis,
       totalGainPct: totals.costBasis ? ((totals.marketValue - totals.costBasis) / totals.costBasis) * 100 : 0,
     };
-  }, [data, todayBuyPriceBySymbol]);
+  }, [data, todayBuyPriceBySymbol, todayOptionSymbols]);
 
   const table = useReactTable({ data, columns, defaultColumn: { size: 160, minSize: 80, maxSize: 600 }, state: { sorting, columnSizing }, onSortingChange: setSorting, onColumnSizingChange: setColumnSizing, columnResizeMode: "onChange", getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel() });
 

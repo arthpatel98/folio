@@ -19,6 +19,15 @@ const pct = (value: number) => `${value >= 0 ? "+" : ""}${(value * 100).toFixed(
 type ExtraRow = { id: string; label: string; amount: number; lastPostedDate: string };
 type ExtrasByPortfolio = Record<"robinhood"|"fidelity-roth", ExtraRow[]>;
 const EXTRAS_STORAGE_KEY = "folio-portfolio-performance-extras-v1";
+type AllTimeHighEntry = { value: number; date: string };
+type AllTimeHighByPortfolio = Record<DataPortfolioId, AllTimeHighEntry>;
+const ALL_TIME_HIGH_STORAGE_KEY = "folio-portfolio-performance-all-time-high-v1";
+const DEFAULT_ALL_TIME_HIGHS: AllTimeHighByPortfolio = {
+  robinhood: { value: 108128, date: "2025-11-05" },
+  "fidelity-roth": { value: 20134, date: "2025-08-06" },
+  "fidelity-401k": { value: 21194, date: "2026-06-02" },
+};
+
 const DEFAULT_EXTRAS: ExtrasByPortfolio = {
   robinhood: [
     { id:"rg-interest", label:"RG Interest", amount:651.71, lastPostedDate:"2026-07-31" },
@@ -31,17 +40,42 @@ const DEFAULT_EXTRAS: ExtrasByPortfolio = {
   ],
 };
 
+function formatDisplayDate(value: string) {
+  if (!value) return "—";
+  const parsed = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 function ExtrasTable({rows,onSave}:{rows:ExtraRow[];onSave:(rows:ExtraRow[])=>void}) {
   const [draft,setDraft]=useState(rows);
-  const [saved,setSaved]=useState(false);
+  const [editing,setEditing]=useState<{id:string;field:"amount"|"lastPostedDate"}|null>(null);
   useEffect(()=>setDraft(rows),[rows]);
   const total=draft.reduce((sum,row)=>sum+(Number(row.amount)||0),0);
-  const update=(id:string,field:"amount"|"lastPostedDate",value:string)=>setDraft(current=>current.map(row=>row.id===id?{...row,[field]:field==="amount"?(value===""?0:Number(value)||0):value}:row));
+  const update=(id:string,field:"amount"|"lastPostedDate",value:string)=>{
+    setDraft(current=>{
+      const next=current.map(row=>row.id===id?{...row,[field]:field==="amount"?(value===""?0:Number(value)||0):value}:row);
+      onSave(next);
+      return next;
+    });
+  };
   return <Card className="overflow-hidden">
-    <CardHeader className="flex-row items-center justify-between gap-3"><h2 className="font-medium">Extras</h2><button type="button" onClick={()=>{onSave(draft);setSaved(true);window.setTimeout(()=>setSaved(false),1400);}} className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium transition hover:bg-zinc-100 dark:border-white/10 dark:hover:bg-white/[.06]">{saved?"Saved":"Save"}</button></CardHeader>
-    <CardContent><div className="overflow-hidden rounded-xl border border-dashed border-zinc-300/80 dark:border-white/15"><table className="w-full table-fixed border-collapse text-xs sm:text-sm">
+    <CardHeader><h2 className="font-medium">Extras</h2></CardHeader>
+    <CardContent><div className="overflow-hidden rounded-t-xl border border-b-0 border-dashed border-zinc-300/80 dark:border-white/15 dark:border-b-0"><table className="w-full table-fixed border-collapse text-xs sm:text-sm">
       <thead><tr className="text-left text-[11px] text-zinc-500 sm:text-xs"><th className="w-[42%] border-b border-r border-dashed border-zinc-300/70 p-3 font-medium dark:border-white/10">Extras</th><th className="w-[25%] border-b border-r border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">Amount</th><th className="w-[33%] border-b border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">Last Posted Date</th></tr></thead>
-      <tbody>{draft.map((row,index)=><tr key={row.id}><td className={cn("border-r border-dashed border-zinc-300/60 p-3 font-medium dark:border-white/10",index<draft.length-1&&"border-b")}>{row.label}</td><td className={cn("border-r border-dashed border-zinc-300/60 p-2 text-right dark:border-white/10",index<draft.length-1&&"border-b")}><input type="number" step="0.01" value={row.amount===0?"":row.amount} placeholder="0.00" onChange={e=>update(row.id,"amount",e.target.value)} className={cn("h-9 w-full rounded-lg border border-zinc-200 bg-transparent px-2 text-right font-medium tabular-nums outline-none dark:border-white/10",row.amount<0?"negative":"positive")}/></td><td className={cn("p-2 text-right",index<draft.length-1&&"border-b border-dashed border-zinc-300/60 dark:border-white/10")}><input type="date" value={row.lastPostedDate} onChange={e=>update(row.id,"lastPostedDate",e.target.value)} className="h-9 w-full rounded-lg border border-zinc-200 bg-transparent px-2 text-right text-xs font-medium outline-none dark:border-white/10"/></td></tr>)}
+      <tbody>{draft.map((row,index)=><tr key={row.id}>
+        <td className={cn("border-r border-dashed border-zinc-300/60 p-3 font-medium dark:border-white/10",index<draft.length-1&&"border-b")}>{row.label}</td>
+        <td className={cn("border-r border-dashed border-zinc-300/60 p-2 text-right dark:border-white/10",index<draft.length-1&&"border-b")}>
+          {editing?.id===row.id&&editing.field==="amount"
+            ? <input autoFocus type="number" step="0.01" value={row.amount===0?"":row.amount} placeholder="0.00" onChange={e=>update(row.id,"amount",e.target.value)} onBlur={()=>setEditing(null)} onKeyDown={e=>{if(e.key==="Enter")setEditing(null);}} className={cn("h-9 w-full rounded-lg border border-white/10 bg-transparent px-2 text-right font-medium tabular-nums outline-none",row.amount<0?"negative":"positive")}/>
+            : <button type="button" onClick={()=>setEditing({id:row.id,field:"amount"})} className={cn("w-full rounded-md px-2 py-2 text-right font-medium tabular-nums transition hover:bg-white/[.04]",row.amount<0?"negative":"positive")} title="Click To Edit Amount">{money(row.amount)}</button>}
+        </td>
+        <td className={cn("p-2 text-right",index<draft.length-1&&"border-b border-dashed border-zinc-300/60 dark:border-white/10")}>
+          {editing?.id===row.id&&editing.field==="lastPostedDate"
+            ? <input autoFocus type="date" value={row.lastPostedDate} onChange={e=>update(row.id,"lastPostedDate",e.target.value)} onBlur={()=>setEditing(null)} onKeyDown={e=>{if(e.key==="Enter")setEditing(null);}} className="h-9 w-full rounded-lg border border-white/10 bg-transparent px-2 text-right text-xs font-medium outline-none"/>
+            : <button type="button" onClick={()=>setEditing({id:row.id,field:"lastPostedDate"})} className="w-full rounded-md px-2 py-2 text-right text-xs font-medium transition hover:bg-white/[.04]" title="Click To Edit Last Posted Date">{formatDisplayDate(row.lastPostedDate)}</button>}
+        </td>
+      </tr>)}
       <tr className="font-semibold"><td className="border-r border-t border-dashed border-zinc-300/70 p-3 dark:border-white/10">Total</td><td className={cn("border-r border-t border-dashed border-zinc-300/70 p-3 text-right tabular-nums dark:border-white/10",total<0?"negative":"positive")}>{money(total)}</td><td className="border-t border-dashed border-zinc-300/70 p-3"/></tr></tbody>
     </table></div></CardContent>
   </Card>;
@@ -69,6 +103,21 @@ const accountPortfolioIds: Record<string, DataPortfolioId> = {
 export default function SavingsInvestmentsPage() {
   const { activeId } = useActivePortfolio();
   const [extras,setExtras]=useState<ExtrasByPortfolio>(DEFAULT_EXTRAS);
+  const [allTimeHighs,setAllTimeHighs]=useState<AllTimeHighByPortfolio>(DEFAULT_ALL_TIME_HIGHS);
+  const [editingAllTimeHigh,setEditingAllTimeHigh]=useState<{portfolioId:DataPortfolioId;field:"value"|"date"}|null>(null);
+  useEffect(()=>{
+    try {
+      const saved=window.localStorage.getItem(ALL_TIME_HIGH_STORAGE_KEY);
+      if(saved) setAllTimeHighs(current=>({...current,...JSON.parse(saved)}));
+    } catch {}
+  },[]);
+  const updateAllTimeHigh=(portfolioId:DataPortfolioId,field:"value"|"date",raw:string)=>{
+    setAllTimeHighs(current=>{
+      const next={...current,[portfolioId]:{...current[portfolioId],[field]:field==="value"?(Number(raw)||0):raw}};
+      try{window.localStorage.setItem(ALL_TIME_HIGH_STORAGE_KEY,JSON.stringify(next));}catch{}
+      return next;
+    });
+  };
   useEffect(()=>{
     try{
       const saved=window.localStorage.getItem(EXTRAS_STORAGE_KEY);
@@ -278,7 +327,21 @@ export default function SavingsInvestmentsPage() {
           <div><div className="text-xs text-zinc-500">CAGR</div><div className={cn("mt-1 text-sm font-medium",account.cagr>=0?"positive":"negative")}>{pct(account.cagr)}</div></div>
           <div><div className="text-xs text-zinc-500">2026 YTD</div><div className={cn("mt-1 text-sm font-medium",account.ytd>=0?"positive":"negative")}>{pct(account.ytd)}</div></div>
         </div>
-        <div className="mt-4 space-y-2 text-xs text-zinc-500"><div className="flex justify-between gap-4"><span>Portfolio Start</span><span className="text-zinc-400">{account.start}</span></div><div className="flex justify-between gap-4"><span>All-Time High</span><span className="text-right text-zinc-400">{account.allTimeHigh}</span></div></div>
+        <div className="mt-4 space-y-2 text-xs text-zinc-500">
+          <div className="flex justify-between gap-4"><span>Portfolio Start</span><span className="text-zinc-400">{account.start}</span></div>
+          {(()=>{
+            const portfolioId=accountPortfolioIds[account.name];
+            const ath=allTimeHighs[portfolioId];
+            return <div className="flex items-start justify-between gap-4"><span className="pt-2">All-Time High</span><div className="grid min-w-[170px] gap-1 text-right">
+              {editingAllTimeHigh?.portfolioId===portfolioId&&editingAllTimeHigh.field==="value"
+                ? <input autoFocus type="number" step="0.01" value={ath.value||""} onChange={e=>updateAllTimeHigh(portfolioId,"value",e.target.value)} onBlur={()=>setEditingAllTimeHigh(null)} onKeyDown={e=>{if(e.key==="Enter")setEditingAllTimeHigh(null);}} className="h-8 rounded-lg border border-white/10 bg-transparent px-2 text-right font-medium text-zinc-200 outline-none"/>
+                : <button type="button" onClick={()=>setEditingAllTimeHigh({portfolioId,field:"value"})} className="rounded-md px-2 py-1 text-right font-medium text-zinc-300 transition hover:bg-white/[.04]" title="Click To Edit All-Time High Value">{money(ath.value)}</button>}
+              {editingAllTimeHigh?.portfolioId===portfolioId&&editingAllTimeHigh.field==="date"
+                ? <input autoFocus type="date" value={ath.date} onChange={e=>updateAllTimeHigh(portfolioId,"date",e.target.value)} onBlur={()=>setEditingAllTimeHigh(null)} onKeyDown={e=>{if(e.key==="Enter")setEditingAllTimeHigh(null);}} className="h-8 rounded-lg border border-white/10 bg-transparent px-2 text-right text-zinc-300 outline-none"/>
+                : <button type="button" onClick={()=>setEditingAllTimeHigh({portfolioId,field:"date"})} className="rounded-md px-2 py-1 text-right text-zinc-400 transition hover:bg-white/[.04]" title="Click To Edit All-Time High Date">On {formatDisplayDate(ath.date)}</button>}
+            </div></div>;
+          })()}
+        </div>
       </Card>)}
     </div>
 
