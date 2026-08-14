@@ -274,8 +274,8 @@ export function AddHoldingDialog() {
               <div className="sm:col-span-2">
                 {stockTaxLots.length>0?<div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[.04] p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                    <div><div className="text-sm font-semibold">Tax Lot Selection</div><div className="mt-1 text-xs font-normal text-zinc-500">Uses the purchase lots saved on Position Simulator for {form.symbol}.</div></div>
-                    <label className="block min-w-44"><span className="mb-1.5 block text-xs font-medium text-zinc-500">Sell Method</span><select value={taxLotMethod} onChange={e=>{setTaxLotMethod(e.target.value as TaxLotMethod);setCustomTaxLots({});}} className="field-select"><option value="fifo">FIFO · Oldest First</option><option value="lifo">LIFO · Newest First</option><option value="highest-cost">Highest Cost First</option><option value="custom">Custom Lots</option></select></label>
+                    <div><div className="text-sm font-semibold">Tax Lot Selection</div><div className="mt-1 text-xs font-normal text-zinc-500">Uses the purchase lots saved on Return Simulator for {form.symbol}.</div></div>
+                    <label className="block min-w-44"><span className="mb-1.5 block text-xs font-medium text-zinc-500">Sell Method</span><select value={taxLotMethod} onChange={e=>{setTaxLotMethod(e.target.value as TaxLotMethod);setCustomTaxLots({});}} className="field-select"><option value="fifo">FIFO · Oldest First</option><option value="lifo">LIFO · Newest First</option><option value="custom">Custom Lots</option></select></label>
                   </div>
                   <div className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 dark:border-white/10">
                     <table className="min-w-full text-xs">
@@ -298,7 +298,7 @@ export function AddHoldingDialog() {
                     <TaxLotMetric label="Est. Realized P/L" value={`${selectedTaxLotGain>=0?"+":""}${money(selectedTaxLotGain)}`} tone={selectedTaxLotGain>=0?"good":"bad"} />
                   </div>
                   {taxLotMethod==="custom"&&Math.abs(selectedTaxLotShares-saleQuantity)>1e-6&&<p className="mt-3 text-xs font-medium text-amber-500">Select exactly {saleQuantity.toLocaleString(undefined,{maximumFractionDigits:6})} shares across the lots above. Currently selected: {selectedTaxLotShares.toLocaleString(undefined,{maximumFractionDigits:6})}.</p>}
-                </div>:form.symbol&&<div className="rounded-xl border border-amber-500/20 bg-amber-500/[.05] p-3 text-xs font-normal text-amber-600 dark:text-amber-300">No Position Simulator tax lots were found for {form.symbol}. This sale will use the position average cost for realized P/L.</div>}
+                </div>:form.symbol&&<div className="rounded-xl border border-amber-500/20 bg-amber-500/[.05] p-3 text-xs font-normal text-amber-600 dark:text-amber-300">No Return Simulator tax lots were found for {form.symbol}. This sale will use the position average cost for realized P/L.</div>}
               </div>
             </> : isRemoveOption ? <>
               <Field label="Contract Details"><select required value={form.selectedContractKey} onChange={(e) => selectOptionContract(e.target.value)} className="field-select" autoFocus><option value="">Select Contract</option>{ownedOptions.map((holding) => <option key={optionContractKey(holding)} value={optionContractKey(holding)}>{holding.company}</option>)}</select></Field>

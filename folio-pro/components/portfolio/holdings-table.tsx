@@ -17,6 +17,7 @@ import { AssetType, Holding, OptionType } from "@/types/portfolio";
 import { holdingMetrics } from "@/lib/calculations/portfolio";
 import { cn, money } from "@/lib/utils";
 import { EditHoldingDialog } from "@/components/portfolio/edit-holding-dialog";
+import { DCA_UPDATED_EVENT, loadDcaPositions } from "@/lib/dca-storage";
 import { usePortfolioStore } from "@/store/portfolio-store";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -53,11 +54,13 @@ export function HoldingsTable({
   title = "Holdings",
   assetType = "stock",
   portfolioValue,
+  portfolioId,
 }: {
   data: Holding[];
   title?: string;
   assetType?: AssetType;
   portfolioValue?: number;
+  portfolioId?: string;
 }) {
   const removeHolding = usePortfolioStore((state) => state.removeHolding);
   const allocationBase = portfolioValue ?? data.reduce((sum, holding) => sum + holdingMetrics(holding).marketValue, 0);
@@ -66,6 +69,37 @@ export function HoldingsTable({
   const [pendingDelete, setPendingDelete] = useState<Holding | null>(null);
   const storageKey = `folio-column-widths-${assetType}`;
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({});
+  const [todayBuyPriceBySymbol, setTodayBuyPriceBySymbol] = useState<Record<string, number>>({});
+  useEffect(() => {
+    const refreshTodayBuyPrices = () => {
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const next: Record<string, number> = {};
+      const positions = loadDcaPositions().filter((position) => (!portfolioId || portfolioId === "all" || position.portfolioId === portfolioId) && !position.id.includes("-option-"));
+      positions.forEach((position) => {
+        const activeLots = position.lots.filter((lot) => lot.date && lot.date !== "Future" && Number(lot.shares) > 0);
+        if (!activeLots.length || !activeLots.every((lot) => lot.date === today)) return;
+        const shares = activeLots.reduce((sum, lot) => sum + Number(lot.shares || 0), 0);
+        const cost = activeLots.reduce((sum, lot) => sum + Number(lot.shares || 0) * Number(lot.price || 0), 0);
+        if (shares > 0 && cost > 0) next[position.symbol.trim().toUpperCase()] = cost / shares;
+      });
+      setTodayBuyPriceBySymbol(next);
+    };
+    refreshTodayBuyPrices();
+    window.addEventListener(DCA_UPDATED_EVENT, refreshTodayBuyPrices);
+    window.addEventListener("storage", refreshTodayBuyPrices);
+    return () => { window.removeEventListener(DCA_UPDATED_EVENT, refreshTodayBuyPrices); window.removeEventListener("storage", refreshTodayBuyPrices); };
+  }, [portfolioId]);
+
+  const dayMetrics = (holding: Holding) => {
+    const metrics = holdingMetrics(holding);
+    const todayBuyPrice = todayBuyPriceBySymbol[holding.symbol.trim().toUpperCase()];
+    if (!todayBuyPrice || (holding.assetType ?? "stock") !== "stock") return { gain: metrics.todayGain, pct: metrics.todayPct };
+    return {
+      gain: (holding.currentPrice - todayBuyPrice) * holding.shares,
+      pct: todayBuyPrice ? ((holding.currentPrice - todayBuyPrice) / todayBuyPrice) * 100 : 0,
+    };
+  };
   useEffect(() => {
     try { const saved = JSON.parse(window.localStorage.getItem(storageKey) ?? "{}"); setColumnSizing({ ...saved, Symbol: Math.max(Number(saved.Symbol) || 0, 280) }); } catch { setColumnSizing({ Symbol: 300 }); }
     try {
@@ -87,7 +121,7 @@ export function HoldingsTable({
           <Link href={`/positions/${row.original.symbol}`} className="text-base font-semibold tracking-wide text-zinc-900 transition hover:text-emerald-600 dark:text-white">
             {row.original.symbol}
           </Link>
-          <div className="mt-0.5 max-w-[270px] truncate text-sm text-zinc-500">{row.original.company}</div>
+          <EditHoldingDialog holding={row.original} trigger={<button type="button" className="mt-0.5 max-w-[270px] truncate text-left text-sm text-zinc-500 transition hover:text-emerald-400" title={`Click To Edit ${row.original.symbol}`}>{row.original.company}</button>} />
         </div>
       ),
     },
@@ -148,11 +182,11 @@ export function HoldingsTable({
     {
       id: "dayReturn",
       header: "Day Return",
-      accessorFn: (holding) => holdingMetrics(holding).todayGain,
+      accessorFn: (holding) => dayMetrics(holding).gain,
       cell: ({ row }) => {
-        const metrics = holdingMetrics(row.original);
+        const metrics = dayMetrics(row.original);
         const shortOption = assetType === "option" && (row.original.optionType === "sell-call" || row.original.optionType === "sell-put");
-        return <div className="space-y-1 text-right"><div className="text-base"><SignedMoney value={metrics.todayGain} /></div><SignedPercent value={shortOption ? -metrics.todayPct : metrics.todayPct} /></div>;
+        return <div className="space-y-1 text-right"><div className="text-base"><SignedMoney value={metrics.gain} /></div><SignedPercent value={shortOption ? -metrics.pct : metrics.pct} /></div>;
       },
     },
     {
@@ -193,21 +227,20 @@ export function HoldingsTable({
       enableSorting: false,
       cell: ({ row }) => (
         <div className="flex items-center justify-end gap-2">
-          <EditHoldingDialog holding={row.original} />
           <button type="button" onClick={() => setPendingDelete(row.original)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 text-red-500 transition hover:bg-red-500/10" aria-label={`Remove ${row.original.symbol}`} title={`Remove ${row.original.symbol}`}>
             <Trash2 size={16} />
           </button>
         </div>
       ),
     },
-  ], [allocationBase, assetType]);
+  ], [allocationBase, assetType, todayBuyPriceBySymbol]);
 
   const subtotal = useMemo(() => {
     const totals = data.reduce((acc, holding) => {
       const metrics = holdingMetrics(holding);
       acc.marketValue += metrics.marketValue;
       acc.costBasis += metrics.costBasis;
-      acc.todayGain += metrics.todayGain;
+      acc.todayGain += dayMetrics(holding).gain;
       return acc;
     }, { marketValue: 0, costBasis: 0, todayGain: 0 });
 
@@ -217,7 +250,7 @@ export function HoldingsTable({
       totalGain: totals.marketValue - totals.costBasis,
       totalGainPct: totals.costBasis ? ((totals.marketValue - totals.costBasis) / totals.costBasis) * 100 : 0,
     };
-  }, [data]);
+  }, [data, todayBuyPriceBySymbol]);
 
   const table = useReactTable({ data, columns, defaultColumn: { size: 160, minSize: 80, maxSize: 600 }, state: { sorting, columnSizing }, onSortingChange: setSorting, onColumnSizingChange: setColumnSizing, columnResizeMode: "onChange", getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel() });
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, Info, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Info, Plus, Trash2, X } from "lucide-react";
 import { cn, money } from "@/lib/utils";
 import { DcaLot, DcaPosition, NumericValue } from "@/lib/dca-data";
 import { DCA_SELECTED_POSITION_KEY, DCA_UPDATED_EVENT, loadDcaPositions, saveDcaPositions, upsertDcaPosition, type TaxLotMethod } from "@/lib/dca-storage";
@@ -494,7 +494,7 @@ export default function DcaPage() {
 
   return <div className="space-y-5">
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Position Simulator</h1><p className="mt-1 text-sm text-zinc-500">Simulate Potential Prices And Returns For Your Stock And Option Positions.</p>
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Return Simulator</h1><p className="mt-1 text-sm text-zinc-500">Simulate Potential Prices And Returns For Your Stock And Option Positions.</p>
     </div>
 
     {showAddPosition && <section className="rounded-2xl border border-white/10 bg-zinc-950/50 p-5">
@@ -522,7 +522,7 @@ export default function DcaPage() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Average Premium</p><p className="mt-3 text-2xl font-semibold">{money(optionAverage)}</p><p className="mt-2 text-sm text-zinc-500">{formatShares(optionContracts)} {optionContracts === 1 ? "Contract" : "Contracts"}</p></div>
         <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5">
-          <div className="flex items-center justify-between gap-2"><p className="text-sm text-zinc-500">Days Since Added</p><button onClick={() => { setOptionBuyDateDraft(selectedPosition?.addedDate ?? ""); setEditingOptionDays(true); }} aria-label="Edit Buy Date" title="Edit Buy Date" className="rounded-lg p-1.5 text-zinc-500 hover:bg-emerald-500/10 hover:text-emerald-400"><Pencil size={15}/></button></div>
+          <button type="button" onClick={() => { setOptionBuyDateDraft(selectedPosition?.addedDate ?? ""); setEditingOptionDays(true); }} className="flex w-full items-center justify-between gap-2 rounded-lg text-left transition hover:bg-white/[.035]" aria-label="Edit Buy Date" title="Click To Edit Buy Date"><p className="text-sm text-zinc-500">Days Since Added</p></button>
           {editingOptionDays ? <div className="mt-3 space-y-2"><label className="block text-xs text-zinc-500">Buy Date</label><div className="flex items-center gap-2"><input autoFocus type="date" max={new Date().toISOString().slice(0,10)} value={optionBuyDateDraft} onChange={(event) => setOptionBuyDateDraft(event.target.value)} className="h-10 min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 outline-none"/><button onClick={() => { if (selectedPosition) { upsertDcaPosition({ ...selectedPosition, addedDate: optionBuyDateDraft || undefined, daysSinceAdded: undefined, sellPrice: parseNumericInput(sellPrice), lots: sortLots(lots) }); loadAll(selectedPosition.id); } setEditingOptionDays(false); }} className="h-10 rounded-xl bg-emerald-400 px-3 text-sm font-semibold text-zinc-950">Save</button></div></div> : <><p className="mt-3 text-2xl font-semibold">{optionDays === null ? "—" : `${optionDays.toLocaleString()} Days`}</p>{selectedPosition?.addedDate && <p className="mt-2 text-xs text-zinc-500">Bought {formatDate(selectedPosition.addedDate)}</p>}</>}
         </div>
         <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Current Premium</p><p className="mt-3 text-2xl font-semibold">{money(selectedHolding.currentPrice)}</p></div>
@@ -553,33 +553,31 @@ export default function DcaPage() {
       </div>}
       <div
         ref={lotScrollRef}
-        className="-mx-px overflow-x-auto overscroll-x-contain pb-1"
+        className="-mx-px overflow-x-hidden pb-1"
         onScroll={(event) => {
           try { window.localStorage.setItem(DCA_LOT_SCROLL_KEY, String(event.currentTarget.scrollLeft)); } catch {}
         }}
       >
-        <table className="table-fixed text-sm" style={{ width: Object.values(lotColumnWidths).reduce((sum, width) => sum + width, 0) }}>
-          <colgroup>{lotColumns.map((column) => <col key={column.key} style={{ width: lotColumnWidths[column.key] }} />)}</colgroup>
+        <table className="w-full table-fixed text-xs xl:text-sm">
+          <colgroup>{lotColumns.map((column) => <col key={column.key} />)}</colgroup>
           <thead className="bg-white/[.025] text-left text-xs tracking-wide text-zinc-500">
-            <tr>{lotColumns.map((column) => <th key={column.key} className={cn("relative whitespace-nowrap px-4 py-3 font-medium", column.key === "actions" && "text-right")}>
+            <tr>{lotColumns.map((column) => <th key={column.key} className={cn("relative whitespace-normal break-words px-2 py-3 font-medium xl:px-3", column.key === "actions" && "text-right")}>
               {column.label}
-              <span onMouseDown={(event) => startColumnResize(event, column.key)} className="absolute inset-y-0 right-0 w-2 cursor-col-resize select-none" aria-hidden="true" />
             </th>)}</tr>
           </thead>
           <tbody>{lots.map((lot, index) => {
             const shares = toNumber(lot.shares), price = toNumber(lot.price), cost = lot.amount;
             const profit = shares * (toNumber(sellPrice) - price), returnPct = cost ? profit / cost * 100 : 0;
-            return <tr key={`${lot.date}-${index}`} className={cn("border-t border-white/10", lot.future && "bg-emerald-500/[.04]")}>
-              <td className="whitespace-nowrap px-4 py-3">{formatShares(shares)}</td>
-              <td className="whitespace-nowrap px-4 py-3">{fixedMoney(price)}</td>
-              <td className="whitespace-nowrap px-4 py-3">{fixedMoney(cost)}</td>
-              <td className="whitespace-nowrap px-4 py-3">{formatDate(lot.date)}</td>
-              <td className="whitespace-nowrap px-4 py-3">{daysSinceAdded(lot.date)}</td>
-              <td className="whitespace-nowrap px-4 py-3">{signedMoney(profit)}</td>
-              <td className="whitespace-nowrap px-4 py-3">{pct(returnPct)}</td>
-              <td className="whitespace-nowrap px-4 py-3 text-right">
-                <button onClick={() => editLot(index)} aria-label="Edit Purchase Lot" title="Edit Purchase Lot" className="rounded-lg p-2 text-zinc-500 hover:bg-emerald-500/10 hover:text-emerald-400"><Pencil size={16}/></button>
-                <button onClick={() => deleteLot(index)} aria-label="Delete Purchase Lot" title="Delete Purchase Lot" className="rounded-lg p-2 text-zinc-500 hover:bg-rose-500/10 hover:text-rose-400"><Trash2 size={16}/></button>
+            return <tr key={`${lot.date}-${index}`} onClick={() => editLot(index)} title="Click To Edit Purchase Lot" className={cn("cursor-pointer border-t border-white/10 transition hover:bg-white/[.035]", lot.future && "bg-emerald-500/[.04]")}>
+              <td className="whitespace-normal break-words px-2 py-3 xl:px-3">{formatShares(shares)}</td>
+              <td className="whitespace-normal break-words px-2 py-3 xl:px-3">{fixedMoney(price)}</td>
+              <td className="whitespace-normal break-words px-2 py-3 xl:px-3">{fixedMoney(cost)}</td>
+              <td className="whitespace-normal break-words px-2 py-3 xl:px-3">{formatDate(lot.date)}</td>
+              <td className="whitespace-normal break-words px-2 py-3 xl:px-3">{daysSinceAdded(lot.date)}</td>
+              <td className="whitespace-normal break-words px-2 py-3 xl:px-3">{signedMoney(profit)}</td>
+              <td className="whitespace-normal break-words px-2 py-3 xl:px-3">{pct(returnPct)}</td>
+              <td className="whitespace-normal px-2 py-3 text-right xl:px-3">
+                <button onClick={(event) => { event.stopPropagation(); deleteLot(index); }} aria-label="Delete Purchase Lot" title="Delete Purchase Lot" className="rounded-lg p-2 text-zinc-500 hover:bg-rose-500/10 hover:text-rose-400"><Trash2 size={16}/></button>
               </td>
             </tr>;
           })}</tbody>
@@ -591,7 +589,7 @@ export default function DcaPage() {
     {isOption ? (
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
-        <h2 className="flex items-center gap-2 font-semibold">Target Return Calculator <InfoTip text="Enter a desired return percentage to calculate the selling price needed for this DCA position." /></h2>
+        <h2 className="flex items-center gap-2 font-semibold">Target Return Calculator <InfoTip text="Enter A Desired Return Percentage To Calculate The Selling Price Needed For This Position." /></h2>
         <label className="mt-4 block text-sm text-zinc-400">Target Return (%)</label><div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={targetReturn} type="number" step="any" onChange={(e)=>setTargetReturn(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span>%</span></div>
         <div className="mt-4 rounded-xl border border-emerald-500/35 bg-emerald-500/[.07] p-5 text-center"><p className="text-sm text-zinc-300">Required Selling Price</p><p className="mt-2 text-3xl font-semibold text-emerald-400">{money(requiredSellingPrice)}</p><p className="mt-2 text-sm text-emerald-400">Potential Return: {signedMoney(targetPotentialProfit)} ({toNumber(targetReturn).toFixed(2)}%)</p></div>
       </section>
@@ -610,17 +608,17 @@ export default function DcaPage() {
         </div>
       </section>
           <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
-        <h2 className="flex items-center gap-2 font-semibold">Target Return Calculator <InfoTip text="Enter a desired return percentage to calculate the selling price needed for this DCA position." /></h2>
+        <h2 className="flex items-center gap-2 font-semibold">Target Return Calculator <InfoTip text="Enter A Desired Return Percentage To Calculate The Selling Price Needed For This Position." /></h2>
         <label className="mt-4 block text-sm text-zinc-400">Target Return (%)</label><div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={targetReturn} type="number" step="any" onChange={(e)=>setTargetReturn(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span>%</span></div>
         <div className="mt-4 rounded-xl border border-emerald-500/35 bg-emerald-500/[.07] p-5 text-center"><p className="text-sm text-zinc-300">Required Selling Price</p><p className="mt-2 text-3xl font-semibold text-emerald-400">{money(requiredSellingPrice)}</p><p className="mt-2 text-sm text-emerald-400">Potential Return: {signedMoney(targetPotentialProfit)} ({toNumber(targetReturn).toFixed(2)}%)</p></div>
       </section>
         </div>
         <div className="min-w-0">
           <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
-        <h2 className="flex items-center gap-2 font-semibold">Partial Sale Calculator <InfoTip text="Choose which purchase lots would be sold and preview the resulting realized return and remaining cost basis." /></h2>
+        <h2 className="flex items-center gap-2 font-semibold">Partial Sale Calculator <InfoTip text="Choose Which Purchase Lots Would Be Sold And Preview The Resulting Realized Return And Remaining Cost Basis." /></h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="block text-sm text-zinc-400">Shares To Sell<div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={sharesToSell} min={0} max={totals.shares} type="number" step="any" onChange={(e)=>setSharesToSell(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span className="whitespace-nowrap text-sm text-zinc-400">Of {formatShares(totals.shares)}</span></div></label>
-          <label className="block text-sm text-zinc-400">Tax Lot Method<select value={partialTaxLotMethod} onChange={e=>{setPartialTaxLotMethod(e.target.value as TaxLotMethod);setPartialCustomLots({});}} className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm text-zinc-200 outline-none"><option value="fifo">FIFO · Oldest First</option><option value="lifo">LIFO · Newest First</option><option value="highest-cost">Highest Cost First</option><option value="custom">Custom Lots</option></select></label>
+          <label className="block text-sm text-zinc-400">Tax Lot Method<select value={partialTaxLotMethod} onChange={e=>{setPartialTaxLotMethod(e.target.value as TaxLotMethod);setPartialCustomLots({});}} className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm text-zinc-200 outline-none"><option value="fifo">FIFO · Oldest First</option><option value="lifo">LIFO · Newest First</option><option value="custom">Custom Lots</option></select></label>
         </div>
         {partialLotRows.length>0&&<div className="mt-5 max-h-64 overflow-auto rounded-xl border border-white/10"><table className="min-w-full text-xs"><thead className="sticky top-0 bg-zinc-950 text-zinc-400"><tr><th className="px-3 py-2 text-left">Buy Date Lot</th><th className="px-3 py-2 text-right">Available</th><th className="px-3 py-2 text-right">Buy</th><th className="px-3 py-2 text-right">Sell Shares</th><th className="px-3 py-2 text-right">Return</th></tr></thead><tbody>{partialLotRows.map(row=><tr key={row.key} className={cn("border-t border-white/10",row.used>0&&"bg-emerald-500/[.035]")}><td className="px-3 py-2">{row.date}</td><td className="px-3 py-2 text-right">{formatShares(row.shares)}</td><td className="px-3 py-2 text-right">{money(row.buyPrice)}</td><td className="px-3 py-2 text-right">{partialTaxLotMethod==="custom"?<input type="number" min={0} max={row.shares} step="any" value={partialCustomLots[row.key]??""} onChange={e=>{const raw=e.target.value;const value=raw===""?"":String(Math.max(0,Math.min(row.shares,Number(raw)||0)));setPartialCustomLots(current=>({...current,[row.key]:value}));}} placeholder="0" className="h-8 w-20 rounded-lg border border-white/10 bg-black/20 px-2 text-right outline-none"/>:<span className={row.used>0?"font-medium text-emerald-400":"text-zinc-600"}>{row.used>0?formatShares(row.used):"—"}</span>}</td><td className={cn("px-3 py-2 text-right",row.returnValue>0?"text-emerald-400":row.returnValue<0?"text-rose-400":"text-zinc-600")}>{row.used>0?signedMoney(row.returnValue):"—"}</td></tr>)}</tbody></table></div>}
         {partialTaxLotMethod==="custom"&&<div className={cn("mt-3 rounded-xl border px-3 py-2 text-xs",Math.abs(partialSelectedShares-safeSharesToSell)<=1e-6?"border-emerald-500/20 bg-emerald-500/[.05] text-emerald-400":"border-amber-500/20 bg-amber-500/[.05] text-amber-400")}>Selected {formatShares(partialSelectedShares)} of {formatShares(safeSharesToSell)} requested shares.</div>}

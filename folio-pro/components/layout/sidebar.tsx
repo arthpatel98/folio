@@ -7,7 +7,7 @@ import { BriefcaseBusiness, Check, ChevronDown, Coins, Landmark, Layers3, PanelL
 import { cn } from "@/lib/utils";
 import { portfolios, useActivePortfolio } from "@/components/portfolio/portfolio-context";
 
-const items=[['/holdings','Holdings',BriefcaseBusiness],['/dca','Position Simulator',Coins],['/targets','Target Planner',Target],['/realized','Realized P/L',Landmark],['/transactions','Transactions',ReceiptText],['/savings-investments','Portfolio Performance',PiggyBank]] as const;
+const items=[['/holdings','Holdings',BriefcaseBusiness],['/dca','Return Simulator',Coins],['/targets','Target Planner',Target],['/realized','Realized P/L',Landmark],['/transactions','Transactions',ReceiptText],['/savings-investments','Portfolio Performance',PiggyBank]] as const;
 
 export function Sidebar({onCollapse}:{onCollapse?:()=>void}){
   const path=usePathname();
