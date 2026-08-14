@@ -121,7 +121,7 @@ export function HoldingsTable({
           <Link href={`/positions/${row.original.symbol}`} className="text-base font-semibold tracking-wide text-zinc-900 transition hover:text-emerald-600 dark:text-white">
             {row.original.symbol}
           </Link>
-          <EditHoldingDialog holding={row.original} trigger={<button type="button" className="mt-0.5 max-w-[270px] truncate text-left text-sm text-zinc-500 transition hover:text-emerald-400" title={`Click To Edit ${row.original.symbol}`}>{row.original.company}</button>} />
+          <div className="mt-0.5 max-w-[270px] truncate text-sm text-zinc-500">{row.original.company}</div>
         </div>
       ),
     },
@@ -227,6 +227,7 @@ export function HoldingsTable({
       enableSorting: false,
       cell: ({ row }) => (
         <div className="flex items-center justify-end gap-2">
+          <EditHoldingDialog holding={row.original} />
           <button type="button" onClick={() => setPendingDelete(row.original)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 text-red-500 transition hover:bg-red-500/10" aria-label={`Remove ${row.original.symbol}`} title={`Remove ${row.original.symbol}`}>
             <Trash2 size={16} />
           </button>

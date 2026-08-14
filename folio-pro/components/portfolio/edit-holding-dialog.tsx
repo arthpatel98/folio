@@ -2,7 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { FormEvent, useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePortfolioStore } from "@/store/portfolio-store";
@@ -65,7 +65,7 @@ function toForm(holding: Holding): HoldingForm {
   };
 }
 
-export function EditHoldingDialog({ holding, trigger }: { holding: Holding; trigger?: React.ReactNode }) {
+export function EditHoldingDialog({ holding }: { holding: Holding }) {
   const updateHolding = usePortfolioStore((state) => state.updateHolding);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<HoldingForm>(() => toForm(holding));
@@ -138,7 +138,14 @@ export function EditHoldingDialog({ holding, trigger }: { holding: Holding; trig
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
-        {trigger ?? <button type="button" className="sr-only" aria-label={`Edit ${holding.symbol}`}>Edit {holding.symbol}</button>}
+        <button
+          type="button"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white"
+          aria-label={`Edit ${holding.symbol}`}
+          title={`Edit ${holding.symbol}`}
+        >
+          <Pencil size={16} />
+        </button>
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
