@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowRight, ArrowUp, Info, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Plus, Trash2, X } from "lucide-react";
 import { cn, money } from "@/lib/utils";
 import { DcaLot, DcaPosition, NumericValue } from "@/lib/dca-data";
 import { DCA_SELECTED_POSITION_KEY, DCA_UPDATED_EVENT, loadDcaPositions, saveDcaPositions, upsertDcaPosition, type TaxLotMethod } from "@/lib/dca-storage";
@@ -65,14 +65,6 @@ const lotColumns = [
 type LotColumnKey = typeof lotColumns[number]["key"];
 const defaultLotWidths = Object.fromEntries(lotColumns.map((column) => [column.key, column.defaultWidth])) as Record<LotColumnKey, number>;
 
-function InfoTip({ text }: { text: string }) {
-  return (
-    <span className="group relative inline-flex align-middle">
-      <button type="button" aria-label={text} title={text} className="inline-flex rounded-full text-zinc-500 transition hover:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-emerald-400/50"><Info size={15} /></button>
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 rounded-lg border border-white/10 bg-zinc-900 px-3 py-2 text-left text-xs font-normal leading-relaxed text-zinc-200 shadow-xl group-hover:block group-focus-within:block">{text}</span>
-    </span>
-  );
-}
 
 export default function DcaPage() {
   const { activeId } = useActivePortfolio();
@@ -88,7 +80,7 @@ export default function DcaPage() {
   const [savedMessage, setSavedMessage] = useState("");
   const [showAddPosition, setShowAddPosition] = useState(false);
   const [showLotForm, setShowLotForm] = useState<"existing" | "future" | null>(null);
-  const [newLotType, setNewLotType] = useState<"existing" | "future">("existing");
+  const [newLotType, setNewLotType] = useState<"existing" | "future">("future");
   const [lotDraft, setLotDraft] = useState<LotDraft>(emptyDraft());
   const [editingLotIndex, setEditingLotIndex] = useState<number | null>(null);
   const [lotColumnWidths, setLotColumnWidths] = useState<Record<LotColumnKey, number>>(defaultLotWidths);
@@ -538,7 +530,7 @@ export default function DcaPage() {
 
     {!isOption && <>
     <section className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-950/35">
-      <div className="flex flex-col gap-3 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="font-semibold">Purchase Lots</h2><p className="mt-1 text-sm text-zinc-500">Edit Existing Or Future Purchase Lots. Holdings Purchases Are Added Automatically.</p></div><button onClick={() => { setEditingLotIndex(null); setNewLotType("existing"); setShowLotForm("existing"); setLotDraft(emptyDraft(false)); }} aria-label="Add Purchase" title="Add Purchase" className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400 text-zinc-950 hover:bg-emerald-300"><Plus size={18}/></button></div>
+      <div className="flex flex-col gap-3 border-b border-white/10 p-5 lg:flex-row lg:items-center lg:justify-between"><div><h2 className="font-semibold">Purchase Lots</h2></div><button onClick={() => { setEditingLotIndex(null); setNewLotType("future"); setShowLotForm("future"); setLotDraft(emptyDraft(true)); }} aria-label="Add Purchase" title="Add Purchase" className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400 text-zinc-950 hover:bg-emerald-300"><Plus size={18}/></button></div>
       {showLotForm && <div className="border-b border-white/10 p-5">
         {editingLotIndex === null && <div className="mb-4 inline-flex rounded-xl border border-white/10 bg-black/20 p-1">
           {(["existing", "future"] as const).map((type) => <button key={type} onClick={() => { setNewLotType(type); setShowLotForm(type); setLotDraft(emptyDraft(type === "future")); }} className={cn("rounded-lg px-4 py-2 text-sm font-semibold transition", newLotType === type ? "bg-emerald-400 text-zinc-950" : "text-zinc-400 hover:text-white")}>{type === "existing" ? "Existing Purchase" : "Future Purchase"}</button>)}
@@ -589,9 +581,9 @@ export default function DcaPage() {
     {isOption ? (
       <div className="grid gap-4 xl:grid-cols-2">
         <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
-        <h2 className="flex items-center gap-2 font-semibold">Target Return Calculator <InfoTip text="Enter A Desired Return Percentage To Calculate The Selling Price Needed For This Position." /></h2>
+        <h2 className="flex items-center gap-2 font-semibold">Target Return Calculator</h2>
         <label className="mt-4 block text-sm text-zinc-400">Target Return (%)</label><div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={targetReturn} type="number" step="any" onChange={(e)=>setTargetReturn(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span>%</span></div>
-        <div className="mt-4 rounded-xl border border-emerald-500/35 bg-emerald-500/[.07] p-5 text-center"><p className="text-sm text-zinc-300">Required Selling Price</p><p className="mt-2 text-3xl font-semibold text-emerald-400">{money(requiredSellingPrice)}</p><p className="mt-2 text-sm text-emerald-400">Potential Return: {signedMoney(targetPotentialProfit)} ({toNumber(targetReturn).toFixed(2)}%)</p></div>
+        <div className={cn("mt-4 rounded-xl border p-5 text-center transition-colors", toNumber(targetReturn) < 0 ? "border-rose-500/35 bg-rose-500/[.08]" : "border-emerald-500/35 bg-emerald-500/[.07]")}><p className="text-sm text-zinc-300">Required Selling Price</p><p className={cn("mt-2 text-3xl font-semibold", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>{money(requiredSellingPrice)}</p><p className={cn("mt-2 text-sm", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>Potential Return: {signedMoney(targetPotentialProfit)} ({toNumber(targetReturn).toFixed(2)}%)</p></div>
       </section>
       </div>
     ) : (
@@ -599,23 +591,23 @@ export default function DcaPage() {
         <div className="grid gap-4">
           <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
         <h2 className="font-semibold">Before DCA Vs. After DCA</h2>
-        <div className="mt-5 overflow-hidden rounded-2xl border border-white/10 bg-black/15">
+        <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/[.035] to-black/20 shadow-[0_18px_50px_rgba(0,0,0,.22)]">
           <div className="grid md:grid-cols-[1fr_auto_1fr] md:items-stretch">
-            <div className="p-5"><p className="text-sm font-medium text-zinc-400">Before DCA</p><p className="mt-1 text-xs text-zinc-600">Existing Average Price</p><p className="mt-4 text-3xl font-semibold">{totals.oldAvg ? money(totals.oldAvg) : "—"}</p></div>
-            <div className="hidden items-center justify-center border-x border-white/10 px-3 md:flex"><ArrowRight size={20} className="text-zinc-500"/></div>
-            <div className={cn("p-5", totals.avg < totals.oldAvg ? "bg-emerald-500/[.06]" : totals.avg > totals.oldAvg ? "bg-rose-500/[.06]" : "")}><p className="text-sm font-medium text-zinc-400">After DCA</p><p className="mt-1 text-xs text-zinc-600">New Average Price</p><div className="mt-4 flex items-end justify-between gap-4"><p className="text-3xl font-semibold">{totals.avg ? money(totals.avg) : "—"}</p>{totals.oldAvg > 0 && totals.avg > 0 && (() => { const difference = totals.avg - totals.oldAvg; const percent = difference / totals.oldAvg * 100; const Icon = difference > 0 ? ArrowUp : difference < 0 ? ArrowDown : ArrowRight; return <div className={cn("flex items-center gap-1.5 text-sm font-semibold", difference < 0 ? "text-emerald-400" : difference > 0 ? "text-rose-400" : "text-zinc-400")}><Icon size={17}/><span>{signedMoney(difference)} · {Math.abs(percent).toFixed(2)}%</span></div>; })()}</div></div>
+            <div className="p-6 sm:p-7"><p className="text-sm font-semibold uppercase tracking-[.12em] text-zinc-500">Before DCA</p><p className="mt-2 text-sm text-zinc-600">Existing Average Price</p><p className="mt-5 text-4xl font-semibold tracking-tight text-zinc-100">{totals.oldAvg ? money(totals.oldAvg) : "—"}</p></div>
+            <div className="hidden items-center justify-center border-x border-white/10 bg-black/15 px-4 md:flex"><span className="grid size-10 place-items-center rounded-full border border-white/10 bg-white/[.04]"><ArrowRight size={20} className="text-zinc-400"/></span></div>
+            <div className="relative overflow-hidden border-t border-emerald-400/15 bg-gradient-to-br from-emerald-500/[.14] via-emerald-500/[.07] to-cyan-500/[.04] p-6 sm:p-7 md:border-l-0 md:border-t-0"><div className="pointer-events-none absolute -right-16 -top-20 size-48 rounded-full bg-emerald-400/[.08] blur-3xl"/><p className="relative text-sm font-semibold uppercase tracking-[.12em] text-emerald-400">After DCA</p><p className="relative mt-2 text-sm text-emerald-200/55">New Average Price</p><div className="relative mt-5 flex flex-wrap items-end justify-between gap-4"><p className="text-4xl font-semibold tracking-tight text-emerald-300">{totals.avg ? money(totals.avg) : "—"}</p>{totals.oldAvg > 0 && totals.avg > 0 && (() => { const difference = totals.avg - totals.oldAvg; const percent = difference / totals.oldAvg * 100; const Icon = difference > 0 ? ArrowUp : difference < 0 ? ArrowDown : ArrowRight; return <div className={cn("flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold", difference <= 0 ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300" : "border-rose-400/20 bg-rose-400/10 text-rose-300")}><Icon size={16}/><span>{signedMoney(difference)} · {Math.abs(percent).toFixed(2)}%</span></div>; })()}</div></div>
           </div>
         </div>
       </section>
           <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
-        <h2 className="flex items-center gap-2 font-semibold">Target Return Calculator <InfoTip text="Enter A Desired Return Percentage To Calculate The Selling Price Needed For This Position." /></h2>
+        <h2 className="flex items-center gap-2 font-semibold">Target Return Calculator</h2>
         <label className="mt-4 block text-sm text-zinc-400">Target Return (%)</label><div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={targetReturn} type="number" step="any" onChange={(e)=>setTargetReturn(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span>%</span></div>
-        <div className="mt-4 rounded-xl border border-emerald-500/35 bg-emerald-500/[.07] p-5 text-center"><p className="text-sm text-zinc-300">Required Selling Price</p><p className="mt-2 text-3xl font-semibold text-emerald-400">{money(requiredSellingPrice)}</p><p className="mt-2 text-sm text-emerald-400">Potential Return: {signedMoney(targetPotentialProfit)} ({toNumber(targetReturn).toFixed(2)}%)</p></div>
+        <div className={cn("mt-4 rounded-xl border p-5 text-center transition-colors", toNumber(targetReturn) < 0 ? "border-rose-500/35 bg-rose-500/[.08]" : "border-emerald-500/35 bg-emerald-500/[.07]")}><p className="text-sm text-zinc-300">Required Selling Price</p><p className={cn("mt-2 text-3xl font-semibold", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>{money(requiredSellingPrice)}</p><p className={cn("mt-2 text-sm", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>Potential Return: {signedMoney(targetPotentialProfit)} ({toNumber(targetReturn).toFixed(2)}%)</p></div>
       </section>
         </div>
         <div className="min-w-0">
           <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
-        <h2 className="flex items-center gap-2 font-semibold">Partial Sale Calculator <InfoTip text="Choose Which Purchase Lots Would Be Sold And Preview The Resulting Realized Return And Remaining Cost Basis." /></h2>
+        <h2 className="flex items-center gap-2 font-semibold">Partial Sale Calculator</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="block text-sm text-zinc-400">Shares To Sell<div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={sharesToSell} min={0} max={totals.shares} type="number" step="any" onChange={(e)=>setSharesToSell(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span className="whitespace-nowrap text-sm text-zinc-400">Of {formatShares(totals.shares)}</span></div></label>
           <label className="block text-sm text-zinc-400">Tax Lot Method<select value={partialTaxLotMethod} onChange={e=>{setPartialTaxLotMethod(e.target.value as TaxLotMethod);setPartialCustomLots({});}} className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm text-zinc-200 outline-none"><option value="fifo">FIFO · Oldest First</option><option value="lifo">LIFO · Newest First</option><option value="custom">Custom Lots</option></select></label>

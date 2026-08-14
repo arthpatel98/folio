@@ -332,14 +332,9 @@ export default function SavingsInvestmentsPage() {
           {(()=>{
             const portfolioId=accountPortfolioIds[account.name];
             const ath=allTimeHighs[portfolioId];
-            return <div className="flex items-start justify-between gap-4"><span className="pt-2">All-Time High</span><div className="grid min-w-[170px] gap-1 text-right">
-              {editingAllTimeHigh?.portfolioId===portfolioId&&editingAllTimeHigh.field==="value"
-                ? <input autoFocus type="number" step="0.01" value={ath.value||""} onChange={e=>updateAllTimeHigh(portfolioId,"value",e.target.value)} onBlur={()=>setEditingAllTimeHigh(null)} onKeyDown={e=>{if(e.key==="Enter")setEditingAllTimeHigh(null);}} className="h-8 rounded-lg border border-white/10 bg-transparent px-2 text-right font-medium text-zinc-200 outline-none"/>
-                : <button type="button" onClick={()=>setEditingAllTimeHigh({portfolioId,field:"value"})} className="rounded-md px-2 py-1 text-right font-medium text-zinc-300 transition hover:bg-white/[.04]" title="Click To Edit All-Time High Value">{money(ath.value)}</button>}
-              {editingAllTimeHigh?.portfolioId===portfolioId&&editingAllTimeHigh.field==="date"
-                ? <input autoFocus type="date" value={ath.date} onChange={e=>updateAllTimeHigh(portfolioId,"date",e.target.value)} onBlur={()=>setEditingAllTimeHigh(null)} onKeyDown={e=>{if(e.key==="Enter")setEditingAllTimeHigh(null);}} className="h-8 rounded-lg border border-white/10 bg-transparent px-2 text-right text-zinc-300 outline-none"/>
-                : <button type="button" onClick={()=>setEditingAllTimeHigh({portfolioId,field:"date"})} className="rounded-md px-2 py-1 text-right text-zinc-400 transition hover:bg-white/[.04]" title="Click To Edit All-Time High Date">On {formatDisplayDate(ath.date)}</button>}
-            </div></div>;
+            return <div className="flex items-start justify-between gap-4"><span className="pt-2">All-Time High</span>{editingAllTimeHigh?.portfolioId===portfolioId
+              ? <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-2"><input autoFocus type="number" step="0.01" value={ath.value||""} onChange={e=>updateAllTimeHigh(portfolioId,"value",e.target.value)} className="h-8 w-28 rounded-lg border border-white/10 bg-transparent px-2 text-right font-medium text-zinc-200 outline-none"/><input type="date" value={ath.date} onChange={e=>updateAllTimeHigh(portfolioId,"date",e.target.value)} onKeyDown={e=>{if(e.key==="Enter")setEditingAllTimeHigh(null);}} className="h-8 w-36 rounded-lg border border-white/10 bg-transparent px-2 text-right text-zinc-300 outline-none"/><button type="button" onClick={()=>setEditingAllTimeHigh(null)} className="h-8 rounded-lg border border-white/10 px-2 text-zinc-400 hover:bg-white/[.04]">Done</button></div>
+              : <button type="button" onClick={()=>setEditingAllTimeHigh({portfolioId,field:"value"})} className="whitespace-nowrap rounded-md px-2 py-1 text-right text-zinc-400 transition hover:bg-white/[.04]" title="Click To Edit All-Time High">{money(ath.value)} On {formatDisplayDate(ath.date)}</button>}</div>;
           })()}
         </div>
       </Card>)}

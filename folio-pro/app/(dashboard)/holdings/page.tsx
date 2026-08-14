@@ -45,10 +45,17 @@ export default function Page() {
   const normalizedQuery = query.trim().toLowerCase();
   const filtered = useMemo(() => {
     if (!normalizedQuery) return holdings;
-    return holdings.filter((holding) =>
-      holding.symbol.toLowerCase().includes(normalizedQuery) ||
-      holding.company.toLowerCase().includes(normalizedQuery),
-    );
+    return holdings.filter((holding) => {
+      const optionLabel = [
+        holding.optionSymbol,
+        holding.optionType?.replace("-", " "),
+        holding.optionExpiry,
+        holding.optionStrike != null ? String(holding.optionStrike) : "",
+      ].filter(Boolean).join(" ").toLowerCase();
+      return holding.symbol.toLowerCase().includes(normalizedQuery) ||
+        holding.company.toLowerCase().includes(normalizedQuery) ||
+        optionLabel.includes(normalizedQuery);
+    });
   }, [holdings, normalizedQuery]);
 
   const stocks = filtered.filter((holding) => (holding.assetType ?? "stock") === "stock");
