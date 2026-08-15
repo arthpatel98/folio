@@ -318,8 +318,9 @@ export default function Page() {
         </div>
       </div>
 
-      <HoldingsTable data={stocks} title="Stocks" assetType="stock" portfolioValue={summary.value} portfolioId={activePortfolioId} />
-      {!isFidelity401k && <HoldingsTable data={options} title="Options" assetType="option" portfolioValue={summary.value} portfolioId={activePortfolioId} />}
+      {(!normalizedQuery || stocks.length > 0) && <HoldingsTable data={stocks} title="Stocks" assetType="stock" portfolioValue={summary.value} portfolioId={activePortfolioId} />}
+      {!isFidelity401k && (!normalizedQuery || options.length > 0) && <HoldingsTable data={options} title="Options" assetType="option" portfolioValue={summary.value} portfolioId={activePortfolioId} />}
+      {normalizedQuery && stocks.length === 0 && (isFidelity401k || options.length === 0) && <div className="rounded-2xl border border-zinc-200 bg-white px-6 py-14 text-center text-sm text-zinc-500 shadow-sm dark:border-white/10 dark:bg-zinc-950/30">No holdings match your search.</div>}
 
       <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-950/30">
         <div className="border-b border-zinc-200 bg-zinc-50 px-5 py-4 dark:border-white/5 dark:bg-white/[.025]"><h2 className="font-semibold">Portfolio Totals</h2></div>
