@@ -1,8 +1,8 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { FormEvent, useEffect, useState } from "react";
-import { Pencil, X } from "lucide-react";
+import { FormEvent, ReactNode, useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePortfolioStore } from "@/store/portfolio-store";
@@ -65,7 +65,7 @@ function toForm(holding: Holding): HoldingForm {
   };
 }
 
-export function EditHoldingDialog({ holding }: { holding: Holding }) {
+export function EditHoldingDialog({ holding, children, onDelete }: { holding: Holding; children?: ReactNode; onDelete?: () => void }) {
   const updateHolding = usePortfolioStore((state) => state.updateHolding);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<HoldingForm>(() => toForm(holding));
@@ -138,14 +138,7 @@ export function EditHoldingDialog({ holding }: { holding: Holding }) {
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
-        <button
-          type="button"
-          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-950 dark:border-white/10 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-white"
-          aria-label={`Edit ${holding.symbol}`}
-          title={`Edit ${holding.symbol}`}
-        >
-          <Pencil size={16} />
-        </button>
+        {children ? <button type="button" className="contents" aria-label={`Edit ${holding.symbol}`} title={`Edit ${holding.symbol}`}>{children}</button> : <button type="button" className="text-inherit" aria-label={`Edit ${holding.symbol}`} title={`Edit ${holding.symbol}`}>{holding.symbol}</button>}
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
@@ -220,6 +213,7 @@ export function EditHoldingDialog({ holding }: { holding: Holding }) {
             )}
 
             <div className="mt-2 flex justify-end gap-3 sm:col-span-2">
+              {onDelete && <Button type="button" variant="outline" onClick={() => { setOpen(false); onDelete(); }} className="mr-auto border-red-500/25 text-red-400 hover:bg-red-500/10 hover:text-red-300">Delete Position</Button>}
               <Dialog.Close asChild>
                 <Button type="button" variant="outline">Cancel</Button>
               </Dialog.Close>

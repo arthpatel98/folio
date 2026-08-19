@@ -595,7 +595,7 @@ export default function Page() {
   }
 
   function exportCsv() {
-    const header = ["Ticker", "Type", "Realized P/L", "Fees", "Last Sell Date", "PAT", "Loss", "PAT Needed", "Dividend Amount", "Dividend NRA Withholding", "Last Dividend Date", "Comment"];
+    const header = ["Ticker", "Type", "Realized Returns", "Fees", "Last Sell Date", "PAT", "Loss", "PAT Needed", "Dividend Amount", "Dividend NRA Withholding", "Last Dividend Date", "Comment"];
     const rows = visiblePositions.map((item) => [
       item.symbol, item.type === "option" ? "Option" : "Stock", item.amount.toFixed(2), item.fees.toFixed(2),
       item.lastSellDate, calculatedPat(item, tickerCommentFor(item.symbol)) ?? "-", item.loss ?? "-", derivedPatNeeded(calculatedPat(item, tickerCommentFor(item.symbol)), item.loss) ?? "-", item.dividendAmount.toFixed(2), item.dividendNraWithholding.toFixed(2), item.lastDividendDate || "-", item.comment || "-",
@@ -782,7 +782,7 @@ export default function Page() {
     <div>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold sm:text-3xl">Realized P/L</h1>
+          <h1 className="text-2xl font-semibold sm:text-3xl">Realized Returns</h1>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
           <input ref={fileInputRef} className="hidden" type="file" accept=".csv" onChange={handleFileUpload} />
@@ -807,7 +807,7 @@ export default function Page() {
       <Card className="mt-6 overflow-hidden p-5">
         <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="font-medium">Realized P/L By Ticker</h2>
+            <h2 className="font-medium">Realized P/L & Dividends By Ticker</h2>
             <p className="mt-1 text-xs text-zinc-500">Choose A Ticker Row To See Its Individual Stock And Option Entries.</p>
           </div>
           <div className="flex flex-col items-end gap-2">

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -12,7 +11,7 @@ import {
   ColumnSizingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowDown, ArrowUp, ArrowUpDown, BriefcaseBusiness, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, BriefcaseBusiness } from "lucide-react";
 import { AssetType, Holding, OptionType } from "@/types/portfolio";
 import { holdingMetrics } from "@/lib/calculations/portfolio";
 import { cn, money } from "@/lib/utils";
@@ -128,9 +127,11 @@ export function HoldingsTable({
       header: assetType === "stock" ? "Ticker" : "Ticker",
       cell: ({ row }) => (
         <div className="min-w-[210px]">
-          <Link href={`/positions/${row.original.symbol}`} className="text-base font-semibold tracking-wide text-zinc-900 transition hover:text-emerald-600 dark:text-white">
-            {row.original.symbol}
-          </Link>
+          <EditHoldingDialog holding={row.original} onDelete={() => setPendingDelete(row.original)}>
+            <span className="text-base font-semibold tracking-wide text-zinc-900 transition hover:text-emerald-600 dark:text-white">
+              {row.original.symbol}
+            </span>
+          </EditHoldingDialog>
           <div className="mt-0.5 max-w-[270px] truncate text-sm text-zinc-500">{row.original.company}</div>
         </div>
       ),
@@ -230,19 +231,6 @@ export function HoldingsTable({
         const allocation = allocationBase ? Math.abs(value / allocationBase) * 100 : 0;
         return <div className="space-y-1 text-right"><div className="text-base font-medium">{money(value)}</div><div className="text-sm text-zinc-500">{allocation.toFixed(2)}%</div></div>;
       },
-    },
-    {
-      id: "actions",
-      header: "Actions",
-      enableSorting: false,
-      cell: ({ row }) => (
-        <div className="flex items-center justify-end gap-2">
-          <EditHoldingDialog holding={row.original} />
-          <button type="button" onClick={() => setPendingDelete(row.original)} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-500/20 text-red-500 transition hover:bg-red-500/10" aria-label={`Remove ${row.original.symbol}`} title={`Remove ${row.original.symbol}`}>
-            <Trash2 size={16} />
-          </button>
-        </div>
-      ),
     },
   ], [allocationBase, assetType, todayBuyPriceBySymbol, todayOptionSymbols]);
 

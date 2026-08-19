@@ -19,6 +19,16 @@ function MetricBlock({ label, value, subvalue, positive, icon: Icon, tone = "gre
   return <div className={cn("rounded-2xl border p-4 shadow-sm", toneClass)}><div className="flex items-center justify-between gap-3"><p className="text-sm font-medium text-zinc-400">{label}</p><div className="rounded-lg bg-current/10 p-2"><Icon size={18}/></div></div><div className="mt-3 flex items-baseline justify-between gap-2"><p className={cn("text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white", positive === true && "text-emerald-500", positive === false && "text-red-500")}>{value}</p>{valueExtra}</div>{subvalue && <p className={cn("mt-1.5 whitespace-pre-line text-sm", positive === true && "text-emerald-400", positive === false && "text-red-400", positive === undefined && "text-zinc-500")}>{subvalue}</p>}</div>;
 }
 
+const PORTFOLIO_CLOSE_SNAPSHOTS_KEY = "folio-portfolio-close-snapshots-v1";
+
+function easternMarketClock(date = new Date()) {
+  const dateText = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour12: false, hour: "2-digit", minute: "2-digit" }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value ?? 0);
+  return { dateText, minutes: hour * 60 + minute };
+}
+
 export default function Page() {
   const activePortfolioId = usePortfolioStore((state) => state.activePortfolioId);
   const holdingsByPortfolio = usePortfolioStore((state) => state.holdingsByPortfolio);
@@ -40,6 +50,7 @@ export default function Page() {
   const [pricesError, setPricesError] = useState<string | null>(null);
   const [pricesUpdatedAt, setPricesUpdatedAt] = useState<Date | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [closeSnapshots, setCloseSnapshots] = useState<Record<string, number>>({});
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -78,6 +89,44 @@ export default function Page() {
   const collateral = useMemo(() => isFidelity401k ? 0 : optionCollateral(holdings), [holdings, isFidelity401k]);
   const availableCash = displayedCash - collateral;
   const summary = useMemo(() => portfolioSummary(holdings, displayedCash), [holdings, displayedCash]);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(PORTFOLIO_CLOSE_SNAPSHOTS_KEY) ?? "{}");
+      if (saved && typeof saved === "object") setCloseSnapshots(saved);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    const captureClose = () => {
+      const now = new Date();
+      const clock = easternMarketClock(now);
+      if (!isUsMarketDay(now) || clock.minutes < 16 * 60) return;
+      const key = `${activePortfolioId}:${clock.dateText}`;
+      setCloseSnapshots((current) => {
+        if (current[key] !== undefined) return current;
+        const next = { ...current, [key]: summary.value };
+        try { window.localStorage.setItem(PORTFOLIO_CLOSE_SNAPSHOTS_KEY, JSON.stringify(next)); } catch {}
+        return next;
+      });
+    };
+    captureClose();
+    const timer = window.setInterval(captureClose, 60_000);
+    return () => window.clearInterval(timer);
+  }, [activePortfolioId, summary.value]);
+
+  const priorCloseValue = useMemo(() => {
+    const today = easternMarketClock().dateText;
+    const prefix = `${activePortfolioId}:`;
+    const candidates = Object.entries(closeSnapshots)
+      .filter(([key, value]) => key.startsWith(prefix) && key.slice(prefix.length) < today && Number.isFinite(value) && value > 0)
+      .sort(([a], [b]) => b.localeCompare(a));
+    return candidates.length ? Number(candidates[0][1]) : null;
+  }, [activePortfolioId, closeSnapshots]);
+
+  const portfolioDayReturn = priorCloseValue !== null ? summary.value - priorCloseValue : summary.today;
+  const portfolioDayReturnPct = priorCloseValue ? (portfolioDayReturn / priorCloseValue) * 100 : summary.todayPct;
+
   const positionValue = summary.invested;
   const stockValue = holdings.filter((holding) => (holding.assetType ?? "stock") === "stock").reduce((sum, holding) => sum + holdingMetrics(holding).marketValue, 0);
   const optionValue = holdings.filter((holding) => holding.assetType === "option").reduce((sum, holding) => sum + holdingMetrics(holding).marketValue, 0);
@@ -304,7 +353,7 @@ export default function Page() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Portfolio Overview</h1>{pricesUpdatedAt && <p className="mt-1 text-xs text-zinc-500">Prices Updated {pricesUpdatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}{pricesError && <p className="mt-1 text-xs text-amber-500">{pricesError}</p>}{importMessage && <p className="mt-1 text-xs font-medium text-emerald-500">{importMessage}</p>}</div><div className="flex items-center gap-2"><input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) importHoldingsCsv(file); }} /><button type="button" onClick={() => csvInputRef.current?.click()} disabled={activePortfolioId === "all"} aria-label="Import Holdings CSV" title={activePortfolioId === "all" ? "Select A Single Portfolio To Import CSV" : "Import Holdings CSV"} className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><Upload size={17}/><span className="hidden sm:inline">Import CSV</span></button><button type="button" onClick={() => refreshPrices(false, true)} disabled={pricesLoading || !hasRefreshableSymbols} aria-label="Refresh Prices" title="Refresh Prices" className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><RefreshCw size={17} className={pricesLoading ? "animate-spin" : ""}/><span className="hidden sm:inline">Refresh Prices</span></button><button onClick={downloadExcel} aria-label="Download Portfolio" title="Download Portfolio" className="inline-flex size-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><Download size={17}/></button><AddHoldingDialog /></div></div>
 
       <div className={cn("grid grid-cols-2 gap-3 sm:grid-cols-2", isFidelity401k ? "xl:grid-cols-4" : "xl:grid-cols-5")}>
-        <MetricBlock label="Portfolio Value" value={money(summary.value)} subvalue={<>Day Return: {summary.today >= 0 ? "↑ +" : "↓ -"}{money(Math.abs(summary.today))}<br />( {summary.todayPct >= 0 ? "+" : ""}{summary.todayPct.toFixed(2)}% )</>} positive={summary.today >= 0} icon={WalletCards}/>
+        <MetricBlock label="Portfolio Value" value={money(summary.value)} subvalue={<>Day Return: {portfolioDayReturn >= 0 ? "↑ +" : "↓ -"}{money(Math.abs(portfolioDayReturn))}<br />( {portfolioDayReturnPct >= 0 ? "+" : ""}{portfolioDayReturnPct.toFixed(2)}% )</>} positive={portfolioDayReturn >= 0} icon={WalletCards}/>
         <MetricBlock label="Holdings Value" value={money(positionValue)} subvalue={`${holdings.length} Open Positions`} icon={BriefcaseBusiness} tone="blue"/>
         <MetricBlock label="Total Stocks Value" value={money(stockValue)} subvalue={`${stockHoldings.length} Open Positions\n( ${profitableStocks} Profitable Positions )`} icon={Layers3} tone="green"/>
         {!isFidelity401k && <MetricBlock label="Total Options Value" value={money(optionValue)} subvalue={`${optionHoldings.length} Open Positions\n( ${profitableOptions} Profitable Positions )`} icon={Layers3} tone="purple"/>}
