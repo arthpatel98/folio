@@ -125,7 +125,12 @@ export default function Page() {
   }, [activePortfolioId, closeSnapshots]);
 
   const portfolioDayReturn = priorCloseValue !== null ? summary.value - priorCloseValue : summary.today;
-  const portfolioDayReturnPct = priorCloseValue ? (portfolioDayReturn / priorCloseValue) * 100 : summary.todayPct;
+  const impliedStartOfDayValue = summary.value - portfolioDayReturn;
+  const portfolioDayReturnPct = priorCloseValue
+    ? (portfolioDayReturn / priorCloseValue) * 100
+    : impliedStartOfDayValue
+      ? (portfolioDayReturn / impliedStartOfDayValue) * 100
+      : 0;
 
   const positionValue = summary.invested;
   const stockValue = holdings.filter((holding) => (holding.assetType ?? "stock") === "stock").reduce((sum, holding) => sum + holdingMetrics(holding).marketValue, 0);

@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore, type DataPortfolioId } from "@/store/portfolio-store";
 import { cn } from "@/lib/utils";
+import { optionCollateral } from "@/lib/calculations/portfolio";
 import type { Transaction, TransactionType } from "@/types/portfolio";
 
 const PORTFOLIO_NAMES: Record<DataPortfolioId,string> = {
@@ -152,6 +153,7 @@ export default function TransactionsPage(){
   const {activeId}=useActivePortfolio();
   const transactionsByPortfolio=usePortfolioStore(s=>s.transactionsByPortfolio);
   const cashByPortfolio=usePortfolioStore(s=>s.cashByPortfolio);
+  const holdingsByPortfolio=usePortfolioStore(s=>s.holdingsByPortfolio);
   const addCashTransaction=usePortfolioStore(s=>s.addCashTransaction);
   const [category,setCategory]=useState<Category>("all");
   const [query,setQuery]=useState("");
@@ -230,18 +232,30 @@ export default function TransactionsPage(){
     const result=new Map<string,number>();
     const ids:DataPortfolioId[]=["robinhood","fidelity-roth","fidelity-401k"];
     ids.forEach(portfolioId=>{
-      let running=Number(cashByPortfolio[portfolioId]??0);
+      let lockedCollateral=portfolioId==="fidelity-401k" ? 0 : optionCollateral(holdingsByPortfolio[portfolioId]??[]);
+      let storedCash=Number(cashByPortfolio[portfolioId]??0);
       const ledger=(transactionsByPortfolio[portfolioId]??[])
         .filter(isActualPortfolioTransaction)
         .slice()
         .sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
       ledger.forEach(tx=>{
-        result.set(`${portfolioId}:${tx.id}`,running);
-        running-=transactionCashImpact(tx);
+        result.set(`${portfolioId}:${tx.id}`,portfolioId==="fidelity-401k" ? 0 : storedCash-lockedCollateral);
+        storedCash-=transactionCashImpact(tx);
+
+        // Reconstruct the collateral state immediately before this transaction.
+        // Sell-put collateral is reserved cash, not stored cash, and becomes spendable
+        // only after the short put is reduced/closed/released.
+        if(tx.assetType==="option"&&tx.optionType==="sell-put"&&typeof tx.optionStrike==="number"&&tx.optionStrike>0){
+          const contracts=Math.abs(Number(tx.quantity)||0);
+          const collateralChange=contracts*tx.optionStrike*100;
+          const display=optionTradeDisplay(tx);
+          if(display==="Sell to Open") lockedCollateral=Math.max(0,lockedCollateral-collateralChange);
+          if(display==="Buy to Close") lockedCollateral+=collateralChange;
+        }
       });
     });
     return result;
-  },[cashByPortfolio,transactionsByPortfolio]);
+  },[cashByPortfolio,holdingsByPortfolio,transactionsByPortfolio]);
 
   const filteredRows=useMemo(()=>allRows.filter(({transaction:tx,portfolioId})=>{
     if(category!=="all"&&categoryFor(tx)!==category)return false;
