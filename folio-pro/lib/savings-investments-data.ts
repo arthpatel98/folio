@@ -18,7 +18,7 @@ export const quarterlyIncome = [
   { period: "Q4 2025", robinhoodProfit: 17530.04, robinhoodIncome: 137.11, rothProfit: 1587.46, rothIncome: 32.93, total: 19287.54 },
   { period: "Q1 2026", robinhoodProfit: -3851.48, robinhoodIncome: 880.52, rothProfit: -522.7, rothIncome: 13.27, total: -3480.39 },
   { period: "Q2 2026", robinhoodProfit: 15699.68, robinhoodIncome: 247.76, rothProfit: -909.09, rothIncome: 61.81, total: 15100.16 },
-  { period: "Jul 2026", robinhoodProfit: 3669.1, robinhoodIncome: 0, rothProfit: -480.1, rothIncome: 0, total: 3189 },
+  { period: "Jul 2026", robinhoodProfit: 3669.1, robinhoodIncome: 26.54, rothProfit: -480.1, rothIncome: 13.37, total: 3228.91 },
 ] as const;
 
 export const yearlyIncome = [

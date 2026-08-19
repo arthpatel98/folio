@@ -8,6 +8,7 @@ import { DCA_SELECTED_POSITION_KEY, DCA_UPDATED_EVENT, loadDcaPositions, saveDca
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore } from "@/store/portfolio-store";
 import { holdingMetrics } from "@/lib/calculations/portfolio";
+import type { Holding } from "@/types/portfolio";
 
 const toNumber = (value: NumericValue | string) => value === "" || !Number.isFinite(Number(value)) ? 0 : Number(value);
 const parseNumericInput = (value: string): NumericValue => value === "" ? "" : Number(value);
@@ -69,6 +70,7 @@ const defaultLotWidths = Object.fromEntries(lotColumns.map((column) => [column.k
 export default function DcaPage() {
   const { activeId } = useActivePortfolio();
   const holdingsByPortfolio = usePortfolioStore((state) => state.holdingsByPortfolio);
+  const transactionsByPortfolio = usePortfolioStore((state) => state.transactionsByPortfolio);
   const activeHoldings = usePortfolioStore((state) => state.holdings);
   const [allPositions, setAllPositions] = useState<DcaPosition[]>([]);
   const [positionId, setPositionId] = useState("");
@@ -97,6 +99,21 @@ export default function DcaPage() {
   const [editingOptionDays, setEditingOptionDays] = useState(false);
   const [optionBuyDateDraft, setOptionBuyDateDraft] = useState("");
 
+  const optionAddedDateForHolding = (portfolioId: "robinhood" | "fidelity-401k" | "fidelity-roth", holding: Holding) => {
+    const transactions = transactionsByPortfolio[portfolioId] ?? [];
+    const matches = transactions.filter((tx) => {
+      if (tx.assetType !== "option" || tx.type !== "buy") return false;
+      if ((tx.symbol ?? "").trim().toUpperCase() !== holding.symbol.trim().toUpperCase()) return false;
+      if (holding.optionType && tx.optionType !== holding.optionType) return false;
+      if (holding.optionExpiry && tx.optionExpiry !== holding.optionExpiry) return false;
+      if (holding.optionStrike !== undefined && tx.optionStrike !== holding.optionStrike) return false;
+      if (holding.optionSymbol && tx.optionSymbol && tx.optionSymbol !== holding.optionSymbol) return false;
+      return true;
+    });
+    if (!matches.length) return undefined;
+    return matches.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id))[0].date;
+  };
+
   const mergeWithHeldPositions = (savedPositions: DcaPosition[]) => {
     const portfolioIds = activeId === "all" ? (["robinhood", "fidelity-401k", "fidelity-roth"] as const) : [activeId];
     const visibleSaved = savedPositions
@@ -115,7 +132,18 @@ export default function DcaPage() {
       })
       .map((position) => {
         const portfolioId = position.portfolioId;
-        if (!portfolioId || position.id.includes("-option-") || position.lots.length > 0) return position;
+        if (!portfolioId) return position;
+        if (position.id.includes("-option-")) {
+          if (position.addedDate) return position;
+          const holding = holdingsByPortfolio[portfolioId].find((item) =>
+            item.assetType === "option"
+            && item.symbol.trim().toUpperCase() === position.symbol.trim().toUpperCase()
+            && optionPositionMatchesHolding(position, item)
+            && item.shares !== 0,
+          );
+          return holding ? { ...position, addedDate: optionAddedDateForHolding(portfolioId, holding) } : position;
+        }
+        if (position.lots.length > 0) return position;
         const holding = holdingsByPortfolio[portfolioId].find((item) =>
           (item.assetType ?? "stock") === "stock"
           && item.symbol.trim().toUpperCase() === position.symbol.trim().toUpperCase()
@@ -170,6 +198,7 @@ export default function DcaPage() {
             }],
             custom: true,
             portfolioId,
+            addedDate: isOptionHolding ? optionAddedDateForHolding(portfolioId, holding) : undefined,
           });
         });
     });
@@ -357,6 +386,10 @@ export default function DcaPage() {
   }, [lots, sellPrice]);
 
   const targetPrice = toNumber(sellPrice);
+  const currentMarketPrice = selectedHolding?.currentPrice ?? 0;
+  const returnNeededFromCurrent = currentMarketPrice > 0
+    ? ((targetPrice - currentMarketPrice) / currentMarketPrice) * 100
+    : null;
   const baseAverage = isOption ? optionAverage : totals.avg;
   const baseQuantity = isOption ? optionContracts * 100 : totals.shares;
   const requiredSellingPrice = isOption && optionDirection < 0
@@ -579,12 +612,19 @@ export default function DcaPage() {
     </>}
 
     {isOption ? (
-      <div className="grid gap-4 xl:grid-cols-2">
-        <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
-        <h2 className="flex items-center gap-2 font-semibold">Target Return Calculator</h2>
-        <label className="mt-4 block text-sm text-zinc-400">Target Return (%)</label><div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={targetReturn} type="number" step="any" onChange={(e)=>setTargetReturn(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span>%</span></div>
-        <div className={cn("mt-4 rounded-xl border p-5 text-center transition-colors", toNumber(targetReturn) < 0 ? "border-rose-500/35 bg-rose-500/[.08]" : "border-emerald-500/35 bg-emerald-500/[.07]")}><p className="text-sm text-zinc-300">Required Selling Price</p><p className={cn("mt-2 text-3xl font-semibold", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>{money(requiredSellingPrice)}</p><p className={cn("mt-2 text-sm", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>Potential Return: {signedMoney(targetPotentialProfit)} ({toNumber(targetReturn).toFixed(2)}%)</p></div>
-      </section>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.72fr)_minmax(260px,0.48fr)]">
+        <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4">
+          <h2 className="font-semibold">Target Return Calculator</h2>
+          <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(190px,0.9fr)] sm:items-end">
+            <div><label className="block text-sm text-zinc-400">Target Return (%)</label><div className="mt-2 flex h-10 items-center rounded-xl border border-white/10 bg-black/15 px-3"><input value={targetReturn} type="number" step="any" onChange={(e)=>setTargetReturn(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span>%</span></div></div>
+            <div className={cn("rounded-xl border p-3 text-center transition-colors", toNumber(targetReturn) < 0 ? "border-rose-500/35 bg-rose-500/[.08]" : "border-emerald-500/35 bg-emerald-500/[.07]")}><p className="text-xs text-zinc-400">Required Selling Price</p><p className={cn("mt-1 text-2xl font-semibold", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>{money(requiredSellingPrice)}</p><p className={cn("mt-1 text-xs", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>{signedMoney(targetPotentialProfit)} · {toNumber(targetReturn).toFixed(2)}%</p></div>
+          </div>
+        </section>
+        <section className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[.045] p-4">
+          <p className="text-sm text-zinc-400">Return Needed From Current Price</p>
+          <p className={cn("mt-2 text-3xl font-semibold", returnNeededFromCurrent === null ? "text-zinc-300" : returnNeededFromCurrent >= 0 ? "text-emerald-400" : "text-rose-400")}>{returnNeededFromCurrent === null ? "—" : `${returnNeededFromCurrent >= 0 ? "+" : ""}${returnNeededFromCurrent.toFixed(2)}%`}</p>
+          <p className="mt-2 text-xs text-zinc-500">{currentMarketPrice > 0 ? `${money(currentMarketPrice)} Current → ${money(targetPrice)} Potential Sell Price` : "Current Price Unavailable"}</p>
+        </section>
       </div>
     ) : (
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)] xl:items-start">
@@ -599,11 +639,20 @@ export default function DcaPage() {
           </div>
         </div>
       </section>
-          <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
-        <h2 className="flex items-center gap-2 font-semibold">Target Return Calculator</h2>
-        <label className="mt-4 block text-sm text-zinc-400">Target Return (%)</label><div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={targetReturn} type="number" step="any" onChange={(e)=>setTargetReturn(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span>%</span></div>
-        <div className={cn("mt-4 rounded-xl border p-5 text-center transition-colors", toNumber(targetReturn) < 0 ? "border-rose-500/35 bg-rose-500/[.08]" : "border-emerald-500/35 bg-emerald-500/[.07]")}><p className="text-sm text-zinc-300">Required Selling Price</p><p className={cn("mt-2 text-3xl font-semibold", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>{money(requiredSellingPrice)}</p><p className={cn("mt-2 text-sm", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>Potential Return: {signedMoney(targetPotentialProfit)} ({toNumber(targetReturn).toFixed(2)}%)</p></div>
-      </section>
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(240px,0.58fr)]">
+            <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4">
+              <h2 className="font-semibold">Target Return Calculator</h2>
+              <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(190px,0.9fr)] sm:items-end">
+                <div><label className="block text-sm text-zinc-400">Target Return (%)</label><div className="mt-2 flex h-10 items-center rounded-xl border border-white/10 bg-black/15 px-3"><input value={targetReturn} type="number" step="any" onChange={(e)=>setTargetReturn(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span>%</span></div></div>
+                <div className={cn("rounded-xl border p-3 text-center transition-colors", toNumber(targetReturn) < 0 ? "border-rose-500/35 bg-rose-500/[.08]" : "border-emerald-500/35 bg-emerald-500/[.07]")}><p className="text-xs text-zinc-400">Required Selling Price</p><p className={cn("mt-1 text-2xl font-semibold", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>{money(requiredSellingPrice)}</p><p className={cn("mt-1 text-xs", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>{signedMoney(targetPotentialProfit)} · {toNumber(targetReturn).toFixed(2)}%</p></div>
+              </div>
+            </section>
+            <section className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[.045] p-4">
+              <p className="text-sm text-zinc-400">Return Needed From Current Price</p>
+              <p className={cn("mt-2 text-3xl font-semibold", returnNeededFromCurrent === null ? "text-zinc-300" : returnNeededFromCurrent >= 0 ? "text-emerald-400" : "text-rose-400")}>{returnNeededFromCurrent === null ? "—" : `${returnNeededFromCurrent >= 0 ? "+" : ""}${returnNeededFromCurrent.toFixed(2)}%`}</p>
+              <p className="mt-2 text-xs text-zinc-500">{currentMarketPrice > 0 ? `${money(currentMarketPrice)} Current → ${money(targetPrice)} Potential Sell Price` : "Current Price Unavailable"}</p>
+            </section>
+          </div>
         </div>
         <div className="min-w-0">
           <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">

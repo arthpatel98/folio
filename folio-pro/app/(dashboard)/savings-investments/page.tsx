@@ -82,7 +82,7 @@ function ExtrasTable({rows,onSave}:{rows:ExtraRow[];onSave:(rows:ExtraRow[])=>vo
             : <button type="button" onClick={()=>setEditing({id:row.id,field:"lastPostedDate"})} className="w-full rounded-md px-2 py-2 text-right text-xs font-medium transition hover:bg-white/[.04]" title="Click To Edit Last Posted Date">{formatDisplayDate(row.lastPostedDate)}</button>}
         </td>
       </tr>)}
-      <tr className="font-semibold"><td className="border-r border-t border-dashed border-zinc-300/70 p-3 dark:border-white/10">Total</td><td className={cn("border-r border-t border-dashed border-zinc-300/70 p-3 text-right tabular-nums dark:border-white/10",total<0?"negative":"positive")}>{money(total)}</td><td className="border-t border-dashed border-zinc-300/70 p-3"/></tr></tbody>
+      <tr className="border-t border-zinc-300/60 font-semibold dark:border-white/10"><td className="border-r border-zinc-300/60 p-3 dark:border-white/10">Total</td><td className={cn("border-r border-zinc-300/60 p-3 text-right tabular-nums dark:border-white/10",total<0?"negative":"positive")}>{money(total)}</td><td className="p-3"/></tr></tbody>
     </table></div></CardContent>
   </Card>;
 }
