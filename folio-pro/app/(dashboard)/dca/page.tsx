@@ -544,7 +544,7 @@ export default function DcaPage() {
     </section>
 
     {isOption && selectedHolding && optionMetrics ? (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-7">
         <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Average Premium</p><p className="mt-3 text-2xl font-semibold">{money(optionAverage)}</p><p className="mt-2 text-sm text-zinc-500">{formatShares(optionContracts)} {optionContracts === 1 ? "Contract" : "Contracts"}</p></div>
         <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5">
           <button type="button" onClick={() => { setOptionBuyDateDraft(selectedPosition?.addedDate ?? ""); setEditingOptionDays(true); }} className="flex w-full items-center justify-between gap-2 rounded-lg text-left transition hover:bg-white/[.035]" aria-label="Edit Buy Date" title="Click To Edit Buy Date"><p className="text-sm text-zinc-500">Days Since Added</p></button>
@@ -554,10 +554,12 @@ export default function DcaPage() {
         <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Market Value</p><p className="mt-3 text-2xl font-semibold">{money(optionMetrics.marketValue)}</p></div>
         <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Potential P/L</p><p className={cn("mt-3 text-2xl font-semibold", optionPotentialProfit > 0 ? "text-emerald-400" : optionPotentialProfit < 0 ? "text-rose-400" : "text-zinc-100")}>{signedMoney(optionPotentialProfit)}</p></div>
         <div className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">Potential P/L %</p><p className={cn("mt-3 text-2xl font-semibold", optionPotentialProfit > 0 ? "text-emerald-400" : optionPotentialProfit < 0 ? "text-rose-400" : "text-zinc-100")}>{pct(optionPotentialPct)}</p></div>
+        <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[.045] p-5"><p className="text-sm text-zinc-400">Return Needed From Current Price</p><p className={cn("mt-3 text-2xl font-semibold", returnNeededFromCurrent === null ? "text-zinc-300" : returnNeededFromCurrent >= 0 ? "text-emerald-400" : "text-rose-400")}>{returnNeededFromCurrent === null ? "—" : `${returnNeededFromCurrent >= 0 ? "+" : ""}${returnNeededFromCurrent.toFixed(2)}%`}</p><p className="mt-2 text-xs text-zinc-500">{currentMarketPrice > 0 ? `${money(currentMarketPrice)} Current → ${money(targetPrice)} Potential Sell Price` : "Current Price Unavailable"}</p></div>
       </div>
     ) : (
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-7">
         {[ ["Total Investment", totals.amount ? money(totals.amount) : "—"], ["Total Shares", totals.shares ? formatShares(totals.shares) : "—"], ["Average Price", totals.avg ? money(totals.avg) : "—"], ["Average Days Held", totals.avgDaysHeld ? `${totals.avgDaysHeld.toLocaleString()} Days` : "—"], ["Potential Return", totals.amount ? signedMoney(totals.profit) : "—"], ["Potential Return %", totals.amount ? pct(totals.roi) : "—"] ].map(([label, value], index) => <div key={label} className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">{label}</p><p className={cn("mt-3 text-2xl font-semibold", index >= 4 && (totals.profit > 0 ? "text-emerald-400" : totals.profit < 0 ? "text-rose-400" : "text-zinc-100"))}>{value}</p></div>)}
+        <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[.045] p-5"><p className="text-sm text-zinc-400">Return Needed From Current Price</p><p className={cn("mt-3 text-2xl font-semibold", returnNeededFromCurrent === null ? "text-zinc-300" : returnNeededFromCurrent >= 0 ? "text-emerald-400" : "text-rose-400")}>{returnNeededFromCurrent === null ? "—" : `${returnNeededFromCurrent >= 0 ? "+" : ""}${returnNeededFromCurrent.toFixed(2)}%`}</p><p className="mt-2 text-xs text-zinc-500">{currentMarketPrice > 0 ? `${money(currentMarketPrice)} Current → ${money(targetPrice)} Potential Sell Price` : "Current Price Unavailable"}</p></div>
       </div>
     )}
 
@@ -612,18 +614,13 @@ export default function DcaPage() {
     </>}
 
     {isOption ? (
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.72fr)_minmax(260px,0.48fr)]">
+      <div className="max-w-2xl">
         <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4">
           <h2 className="font-semibold">Target Return Calculator</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(190px,0.9fr)] sm:items-end">
             <div><label className="block text-sm text-zinc-400">Target Return (%)</label><div className="mt-2 flex h-10 items-center rounded-xl border border-white/10 bg-black/15 px-3"><input value={targetReturn} type="number" step="any" onChange={(e)=>setTargetReturn(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span>%</span></div></div>
             <div className={cn("rounded-xl border p-3 text-center transition-colors", toNumber(targetReturn) < 0 ? "border-rose-500/35 bg-rose-500/[.08]" : "border-emerald-500/35 bg-emerald-500/[.07]")}><p className="text-xs text-zinc-400">Required Selling Price</p><p className={cn("mt-1 text-2xl font-semibold", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>{money(requiredSellingPrice)}</p><p className={cn("mt-1 text-xs", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>{signedMoney(targetPotentialProfit)} · {toNumber(targetReturn).toFixed(2)}%</p></div>
           </div>
-        </section>
-        <section className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[.045] p-4">
-          <p className="text-sm text-zinc-400">Return Needed From Current Price</p>
-          <p className={cn("mt-2 text-3xl font-semibold", returnNeededFromCurrent === null ? "text-zinc-300" : returnNeededFromCurrent >= 0 ? "text-emerald-400" : "text-rose-400")}>{returnNeededFromCurrent === null ? "—" : `${returnNeededFromCurrent >= 0 ? "+" : ""}${returnNeededFromCurrent.toFixed(2)}%`}</p>
-          <p className="mt-2 text-xs text-zinc-500">{currentMarketPrice > 0 ? `${money(currentMarketPrice)} Current → ${money(targetPrice)} Potential Sell Price` : "Current Price Unavailable"}</p>
         </section>
       </div>
     ) : (
@@ -639,18 +636,13 @@ export default function DcaPage() {
           </div>
         </div>
       </section>
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(240px,0.58fr)]">
+          <div className="max-w-2xl">
             <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4">
               <h2 className="font-semibold">Target Return Calculator</h2>
               <div className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(190px,0.9fr)] sm:items-end">
                 <div><label className="block text-sm text-zinc-400">Target Return (%)</label><div className="mt-2 flex h-10 items-center rounded-xl border border-white/10 bg-black/15 px-3"><input value={targetReturn} type="number" step="any" onChange={(e)=>setTargetReturn(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span>%</span></div></div>
                 <div className={cn("rounded-xl border p-3 text-center transition-colors", toNumber(targetReturn) < 0 ? "border-rose-500/35 bg-rose-500/[.08]" : "border-emerald-500/35 bg-emerald-500/[.07]")}><p className="text-xs text-zinc-400">Required Selling Price</p><p className={cn("mt-1 text-2xl font-semibold", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>{money(requiredSellingPrice)}</p><p className={cn("mt-1 text-xs", toNumber(targetReturn) < 0 ? "text-rose-400" : "text-emerald-400")}>{signedMoney(targetPotentialProfit)} · {toNumber(targetReturn).toFixed(2)}%</p></div>
               </div>
-            </section>
-            <section className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[.045] p-4">
-              <p className="text-sm text-zinc-400">Return Needed From Current Price</p>
-              <p className={cn("mt-2 text-3xl font-semibold", returnNeededFromCurrent === null ? "text-zinc-300" : returnNeededFromCurrent >= 0 ? "text-emerald-400" : "text-rose-400")}>{returnNeededFromCurrent === null ? "—" : `${returnNeededFromCurrent >= 0 ? "+" : ""}${returnNeededFromCurrent.toFixed(2)}%`}</p>
-              <p className="mt-2 text-xs text-zinc-500">{currentMarketPrice > 0 ? `${money(currentMarketPrice)} Current → ${money(targetPrice)} Potential Sell Price` : "Current Price Unavailable"}</p>
             </section>
           </div>
         </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Banknote, BriefcaseBusiness, Download, Layers3, LockKeyhole, RefreshCw, Search, Upload, WalletCards } from "lucide-react";
+import { Banknote, BriefcaseBusiness, Download, Layers3, LockKeyhole, RefreshCw, Search, WalletCards } from "lucide-react";
 import { HoldingsTable } from "@/components/portfolio/holdings-table";
 import { AddHoldingDialog } from "@/components/portfolio/add-holding-dialog";
 import { EditCashDialog } from "@/components/portfolio/edit-cash-dialog";
@@ -17,6 +17,21 @@ import * as XLSX from "xlsx";
 function MetricBlock({ label, value, subvalue, positive, icon: Icon, tone = "green", valueExtra }: { label: string; value: string; subvalue?: React.ReactNode; positive?: boolean; icon: typeof BriefcaseBusiness; tone?: "green" | "red" | "blue" | "purple"; valueExtra?: React.ReactNode }) {
   const toneClass = tone === "red" ? "border-red-500/30 bg-red-500/[.06] text-red-400" : tone === "blue" ? "border-blue-500/30 bg-blue-500/[.06] text-blue-400" : tone === "purple" ? "border-violet-500/30 bg-violet-500/[.06] text-violet-400" : "border-emerald-500/30 bg-emerald-500/[.06] text-emerald-400";
   return <div className={cn("rounded-2xl border p-4 shadow-sm", toneClass)}><div className="flex items-center justify-between gap-3"><p className="text-sm font-medium text-zinc-400">{label}</p><div className="rounded-lg bg-current/10 p-2"><Icon size={18}/></div></div><div className="mt-3 flex items-baseline justify-between gap-2"><p className={cn("text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white", positive === true && "text-emerald-500", positive === false && "text-red-500")}>{value}</p>{valueExtra}</div>{subvalue && <p className={cn("mt-1.5 whitespace-pre-line text-sm", positive === true && "text-emerald-400", positive === false && "text-red-400", positive === undefined && "text-zinc-500")}>{subvalue}</p>}</div>;
+}
+
+function PortfolioValueMetric({ value, dayReturn, dayReturnPct }: { value: number; dayReturn: number; dayReturnPct: number }) {
+  const positive = dayReturn >= 0;
+  return <div className={cn("min-w-0 rounded-2xl border p-3 shadow-sm sm:p-4", positive ? "border-emerald-500/30 bg-emerald-500/[.06]" : "border-red-500/30 bg-red-500/[.06]")}>
+    <div className="flex min-w-0 items-center gap-2 text-xs text-zinc-500">
+      <span className={cn("grid size-8 place-items-center rounded-lg", positive ? "bg-emerald-400/15 text-emerald-400" : "bg-red-400/15 text-red-400")}><WalletCards size={16}/></span>
+      Portfolio Value
+    </div>
+    <div className="mt-3 break-words text-lg font-semibold text-zinc-950 dark:text-white sm:text-xl">{money(value)}</div>
+    <div className="mt-3 flex flex-wrap gap-2">
+      <span className={cn("rounded-lg border px-2 py-1 text-[11px] font-semibold", positive ? "border-emerald-400/20 bg-emerald-400/[.08] text-emerald-300" : "border-rose-400/20 bg-rose-400/[.08] text-rose-300")}>Day Return {dayReturn >= 0 ? "+" : "-"}{money(Math.abs(dayReturn))}</span>
+      <span className={cn("rounded-lg border px-2 py-1 text-[11px] font-semibold", dayReturnPct >= 0 ? "border-emerald-400/20 bg-emerald-400/[.08] text-emerald-300" : "border-rose-400/20 bg-rose-400/[.08] text-rose-300")}>{dayReturnPct >= 0 ? "+" : ""}{dayReturnPct.toFixed(2)}%</span>
+    </div>
+  </div>;
 }
 
 const PORTFOLIO_CLOSE_SNAPSHOTS_KEY = "folio-portfolio-close-snapshots-v1";
@@ -355,11 +370,10 @@ export default function Page() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Portfolio Overview</h1>{pricesUpdatedAt && <p className="mt-1 text-xs text-zinc-500">Prices Updated {pricesUpdatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}{pricesError && <p className="mt-1 text-xs text-amber-500">{pricesError}</p>}{importMessage && <p className="mt-1 text-xs font-medium text-emerald-500">{importMessage}</p>}</div><div className="flex items-center gap-2"><input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) importHoldingsCsv(file); }} /><button type="button" onClick={() => csvInputRef.current?.click()} disabled={activePortfolioId === "all"} aria-label="Import Holdings CSV" title={activePortfolioId === "all" ? "Select A Single Portfolio To Import CSV" : "Import Holdings CSV"} className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><Upload size={17}/><span className="hidden sm:inline">Import CSV</span></button><button type="button" onClick={() => refreshPrices(false, true)} disabled={pricesLoading || !hasRefreshableSymbols} aria-label="Refresh Prices" title="Refresh Prices" className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><RefreshCw size={17} className={pricesLoading ? "animate-spin" : ""}/><span className="hidden sm:inline">Refresh Prices</span></button><button onClick={downloadExcel} aria-label="Download Portfolio" title="Download Portfolio" className="inline-flex size-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><Download size={17}/></button><AddHoldingDialog /></div></div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Portfolio Overview</h1>{pricesUpdatedAt && <p className="mt-1 text-xs text-zinc-500">Prices Updated {pricesUpdatedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p>}{pricesError && <p className="mt-1 text-xs text-amber-500">{pricesError}</p>}{importMessage && <p className="mt-1 text-xs font-medium text-emerald-500">{importMessage}</p>}</div><div className="flex items-center gap-2"><input ref={csvInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) importHoldingsCsv(file); }} /><button type="button" onClick={() => refreshPrices(false, true)} disabled={pricesLoading || !hasRefreshableSymbols} aria-label="Refresh Prices" title="Refresh Prices" className="inline-flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><RefreshCw size={17} className={pricesLoading ? "animate-spin" : ""}/><span className="hidden sm:inline">Refresh Prices</span></button><button onClick={downloadExcel} aria-label="Download Portfolio" title="Download Portfolio" className="inline-flex size-10 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-700 transition hover:bg-zinc-50 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-200"><Download size={17}/></button><AddHoldingDialog /></div></div>
 
-      <div className={cn("grid grid-cols-2 gap-3 sm:grid-cols-2", isFidelity401k ? "xl:grid-cols-4" : "xl:grid-cols-5")}>
-        <MetricBlock label="Portfolio Value" value={money(summary.value)} subvalue={<>Day Return: {portfolioDayReturn >= 0 ? "↑ +" : "↓ -"}{money(Math.abs(portfolioDayReturn))}<br />( {portfolioDayReturnPct >= 0 ? "+" : ""}{portfolioDayReturnPct.toFixed(2)}% )</>} positive={portfolioDayReturn >= 0} icon={WalletCards}/>
-        <MetricBlock label="Holdings Value" value={money(positionValue)} subvalue={`${holdings.length} Open Positions`} icon={BriefcaseBusiness} tone="blue"/>
+      <div className={cn("grid grid-cols-2 gap-3 sm:grid-cols-2", isFidelity401k ? "xl:grid-cols-3" : "xl:grid-cols-4")}>
+        <PortfolioValueMetric value={summary.value} dayReturn={portfolioDayReturn} dayReturnPct={portfolioDayReturnPct}/>
         <MetricBlock label="Total Stocks Value" value={money(stockValue)} subvalue={`${stockHoldings.length} Open Positions\n( ${profitableStocks} Profitable Positions )`} icon={Layers3} tone="green"/>
         {!isFidelity401k && <MetricBlock label="Total Options Value" value={money(optionValue)} subvalue={`${optionHoldings.length} Open Positions\n( ${profitableOptions} Profitable Positions )`} icon={Layers3} tone="purple"/>}
         <MetricBlock label="Cash" value={money(availableCash)} subvalue={`${summary.value ? ((availableCash / summary.value) * 100).toFixed(2) : "0.00"}% of Portfolio`} icon={Banknote} tone="purple"/>
@@ -389,12 +403,12 @@ export default function Page() {
             <div className="flex items-center gap-3"><div className="rounded-xl bg-emerald-500/10 p-2 text-emerald-500"><Banknote size={18} /></div><div><p className="font-semibold">Cash</p><p className="text-sm text-zinc-500">Available Cash Balance</p></div></div>
             <div className="flex items-center gap-3">{!isFidelity401k ? <EditCashDialog><span className="block font-semibold">{money(availableCash)}</span><span className="block text-sm text-zinc-500">{summary.value ? ((availableCash / summary.value) * 100).toFixed(2) : "0.00"}%</span></EditCashDialog> : <div className="text-right"><p className="font-semibold">{money(availableCash)}</p><p className="text-sm text-zinc-500">{summary.value ? ((availableCash / summary.value) * 100).toFixed(2) : "0.00"}%</p></div>}</div>
           </div>}
-          {!isFidelity401k && <div className="grid min-h-[88px] grid-cols-[1fr_auto] items-center gap-6 px-6 py-4">
+          {!isFidelity401k && Math.abs(collateral) > 0.005 && <div className="grid min-h-[88px] grid-cols-[1fr_auto] items-center gap-6 px-6 py-4">
             <div className="flex items-center gap-3"><div className="rounded-xl bg-violet-500/10 p-2 text-violet-500"><LockKeyhole size={18} /></div><div><p className="font-semibold">Options Collateral</p><p className="text-sm text-zinc-500">Cash Reserved for Sell Puts</p></div></div>
             <div className="text-right"><p className="font-semibold">{money(collateral)}</p><p className="text-sm text-zinc-500">{summary.value ? ((collateral / summary.value) * 100).toFixed(2) : "0.00"}%</p></div>
           </div>}
           <div className="grid min-h-[92px] grid-cols-[1fr_auto] items-center gap-6 bg-emerald-500/[.04] px-6 py-4">
-            <div><p className="text-lg font-semibold">Total</p><p className="text-sm text-zinc-500">Holdings Plus Cash And Options Collateral</p></div>
+            <div><p className="text-lg font-semibold">Total</p></div>
             <div className="text-right"><p className="text-xl font-semibold">{money(summary.value)}</p><p className="text-sm text-zinc-500">100.00%</p></div>
           </div>
         </div>

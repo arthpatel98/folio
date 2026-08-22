@@ -111,6 +111,7 @@ export default function SavingsInvestmentsPage() {
   const [extras,setExtras]=useState<ExtrasByPortfolio>(DEFAULT_EXTRAS);
   const [allTimeHighs,setAllTimeHighs]=useState<AllTimeHighByPortfolio>(DEFAULT_ALL_TIME_HIGHS);
   const [editingAllTimeHigh,setEditingAllTimeHigh]=useState<{portfolioId:DataPortfolioId;field:"value"|"date"}|null>(null);
+  const [profitDrilldown,setProfitDrilldown]=useState<{portfolioId:DataPortfolioId;period:string}|null>(null);
   useEffect(()=>{
     try {
       const saved=window.localStorage.getItem(ALL_TIME_HIGH_STORAGE_KEY);
@@ -202,6 +203,60 @@ export default function SavingsInvestmentsPage() {
       roth: aggregate("fidelity-roth"),
     };
   }, [transactionsByPortfolio]);
+
+  const profitDrilldownGroups = useMemo<ProfitTickerGroup[]>(() => {
+    if (!profitDrilldown) return [];
+    const transactions = transactionsByPortfolio[profitDrilldown.portfolioId] ?? [];
+    const matching = transactions.filter((transaction) => {
+      if (transaction.type !== "sell" || !Number.isFinite(transaction.realizedGain)) return false;
+      if (!transaction.notes?.includes("Sold from Holdings")) return false;
+      if (!isFutureHoldingsSale(transaction.id)) return false;
+      const date = new Date(`${transaction.date}T12:00:00`);
+      if (Number.isNaN(date.getTime())) return false;
+      const period = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(date);
+      return period === profitDrilldown.period;
+    });
+
+    const groups = new Map<string, ProfitDrilldownTransaction[]>();
+    matching.forEach((transaction) => {
+      const ticker = (transaction.symbol ?? "Other").trim().toUpperCase() || "Other";
+      const optionType = transaction.assetType === "option"
+        ? transaction.optionType?.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")
+        : "";
+      const strike = transaction.assetType === "option" && typeof transaction.optionStrike === "number"
+        ? ` $${transaction.optionStrike}`
+        : "";
+      const expiry = transaction.assetType === "option" && transaction.optionExpiry
+        ? ` · ${new Date(`${transaction.optionExpiry}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+        : "";
+      const label = transaction.assetType === "option"
+        ? `${ticker}${strike} ${optionType || "Option"}${expiry}`
+        : ticker;
+      const row: ProfitDrilldownTransaction = {
+        id: transaction.id,
+        date: transaction.date,
+        ticker,
+        label,
+        quantity: typeof transaction.quantity === "number" ? Math.abs(transaction.quantity) : null,
+        price: typeof transaction.price === "number" ? transaction.price : null,
+        proceeds: typeof transaction.realizedProceeds === "number"
+          ? transaction.realizedProceeds
+          : transaction.amount ? Math.abs(transaction.amount) : null,
+        realizedProfit: Number(transaction.realizedGain) || 0,
+      };
+      groups.set(ticker, [...(groups.get(ticker) ?? []), row]);
+    });
+
+    const total = matching.reduce((sum, transaction) => sum + (Number(transaction.realizedGain) || 0), 0);
+    return Array.from(groups.entries())
+      .map(([ticker, transactions]) => {
+        const realizedProfit = transactions.reduce((sum, transaction) => sum + transaction.realizedProfit, 0);
+        return { ticker, realizedProfit, percent: total ? realizedProfit / total * 100 : 0, transactions };
+      })
+      .sort((a,b) => b.realizedProfit - a.realizedProfit);
+  }, [profitDrilldown, transactionsByPortfolio]);
+
+  const profitDrilldownTotal = profitDrilldownGroups.reduce((sum, group) => sum + group.realizedProfit, 0);
 
   const mergeMonthlySales = (
     base: { period: string; realizedProfit: number; income: number }[],
@@ -300,9 +355,9 @@ export default function SavingsInvestmentsPage() {
   }), [accounts]);
 
   const selectedVisual = activeId === "robinhood"
-    ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={robinhoodQuarterly}/>
+    ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={robinhoodQuarterly} onProfitBarClick={(period)=>setProfitDrilldown({portfolioId:"robinhood",period})}/>
     : activeId === "fidelity-roth"
-      ? <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={rothQuarterly}/>
+      ? <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={rothQuarterly} onProfitBarClick={(period)=>setProfitDrilldown({portfolioId:"fidelity-roth",period})}/>
       : activeId === "fidelity-401k"
         ? <YtdAccountChart account="Fidelity 401(k)" data={ytdPerformance.find((row) => row.account === "401(k) IRA") ?? { account: "401(k) IRA", "2024": 0, "2025": 0, "2026": 0.1465 }} currentYtd={dynamicYtd["Fidelity 401(k)"]}/>
         : <IncomeTotalsChart data={brokerageIncomeTotals}/>;
@@ -353,6 +408,13 @@ export default function SavingsInvestmentsPage() {
     </div>
 
     {selectedVisual}
+
+    {profitDrilldown && <ProfitDrilldownModal
+      period={profitDrilldown.period}
+      groups={profitDrilldownGroups}
+      total={profitDrilldownTotal}
+      onClose={()=>setProfitDrilldown(null)}
+    />}
 
     <div className="grid gap-6 xl:grid-cols-[1fr_1.4fr]">
       <Card>
@@ -410,8 +472,70 @@ function chartValueLabel(value: number) {
   return `${sign}$${absolute.toFixed(0)}`;
 }
 
-function QuarterlyChart({ title, subtitle, data }: { title: string; subtitle: string; data: { period: string; realizedProfit: number; income: number }[] }) {
-  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">{title}</h2><p className="text-xs text-zinc-500">{subtitle}</p></CardHeader><CardContent className="pt-5"><div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:4}}><defs><linearGradient id={`${title.replace(/\W/g, "")}-profit`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={1}/><stop offset="100%" stopColor="#10b981" stopOpacity={0.65}/></linearGradient><linearGradient id={`${title.replace(/\W/g, "")}-income`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.65}/></linearGradient></defs><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="period" tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} interval={0} angle={data.length > 8 ? -28 : 0} textAnchor={data.length > 8 ? "end" : "middle"} height={data.length > 8 ? 55 : 30}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`$${Math.round(v/1000)}k`}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5",boxShadow:"0 12px 30px rgba(0,0,0,.25)"}} formatter={(value: any)=>money(Number(value))}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/><Bar dataKey="realizedProfit" name="Profit" fill={`url(#${title.replace(/\W/g, "")}-profit)`} radius={[7,7,2,2]} maxBarSize={34}><LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={9}/></Bar><Bar dataKey="income" name="Dividend, Interest & Bonus" fill={`url(#${title.replace(/\W/g, "")}-income)`} radius={[7,7,2,2]} maxBarSize={34}><LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={9}/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
+function QuarterlyChart({ title, subtitle, data, onProfitBarClick }: { title: string; subtitle: string; data: { period: string; realizedProfit: number; income: number }[]; onProfitBarClick?: (period:string)=>void }) {
+  const gradientId=title.replace(/\W/g, "");
+  const openProfitDetail=(entry:any)=>{
+    const period=entry?.payload?.period??entry?.period;
+    if(typeof period==="string"&&/^[A-Z][a-z]{2} 20\d{2}$/.test(period)) onProfitBarClick?.(period);
+  };
+  return <Card className="overflow-hidden">
+    <CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">{title}</h2><p className="text-xs text-zinc-500">{subtitle}</p></CardHeader>
+    <CardContent className="pt-5">
+      <div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:4}}>
+        <defs><linearGradient id={`${gradientId}-profit`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={1}/><stop offset="100%" stopColor="#10b981" stopOpacity={0.65}/></linearGradient><linearGradient id={`${gradientId}-income`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.65}/></linearGradient></defs>
+        <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/>
+        <XAxis dataKey="period" tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} interval={0} angle={data.length > 8 ? -28 : 0} textAnchor={data.length > 8 ? "end" : "middle"} height={data.length > 8 ? 55 : 30}/>
+        <YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`$${Math.round(v/1000)}k`}/>
+        <Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5",boxShadow:"0 12px 30px rgba(0,0,0,.25)"}} formatter={(value: any)=>money(Number(value))}/>
+        <Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/>
+        <Bar dataKey="realizedProfit" name="Profit" fill={`url(#${gradientId}-profit)`} radius={[7,7,2,2]} maxBarSize={34} onClick={openProfitDetail} style={{cursor:onProfitBarClick?"pointer":"default"}}>
+          <LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={9}/>
+        </Bar>
+        <Bar dataKey="income" name="Dividend, Interest & Bonus" fill={`url(#${gradientId}-income)`} radius={[7,7,2,2]} maxBarSize={34}>
+          <LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={9}/>
+        </Bar>
+      </BarChart></ResponsiveContainer></div>
+      {onProfitBarClick&&<p className="mt-2 text-center text-[11px] text-zinc-600">Click A Monthly Profit Bar For Ticker And Transaction Details</p>}
+    </CardContent>
+  </Card>;
+}
+
+function ProfitDrilldownModal({period,groups,total,onClose}:{period:string;groups:ProfitTickerGroup[];total:number;onClose:()=>void}) {
+  const palette=["#34d399","#60a5fa","#fbbf24","#a78bfa","#2dd4bf","#fb7185","#38bdf8","#f97316"];
+  const transactions=groups.flatMap(group=>group.transactions.map(transaction=>({...transaction,groupTicker:group.ticker})))
+    .sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+  const dateText=(value:string)=>new Date(`${value}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+  return <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event)=>{if(event.currentTarget===event.target)onClose();}}>
+    <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-3xl border border-white/10 bg-zinc-950 shadow-[0_30px_90px_rgba(0,0,0,.55)]">
+      <div className="sticky top-0 z-10 flex items-start justify-between border-b border-white/[.07] bg-zinc-950/95 px-5 py-4 backdrop-blur-xl sm:px-6">
+        <div><h2 className="text-xl font-semibold">{period} Details</h2><p className="mt-1 text-sm text-zinc-500">Realized Profit By Ticker And Transaction</p></div>
+        <button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl border border-white/10 text-zinc-500 transition hover:bg-white/[.05] hover:text-white" aria-label="Close Details"><X size={17}/></button>
+      </div>
+      <div className="p-5 sm:p-6">
+        <div className="mb-5"><p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Profit</p><p className={cn("mt-1 text-3xl font-semibold",total>=0?"text-emerald-400":"text-rose-400")}>{money(total)}</p></div>
+        {groups.length===0?<div className="rounded-2xl border border-white/10 bg-white/[.025] px-6 py-16 text-center text-sm text-zinc-500">No transaction-level profit details are available for {period}.</div>:<>
+          <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
+            <div className="rounded-2xl border border-white/[.08] bg-white/[.02] p-4 sm:p-5">
+              <h3 className="text-sm font-semibold">Profit By Ticker</h3>
+              <div className="mt-3 h-72"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={groups} dataKey="realizedProfit" nameKey="ticker" cx="50%" cy="50%" innerRadius={70} outerRadius={105} paddingAngle={2} stroke="rgba(0,0,0,.25)" strokeWidth={2}>{groups.map((group,index)=><Cell key={group.ticker} fill={palette[index%palette.length]}/>)}</Pie><Tooltip contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,color:"#f4f4f5"}} formatter={(value:any)=>money(Number(value))}/></PieChart></ResponsiveContainer></div>
+              <div className="-mt-40 pointer-events-none relative mx-auto flex h-24 w-32 flex-col items-center justify-center text-center"><p className="text-xl font-semibold">{money(total)}</p><p className="text-[10px] uppercase tracking-wide text-zinc-600">Total Profit</p></div>
+              <div className="mt-20 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                {groups.map((group,index)=><div key={group.ticker} className="flex items-center justify-between gap-3 rounded-xl px-2 py-1.5 text-sm"><div className="flex min-w-0 items-center gap-2"><span className="size-2.5 shrink-0 rounded-full" style={{backgroundColor:palette[index%palette.length]}}/><span className="truncate font-medium">{group.ticker}</span></div><div className="flex shrink-0 items-center gap-3"><span className="font-medium">{money(group.realizedProfit)}</span><span className="w-12 text-right text-xs text-zinc-500">{group.percent.toFixed(1)}%</span></div></div>)}
+              </div>
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
+              <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Ticker Summary</h3></div>
+              <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm"><thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Ticker</th><th className="px-4 py-3 text-right">Transactions</th><th className="px-4 py-3 text-right">Realized Profit</th><th className="px-4 py-3 text-right">% Of Total</th></tr></thead><tbody>{groups.map((group,index)=><tr key={group.ticker} className="border-t border-white/[.06]"><td className="px-4 py-3"><span className="mr-2 inline-block size-2.5 rounded-full" style={{backgroundColor:palette[index%palette.length]}}/><span className="font-medium">{group.ticker}</span></td><td className="px-4 py-3 text-right text-zinc-400">{group.transactions.length}</td><td className={cn("px-4 py-3 text-right font-semibold",group.realizedProfit>=0?"text-emerald-400":"text-rose-400")}>{money(group.realizedProfit)}</td><td className="px-4 py-3 text-right text-zinc-400">{group.percent.toFixed(1)}%</td></tr>)}<tr className="border-t border-white/10 bg-white/[.025] font-semibold"><td className="px-4 py-3">Total</td><td className="px-4 py-3 text-right">{transactions.length}</td><td className={cn("px-4 py-3 text-right",total>=0?"text-emerald-400":"text-rose-400")}>{money(total)}</td><td className="px-4 py-3 text-right">100%</td></tr></tbody></table></div>
+            </div>
+          </div>
+          <div className="mt-5 overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
+            <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Transaction Detail</h3><p className="mt-1 text-xs text-zinc-600">Each transaction contributing to the {period} profit bar.</p></div>
+            <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Ticker</th><th className="px-4 py-3">Position</th><th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Price</th><th className="px-4 py-3 text-right">Proceeds</th><th className="px-4 py-3 text-right">Realized Profit</th></tr></thead><tbody>{transactions.map(transaction=><tr key={transaction.id} className="border-t border-white/[.06]"><td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateText(transaction.date)}</td><td className="px-4 py-3 font-semibold">{transaction.groupTicker}</td><td className="max-w-72 px-4 py-3 text-zinc-400">{transaction.label}</td><td className="px-4 py-3 text-right">{transaction.quantity===null?"—":transaction.quantity.toLocaleString()}</td><td className="px-4 py-3 text-right">{transaction.price===null?"—":money(transaction.price)}</td><td className="px-4 py-3 text-right">{transaction.proceeds===null?"—":money(transaction.proceeds)}</td><td className={cn("px-4 py-3 text-right font-semibold",transaction.realizedProfit>=0?"text-emerald-400":"text-rose-400")}>{money(transaction.realizedProfit)}</td></tr>)}</tbody></table></div>
+          </div>
+        </>}
+      </div>
+    </div>
+  </div>;
 }
 
 function YtdAccountChart({ account, data, currentYtd }: { account: string; data: { account: string; "2024": number; "2025": number; "2026": number }; currentYtd: number }) {
