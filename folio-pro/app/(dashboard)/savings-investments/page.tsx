@@ -23,6 +23,22 @@ const wholeDollar = (value: number) => new Intl.NumberFormat("en-US", {
 }).format(Math.round(value));
 
 type ExtraRow = { id: string; label: string; amount: number; lastPostedDate: string };
+type ProfitDrilldownTransaction = {
+  id: string;
+  date: string;
+  ticker: string;
+  label: string;
+  quantity: number | null;
+  price: number | null;
+  proceeds: number | null;
+  realizedProfit: number;
+};
+type ProfitTickerGroup = {
+  ticker: string;
+  realizedProfit: number;
+  percent: number;
+  transactions: ProfitDrilldownTransaction[];
+};
 type ExtrasByPortfolio = Record<"robinhood"|"fidelity-roth", ExtraRow[]>;
 const EXTRAS_STORAGE_KEY = "folio-portfolio-performance-extras-v1";
 type AllTimeHighEntry = { value: number; date: string };
