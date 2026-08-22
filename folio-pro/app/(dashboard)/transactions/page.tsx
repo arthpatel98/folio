@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, CalendarDays, CircleDollarSign, Plus, ReceiptText, Search, TrendingUp, X } from "lucide-react";
+import { CalendarDays, CircleDollarSign, Plus, ReceiptText, Search, TrendingUp, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore, type DataPortfolioId } from "@/store/portfolio-store";
@@ -272,15 +272,18 @@ export default function TransactionsPage(){
   const pagedRows=useMemo(()=>filteredRows.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE),[filteredRows,page]);
 
   const totals=useMemo(()=>{
-    let buys=0,sells=0,income=0,realized=0;
+    let income=0;
     filteredRows.forEach(({transaction:tx})=>{
-      if(tx.type==="buy")buys+=Math.abs(tx.amount||0);
-      if(tx.type==="sell")sells+=Math.abs(tx.amount||0);
       if(tx.type==="dividend"||tx.type==="interest")income+=Math.abs(tx.amount||0);
-      realized+=tx.realizedGain||0;
     });
-    return {buys,sells,income,realized};
+    return {income};
   },[filteredRows]);
+
+  const thisMonthPl=useMemo(()=>{
+    const now=new Date();
+    const monthPrefix=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-`;
+    return allRows.reduce((sum,{transaction:tx})=>tx.date.startsWith(monthPrefix)?sum+(tx.realizedGain||0):sum,0);
+  },[allRows]);
 
   const recordEntry=()=>{
     const amount=Number(entryAmount);
@@ -302,15 +305,13 @@ export default function TransactionsPage(){
 
   return <div className="space-y-6">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div><h1 className="text-3xl font-semibold">Transactions</h1><p className="mt-1 text-sm text-zinc-500">Permanent activity history for trades, position changes, income, and cash movements.</p></div>
+      <div><h1 className="text-3xl font-semibold">Transactions</h1></div>
       {activeId!=="all"&&<button type="button" onClick={()=>setShowAdd(true)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-medium text-emerald-300 transition hover:bg-emerald-400/15"><Plus size={16}/>Record Cash / Income</button>}
     </div>
 
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      <Summary icon={ArrowDownLeft} label="Total Buys" value={money(totals.buys)}/>
-      <Summary icon={ArrowUpRight} label="Total Sells" value={money(totals.sells)}/>
-      <Summary icon={TrendingUp} label="Realized P/L" value={signedMoney(totals.realized)} good={totals.realized>=0}/>
-      <Summary icon={CircleDollarSign} label="Dividends + Interest" value={money(totals.income)} good/>
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-2">
+      <Summary icon={TrendingUp} label="This Month P/L" value={signedMoney(thisMonthPl)} good={thisMonthPl>=0}/>
+      <Summary icon={CircleDollarSign} label="Dividends & Interest" value={money(totals.income)} good/>
     </div>
 
     <Card className="overflow-hidden">
@@ -325,9 +326,9 @@ export default function TransactionsPage(){
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1450px] text-sm">
-          <thead className="bg-white/[.025] text-left text-xs tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Date</th>{activeId==="all"&&<th className="px-4 py-3">Portfolio</th>}<th className="px-4 py-3">Type</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Quantity</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Cash Impact</th><th className="px-4 py-3">Cash Value</th><th className="px-4 py-3">Realized P/L</th><th className="px-4 py-3">Realized P/L %</th><th className="px-4 py-3">Avg. Days Held</th></tr></thead>
-          <tbody>{filteredRows.length===0?<tr><td colSpan={activeId==="all"?12:11} className="px-4 py-16 text-center text-zinc-500"><ReceiptText className="mx-auto mb-3 size-8 opacity-40"/><div>No transactions match these filters.</div></td></tr>:pagedRows.map(({transaction:tx,portfolioId})=>{
+        <table className="w-full min-w-[1320px] text-sm">
+          <thead className="bg-white/[.025] text-left text-xs tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Date</th>{activeId==="all"&&<th className="px-4 py-3">Portfolio</th>}<th className="px-4 py-3">Type</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Quantity</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Cash Impact</th><th className="px-4 py-3">Cash Value</th><th className="px-4 py-3">Realized P/L</th><th className="px-4 py-3">Realized P/L %</th><th className="px-4 py-3">Avg. Days Held</th></tr></thead>
+          <tbody>{filteredRows.length===0?<tr><td colSpan={activeId==="all"?11:10} className="px-4 py-16 text-center text-zinc-500"><ReceiptText className="mx-auto mb-3 size-8 opacity-40"/><div>No transactions match these filters.</div></td></tr>:pagedRows.map(({transaction:tx,portfolioId})=>{
             const cashImpact=transactionCashImpact(tx);
             const realizedPct=realizedPlPct(tx);
             const avgDays=explicitAverageDaysHeld(tx)??historicalDaysByTransactionId.get(`${portfolioId}:${tx.id}`)??null;
@@ -338,7 +339,6 @@ export default function TransactionsPage(){
               <td className="max-w-64 px-4 py-3 font-medium">{optionLabel(tx)}</td>
               <td className="px-4 py-3">{typeof tx.quantity==="number"?Math.abs(tx.quantity).toLocaleString():"—"}</td>
               <td className="px-4 py-3">{typeof tx.price==="number"?money(tx.price):"—"}</td>
-              <td className="px-4 py-3">{tx.amount?money(tx.amount):"—"}</td>
               <td className={cn("px-4 py-3 font-medium",cashImpact>0?"text-emerald-400":cashImpact<0?"text-red-400":"text-zinc-500")}>{cashImpact?signedMoney(cashImpact):"—"}</td>
               <td className="whitespace-nowrap px-4 py-3 font-medium text-zinc-300">{money(cashValueByTransaction.get(`${portfolioId}:${tx.id}`)??0)}</td>
               <td className={cn("px-4 py-3 font-medium",(tx.realizedGain||0)>0?"text-emerald-400":(tx.realizedGain||0)<0?"text-red-400":"text-zinc-500")}>{typeof tx.realizedGain==="number"?signedMoney(tx.realizedGain):"—"}</td>
@@ -349,7 +349,7 @@ export default function TransactionsPage(){
         </table>
       </div>
       <div className="flex flex-col gap-3 border-t border-white/[.06] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="text-xs text-zinc-600">Showing {filteredRows.length===0?0:(page-1)*PAGE_SIZE+1}–{Math.min(page*PAGE_SIZE,filteredRows.length)} of {filteredRows.length.toLocaleString()} actual transactions for Aug 2026.</div>
+        <div className="text-xs text-zinc-600">Showing {filteredRows.length===0?0:(page-1)*PAGE_SIZE+1}–{Math.min(page*PAGE_SIZE,filteredRows.length)} of {filteredRows.length.toLocaleString()} Transactions.</div>
         {filteredRows.length>PAGE_SIZE&&<div className="flex items-center gap-2">
           <button type="button" onClick={()=>setPage(current=>Math.max(1,current-1))} disabled={page===1} className="h-8 rounded-lg border border-white/10 px-3 text-xs text-zinc-400 transition hover:bg-white/[.04] disabled:cursor-not-allowed disabled:opacity-35">Previous</button>
           <div className="flex items-center gap-1">{Array.from({length:pageCount},(_,index)=>index+1).map(pageNumber=><button key={pageNumber} type="button" onClick={()=>setPage(pageNumber)} className={cn("grid size-8 place-items-center rounded-lg border text-xs font-medium transition",page===pageNumber?"border-emerald-400/30 bg-emerald-400/10 text-emerald-300":"border-white/10 text-zinc-500 hover:bg-white/[.04] hover:text-zinc-300")}>{pageNumber}</button>)}</div>
