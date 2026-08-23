@@ -349,7 +349,7 @@ export default function SavingsInvestmentsPage() {
   };
 
   const robinhoodQuarterly = useMemo(() => {
-    const base=quarterlyIncome.map((row) => {
+    const base: { period: string; realizedProfit: number; income: number }[] = quarterlyIncome.map((row) => {
       const realizedProfit = row.period === "Q1 2026"
         ? -3854.32
         : row.robinhoodProfit - (row.period === "Q1 2025" ? 311.71 : 0);
