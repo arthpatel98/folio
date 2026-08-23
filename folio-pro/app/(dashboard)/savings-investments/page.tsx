@@ -1187,12 +1187,16 @@ export default function SavingsInvestmentsPage() {
     });
   };
   const verifiedCloseDateTransactions=useMemo<Record<string,ProfitDrilldownTransaction[]>>(()=>{
-    return Object.fromEntries(Object.entries(ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS).map(([period,transactions])=>[
-      period,
-      transactions
-        .filter(transaction=>!verifiedProfitEdits[transaction.id]?.deleted)
-        .map(transaction=>({...transaction,...(verifiedProfitEdits[transaction.id]??{})})),
-    ]));
+    const rebucketed: Record<string,ProfitDrilldownTransaction[]> = {};
+    Object.values(ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS).flat().forEach(transaction=>{
+      if(verifiedProfitEdits[transaction.id]?.deleted)return;
+      const edited={...transaction,...(verifiedProfitEdits[transaction.id]??{})};
+      const parsed=new Date(`${edited.date}T12:00:00`);
+      if(Number.isNaN(parsed.getTime()))return;
+      const period=new Intl.DateTimeFormat("en-US",{month:"short",year:"numeric"}).format(parsed);
+      rebucketed[period]=[...(rebucketed[period]??[]),edited];
+    });
+    return rebucketed;
   },[verifiedProfitEdits]);
   const verifiedCloseDateMonthlyTotals=useMemo<Record<string,number>>(()=>{
     const totals:Record<string,number>={};
@@ -1676,12 +1680,21 @@ function EditableProfitCell({value,display,kind="text",onSave,options,className}
 }
 
 function formatPositionLabel(value:string) {
-  return value.split(/\s+/).map((word,index)=>{
-    if(index===0)return word;
-    if(/^\d+(?:\.\d+)?$/.test(word))return word;
+  const words=value.trim().split(/\s+/);
+  if(words.length===0)return value;
+  const ticker=words[0].toUpperCase();
+  const formatted=words.slice(1).map((word,index,rest)=>{
     const lower=word.toLowerCase();
+    const isCallPut=lower==="call"||lower==="put";
+    const next=rest[index+1]?.toLowerCase();
+    const looksStrike=/^\d+(?:\.\d+)?$/.test(word)&&next&&(next==="call"||next==="put");
+    if(looksStrike)return `$${word}`;
+    if(/^\d+(?:\.\d+)?$/.test(word))return word;
+    if(isCallPut)return lower.charAt(0).toUpperCase()+lower.slice(1);
+    if(/^[a-z]{3}$/i.test(word))return lower.charAt(0).toUpperCase()+lower.slice(1);
     return lower.charAt(0).toUpperCase()+lower.slice(1);
-  }).join(" ");
+  });
+  return [ticker,...formatted].join(" ");
 }
 
 function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{period:string;groups:ProfitTickerGroup[];total:number;onEditTransaction?:(id:string,patch:VerifiedProfitEdit)=>void;onClose:()=>void}) {
@@ -1703,7 +1716,7 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
   const openEditor=(transaction:ProfitDrilldownTransaction & {groupTicker:string})=>{
     if(!onEditTransaction)return;
     setEditingTransaction(transaction);
-    setDraft({...transaction});
+    setDraft({...transaction,label:formatPositionLabel(transaction.label)});
   };
   const saveEditor=()=>{
     if(!editingTransaction||!draft||!onEditTransaction)return;
@@ -1711,7 +1724,7 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
       date:draft.date,
       category:draft.category,
       ticker:draft.ticker.trim().toUpperCase(),
-      label:draft.label,
+      label:formatPositionLabel(draft.label),
       quantity:draft.quantity,
       price:draft.price,
       proceeds:draft.proceeds,
@@ -1788,9 +1801,6 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
           <EditField label="Category"><select value={draft.category} onChange={e=>setDraftField("category",e.target.value as ProfitDrilldownTransaction["category"])} className="edit-modal-input">{["Common Stocks","Sell Call","Sell Put","Buy Call","Buy Put"].map(category=><option key={category}>{category}</option>)}</select></EditField>
           <EditField label="Ticker"><input value={draft.ticker} onChange={e=>setDraftField("ticker",e.target.value)} className="edit-modal-input"/></EditField>
           <EditField label="Position"><input value={draft.label} onChange={e=>setDraftField("label",e.target.value)} className="edit-modal-input"/></EditField>
-          <EditField label="Quantity"><input type="number" step="any" value={draft.quantity??""} onChange={e=>setDraftField("quantity",e.target.value===""?null:Number(e.target.value))} className="edit-modal-input"/></EditField>
-          <EditField label="Price"><input type="number" step="any" value={draft.price??""} onChange={e=>setDraftField("price",e.target.value===""?null:Number(e.target.value))} className="edit-modal-input"/></EditField>
-          <EditField label="Proceeds"><input type="number" step="any" value={draft.proceeds??""} onChange={e=>setDraftField("proceeds",e.target.value===""?null:Number(e.target.value))} className="edit-modal-input"/></EditField>
           <EditField label="Realized P/L"><input type="number" step="any" value={draft.realizedProfit} onChange={e=>setDraftField("realizedProfit",Number(e.target.value)||0)} className="edit-modal-input"/></EditField>
         </div>
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
