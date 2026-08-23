@@ -7,6 +7,7 @@ import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore, type DataPortfolioId } from "@/store/portfolio-store";
 import { cn } from "@/lib/utils";
 import { optionCollateral } from "@/lib/calculations/portfolio";
+import { importedRobinhoodTransactions } from "@/lib/imported-robinhood-transactions";
 import type { Transaction, TransactionType } from "@/types/portfolio";
 
 const PORTFOLIO_NAMES: Record<DataPortfolioId,string> = {
@@ -85,6 +86,19 @@ const transactionCashImpact=(tx:Transaction)=>{
   // Closing a short option is a debit: gross closing cost plus fees both reduce cash.
   return optionTradeDisplay(tx)==="Buy to Close" ? -(amount + Math.abs(tx.fees||0)) : regular;
 };
+
+const transactionImportFingerprint=(tx:Transaction)=>[
+  tx.date,
+  tx.symbol??"",
+  tx.type,
+  tx.assetType??"",
+  tx.optionType??"",
+  tx.optionExpiry??"",
+  tx.optionStrike??"",
+  tx.quantity??"",
+  tx.price??"",
+  Math.round(transactionCashImpact(tx)*100)/100,
+].join("|");
 
 const realizedPlPct=(tx:Transaction)=>{
   const gain=tx.realizedGain;
@@ -169,19 +183,40 @@ export default function TransactionsPage(){
   const [page,setPage]=useState(1);
   const PAGE_SIZE=30;
 
+  const pageTransactionsByPortfolio=useMemo(()=>{
+    const existingRobinhood=transactionsByPortfolio.robinhood??[];
+    const existingCounts=new Map<string,number>();
+    existingRobinhood.forEach(tx=>{
+      const fingerprint=transactionImportFingerprint(tx);
+      existingCounts.set(fingerprint,(existingCounts.get(fingerprint)??0)+1);
+    });
+    const importedToAdd=importedRobinhoodTransactions.filter(tx=>{
+      const fingerprint=transactionImportFingerprint(tx);
+      const remaining=existingCounts.get(fingerprint)??0;
+      if(remaining<=0)return true;
+      existingCounts.set(fingerprint,remaining-1);
+      return false;
+    });
+    return {
+      robinhood:[...existingRobinhood,...importedToAdd],
+      "fidelity-roth":transactionsByPortfolio["fidelity-roth"]??[],
+      "fidelity-401k":transactionsByPortfolio["fidelity-401k"]??[],
+    };
+  },[transactionsByPortfolio]);
+
   const allRows=useMemo<TransactionRow[]>(()=>{
     const ids:DataPortfolioId[]=activeId==="all"?["robinhood","fidelity-roth","fidelity-401k"]:[activeId];
-    return ids.flatMap(portfolioId=>(transactionsByPortfolio[portfolioId]??[])
-      .filter(transaction=>transaction.date>="2026-08-01"&&transaction.date<"2026-09-01"&&isActualPortfolioTransaction(transaction))
+    return ids.flatMap(portfolioId=>(pageTransactionsByPortfolio[portfolioId]??[])
+      .filter(isActualPortfolioTransaction)
       .map(transaction=>({transaction,portfolioId})))
       .sort((a,b)=>b.transaction.date.localeCompare(a.transaction.date)||b.transaction.id.localeCompare(a.transaction.id));
-  },[activeId,transactionsByPortfolio]);
+  },[activeId,pageTransactionsByPortfolio]);
 
   const historicalDaysByTransactionId=useMemo(()=>{
     const result=new Map<string,number>();
     const ids:DataPortfolioId[]=["robinhood","fidelity-roth","fidelity-401k"];
     ids.forEach(portfolioId=>{
-      const ledger=(transactionsByPortfolio[portfolioId]??[])
+      const ledger=(pageTransactionsByPortfolio[portfolioId]??[])
         .filter(isActualPortfolioTransaction)
         .slice()
         .sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
@@ -226,7 +261,7 @@ export default function TransactionsPage(){
       });
     });
     return result;
-  },[transactionsByPortfolio]);
+  },[pageTransactionsByPortfolio]);
 
   const cashValueByTransaction=useMemo(()=>{
     const result=new Map<string,number>();
@@ -234,7 +269,7 @@ export default function TransactionsPage(){
     ids.forEach(portfolioId=>{
       let lockedCollateral=portfolioId==="fidelity-401k" ? 0 : optionCollateral(holdingsByPortfolio[portfolioId]??[]);
       let storedCash=Number(cashByPortfolio[portfolioId]??0);
-      const ledger=(transactionsByPortfolio[portfolioId]??[])
+      const ledger=(pageTransactionsByPortfolio[portfolioId]??[])
         .filter(isActualPortfolioTransaction)
         .slice()
         .sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
@@ -255,7 +290,7 @@ export default function TransactionsPage(){
       });
     });
     return result;
-  },[cashByPortfolio,holdingsByPortfolio,transactionsByPortfolio]);
+  },[cashByPortfolio,holdingsByPortfolio,pageTransactionsByPortfolio]);
 
   const filteredRows=useMemo(()=>allRows.filter(({transaction:tx,portfolioId})=>{
     if(category!=="all"&&categoryFor(tx)!==category)return false;
