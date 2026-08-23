@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, Landmark, TrendingUp, WalletCards, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, ChevronLeft, ChevronRight, Landmark, TrendingUp, WalletCards, X } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { portfolioSummary } from "@/lib/calculations/portfolio";
@@ -990,6 +990,18 @@ const ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS: Record<string, ProfitDrilldown
       "category": "Sell Put"
     },
     {
+      "id": "manual-2026-06-30-ibit-user",
+      "date": "2026-06-30",
+      "ticker": "IBIT",
+      "label": "IBIT",
+      "quantity": null,
+      "price": null,
+      "proceeds": null,
+      "realizedProfit": -142.05,
+      "category": "Common Stocks",
+      "preserveLabelCasing": true
+    },
+    {
       "id": "gk-2026-06-15-spcx-86",
       "date": "2026-06-15",
       "ticker": "SPCX",
@@ -1574,6 +1586,26 @@ export default function SavingsInvestmentsPage() {
     return Array.from(annual.values()).sort((a,b)=>a.period.localeCompare(b.period));
   },[robinhoodQuarterly]);
 
+  const drilldownAdjacentPeriods=useMemo(()=>{
+    if(!profitDrilldown)return {previous:null as string|null,next:null as string|null};
+    const match=profitDrilldown.period.match(/^([A-Z][a-z]{2}) (20\d{2})$/);
+    if(!match)return {previous:null as string|null,next:null as string|null};
+    const monthIndex=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].indexOf(match[1]);
+    if(monthIndex<0)return {previous:null as string|null,next:null as string|null};
+    const currentDate=new Date(Number(match[2]),monthIndex,1);
+    const formatPeriod=(date:Date)=>new Intl.DateTimeFormat("en-US",{month:"short",year:"numeric"}).format(date);
+    const previousCandidate=formatPeriod(new Date(currentDate.getFullYear(),currentDate.getMonth()-1,1));
+    const nextCandidate=formatPeriod(new Date(currentDate.getFullYear(),currentDate.getMonth()+1,1));
+    const available=new Set<string>();
+    if(profitDrilldown.portfolioId==="robinhood") {
+      robinhoodQuarterly.forEach(row=>{if(/^[A-Z][a-z]{2} 20\d{2}$/.test(row.period))available.add(row.period);});
+      Object.keys(verifiedCloseDateTransactions).forEach(period=>available.add(period));
+    } else if(profitDrilldown.portfolioId==="fidelity-roth") {
+      rothQuarterly.forEach(row=>{if(/^[A-Z][a-z]{2} 20\d{2}$/.test(row.period))available.add(row.period);});
+    }
+    return {previous:available.has(previousCandidate)?previousCandidate:null,next:available.has(nextCandidate)?nextCandidate:null};
+  },[profitDrilldown,robinhoodQuarterly,rothQuarterly,verifiedCloseDateTransactions]);
+
   const selectedVisual = activeId === "robinhood"
     ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus" data={robinhoodChartView==="year"?robinhoodAnnualChartData:robinhoodChartData} selectedYear={robinhoodChartYear} onYearChange={setRobinhoodChartYear} yearOptions={["2026","2025","2024"]} selectedView={robinhoodChartView} onViewChange={setRobinhoodChartView} onProfitBarClick={(period)=>{if(robinhoodChartView==="year"){setRobinhoodChartYear(period);setRobinhoodChartView("month");return;}setProfitDrilldown({portfolioId:"robinhood",period});}}/>
     : activeId === "fidelity-roth"
@@ -1634,6 +1666,8 @@ export default function SavingsInvestmentsPage() {
       groups={displayedProfitDrilldownGroups}
       total={profitDrilldownTotal}
       onEditTransaction={profitDrilldown.portfolioId==="robinhood"?(verifiedCloseDateTransactions[profitDrilldown.period]?saveVerifiedProfitEdit:saveDynamicProfitEdit):undefined}
+      onPrevious={drilldownAdjacentPeriods.previous?()=>setProfitDrilldown(current=>current?{...current,period:drilldownAdjacentPeriods.previous!}:current):undefined}
+      onNext={drilldownAdjacentPeriods.next?()=>setProfitDrilldown(current=>current?{...current,period:drilldownAdjacentPeriods.next!}:current):undefined}
       onClose={()=>setProfitDrilldown(null)}
     />}
 
@@ -1786,7 +1820,7 @@ function formatPositionLabel(value:string) {
   return [ticker,...formatted].join(" ");
 }
 
-function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{period:string;groups:ProfitTickerGroup[];total:number;onEditTransaction?:(id:string,patch:VerifiedProfitEdit)=>void;onClose:()=>void}) {
+function ProfitDrilldownModal({period,groups,total,onEditTransaction,onPrevious,onNext,onClose}:{period:string;groups:ProfitTickerGroup[];total:number;onEditTransaction?:(id:string,patch:VerifiedProfitEdit)=>void;onPrevious?:()=>void;onNext?:()=>void;onClose:()=>void}) {
   const [transactionSort,setTransactionSort]=useState<"date"|"realizedProfit">("realizedProfit");
   const [transactionSortDirection,setTransactionSortDirection]=useState<"asc"|"desc">("desc");
   const transactions=groups
@@ -1853,14 +1887,18 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
 
   return <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event)=>{if(event.currentTarget===event.target)onClose();}}>
     <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-3xl border border-white/10 bg-zinc-950 shadow-[0_30px_90px_rgba(0,0,0,.55)]">
-      <div className="sticky top-0 z-10 flex items-start justify-between border-b border-white/[.07] bg-zinc-950/95 px-5 py-4 backdrop-blur-xl sm:px-6">
-        <div><h2 className="text-xl font-semibold">{period} Details</h2></div>
-        <button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl border border-white/10 text-zinc-500 transition hover:bg-white/[.05] hover:text-white" aria-label="Close Details"><X size={17}/></button>
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/[.07] bg-zinc-950/95 px-5 py-4 backdrop-blur-xl sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          {onPrevious&&<button type="button" onClick={onPrevious} className="grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 text-zinc-400 transition hover:bg-white/[.05] hover:text-white" aria-label="Previous Month" title="Previous Month"><ChevronLeft size={18}/></button>}
+          <h2 className="truncate text-xl font-semibold">{period} Details</h2>
+          {onNext&&<button type="button" onClick={onNext} className="grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 text-zinc-400 transition hover:bg-white/[.05] hover:text-white" aria-label="Next Month" title="Next Month"><ChevronRight size={18}/></button>}
+        </div>
+        <button type="button" onClick={onClose} className="grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 text-zinc-500 transition hover:bg-white/[.05] hover:text-white" aria-label="Close Details"><X size={17}/></button>
       </div>
       <div className="p-5 sm:p-6">
         {groups.length===0?<><div className="mb-5"><p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Profit</p><p className={cn("mt-1 text-3xl font-semibold",total>=0?"text-emerald-400":"text-rose-400")}>{money(total)}</p></div><div className="rounded-2xl border border-white/10 bg-white/[.025] px-6 py-16 text-center text-sm text-zinc-500">No transaction-level profit details are available for {period}.</div></>:<>
           <div>
-            <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-semibold">Profit By Position Type</h3><span className="text-xs text-zinc-600">{transactions.length} Transactions</span></div>
+            <div className="mb-3"><h3 className="text-sm font-semibold">Profit By Position Type</h3></div>
             <div className={cn("grid gap-3 sm:grid-cols-2",categoryTotals.length===1&&"xl:grid-cols-2",categoryTotals.length===2&&"xl:grid-cols-3",categoryTotals.length===3&&"xl:grid-cols-4",categoryTotals.length===4&&"xl:grid-cols-5",categoryTotals.length>=5&&"xl:grid-cols-3")}>
               <div className="rounded-2xl border border-white/[.08] bg-white/[.025] p-4">
                 <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Profit</p>
