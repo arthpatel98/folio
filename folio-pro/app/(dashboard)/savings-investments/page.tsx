@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { BarChart3, Landmark, TrendingUp, WalletCards, X } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -1079,7 +1079,7 @@ const ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS: Record<string, ProfitDrilldown
   ]
 };
 
-type VerifiedProfitEdit = Partial<ProfitDrilldownTransaction>;
+type VerifiedProfitEdit = Partial<ProfitDrilldownTransaction> & { deleted?: boolean };
 type VerifiedProfitEdits = Record<string, VerifiedProfitEdit>;
 const VERIFIED_PROFIT_EDITS_KEY = "folio-robinhood-verified-profit-edits-v1";
 type ExtrasByPortfolio = Record<"robinhood"|"fidelity-roth", ExtraRow[]>;
@@ -1171,6 +1171,7 @@ export default function SavingsInvestmentsPage() {
   const [allTimeHighs,setAllTimeHighs]=useState<AllTimeHighByPortfolio>(DEFAULT_ALL_TIME_HIGHS);
   const [editingAllTimeHigh,setEditingAllTimeHigh]=useState<{portfolioId:DataPortfolioId;field:"value"|"date"}|null>(null);
   const [profitDrilldown,setProfitDrilldown]=useState<{portfolioId:DataPortfolioId;period:string}|null>(null);
+  const [robinhoodChartYear,setRobinhoodChartYear]=useState("2026");
   const [verifiedProfitEdits,setVerifiedProfitEdits]=useState<VerifiedProfitEdits>({});
   useEffect(()=>{
     try{
@@ -1188,7 +1189,9 @@ export default function SavingsInvestmentsPage() {
   const verifiedCloseDateTransactions=useMemo<Record<string,ProfitDrilldownTransaction[]>>(()=>{
     return Object.fromEntries(Object.entries(ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS).map(([period,transactions])=>[
       period,
-      transactions.map(transaction=>({...transaction,...(verifiedProfitEdits[transaction.id]??{})})),
+      transactions
+        .filter(transaction=>!verifiedProfitEdits[transaction.id]?.deleted)
+        .map(transaction=>({...transaction,...(verifiedProfitEdits[transaction.id]??{})})),
     ]));
   },[verifiedProfitEdits]);
   const verifiedCloseDateMonthlyTotals=useMemo<Record<string,number>>(()=>{
@@ -1482,8 +1485,15 @@ export default function SavingsInvestmentsPage() {
     "Fidelity 401(k)": 0.1465,
   }), [accounts]);
 
+  const robinhoodChartData=useMemo(()=>robinhoodQuarterly.filter(row=>{
+    const yearMatch=row.period.match(/(20\d{2})/);
+    if(yearMatch?.[1]!==robinhoodChartYear)return false;
+    if(robinhoodChartYear==="2026"&&/^Q[12] 2026$/.test(row.period))return false;
+    return true;
+  }),[robinhoodQuarterly,robinhoodChartYear]);
+
   const selectedVisual = activeId === "robinhood"
-    ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={robinhoodQuarterly} onProfitBarClick={(period)=>setProfitDrilldown({portfolioId:"robinhood",period})}/>
+    ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus" data={robinhoodChartData} selectedYear={robinhoodChartYear} onYearChange={setRobinhoodChartYear} yearOptions={["2026","2025","2024"]} onProfitBarClick={(period)=>setProfitDrilldown({portfolioId:"robinhood",period})}/>
     : activeId === "fidelity-roth"
       ? <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={rothQuarterly} onProfitBarClick={(period)=>setProfitDrilldown({portfolioId:"fidelity-roth",period})}/>
       : activeId === "fidelity-401k"
@@ -1601,19 +1611,31 @@ function chartValueLabel(value: number) {
   return `${sign}$${absolute.toFixed(0)}`;
 }
 
-function QuarterlyChart({ title, subtitle, data, onProfitBarClick }: { title: string; subtitle: string; data: { period: string; realizedProfit: number; income: number }[]; onProfitBarClick?: (period:string)=>void }) {
+function QuarterlyChart({ title, subtitle, data, onProfitBarClick, selectedYear, onYearChange, yearOptions }: { title: string; subtitle: string; data: { period: string; realizedProfit: number; income: number }[]; onProfitBarClick?: (period:string)=>void; selectedYear?:string; onYearChange?:(year:string)=>void; yearOptions?:string[] }) {
   const gradientId=title.replace(/\W/g, "");
+  const isMonthly=(period:string)=>/^[A-Z][a-z]{2} 20\d{2}$/.test(period);
   const openProfitDetail=(entry:any)=>{
     const period=entry?.payload?.period??entry?.period;
-    if(typeof period==="string"&&/^[A-Z][a-z]{2} 20\d{2}$/.test(period)) onProfitBarClick?.(period);
+    if(typeof period==="string"&&isMonthly(period)) onProfitBarClick?.(period);
+  };
+  const PeriodTick=(props:any)=>{
+    const {x,y,payload}=props;
+    const period=String(payload?.value??"");
+    const clickable=Boolean(onProfitBarClick&&isMonthly(period));
+    return <g transform={`translate(${x},${y})`} onClick={()=>clickable&&onProfitBarClick?.(period)} style={{cursor:clickable?"pointer":"default"}}>
+      <text x={0} y={0} dy={16} textAnchor="middle" fill={clickable?"#a1a1aa":"#71717a"} fontSize={10} fontWeight={clickable?600:400}>{period}</text>
+    </g>;
   };
   return <Card className="overflow-hidden">
-    <CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">{title}</h2><p className="text-xs text-zinc-500">{subtitle}</p></CardHeader>
+    <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-zinc-200/70 dark:border-white/[.06]">
+      <div><h2 className="font-medium">{title}</h2><p className="mt-1 text-xs text-zinc-500">{subtitle}</p></div>
+      {selectedYear&&onYearChange&&<select value={selectedYear} onChange={event=>onYearChange(event.target.value)} className="h-9 rounded-xl border border-zinc-200 bg-transparent px-3 text-sm font-medium outline-none dark:border-white/10 dark:bg-zinc-950">{(yearOptions??[]).map(year=><option key={year} value={year}>{year}</option>)}</select>}
+    </CardHeader>
     <CardContent className="pt-5">
       <div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:4}}>
         <defs><linearGradient id={`${gradientId}-profit`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={1}/><stop offset="100%" stopColor="#10b981" stopOpacity={0.65}/></linearGradient><linearGradient id={`${gradientId}-income`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.65}/></linearGradient></defs>
         <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/>
-        <XAxis dataKey="period" tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} interval={0} angle={data.length > 8 ? -28 : 0} textAnchor={data.length > 8 ? "end" : "middle"} height={data.length > 8 ? 55 : 30}/>
+        <XAxis dataKey="period" tick={<PeriodTick/>} axisLine={false} tickLine={false} interval={0} height={34}/>
         <YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`$${Math.round(v/1000)}k`}/>
         <Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5",boxShadow:"0 12px 30px rgba(0,0,0,.25)"}} formatter={(value: any)=>money(Number(value))}/>
         <Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/>
@@ -1624,7 +1646,7 @@ function QuarterlyChart({ title, subtitle, data, onProfitBarClick }: { title: st
           <LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={9}/>
         </Bar>
       </BarChart></ResponsiveContainer></div>
-      {onProfitBarClick&&<p className="mt-2 text-center text-[11px] text-zinc-600">Click A Monthly Profit Bar For Ticker And Transaction Details</p>}
+      {onProfitBarClick&&<p className="mt-2 text-center text-[11px] text-zinc-600">Click A Month Label Or Monthly Profit Bar For Details</p>}
     </CardContent>
   </Card>;
 }
@@ -1653,11 +1675,22 @@ function EditableProfitCell({value,display,kind="text",onSave,options,className}
   </td>;
 }
 
+function formatPositionLabel(value:string) {
+  return value.split(/\s+/).map((word,index)=>{
+    if(index===0)return word;
+    if(/^\d+(?:\.\d+)?$/.test(word))return word;
+    const lower=word.toLowerCase();
+    return lower.charAt(0).toUpperCase()+lower.slice(1);
+  }).join(" ");
+}
+
 function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{period:string;groups:ProfitTickerGroup[];total:number;onEditTransaction?:(id:string,patch:VerifiedProfitEdit)=>void;onClose:()=>void}) {
   const transactions=groups
     .flatMap(group=>group.transactions.map(transaction=>({...transaction,groupTicker:group.ticker})))
     .sort((a,b)=>b.realizedProfit-a.realizedProfit||b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
-  const categoryOrder: ProfitDrilldownTransaction["category"][]=["Sell Call","Sell Put","Buy Call","Buy Put","Common Stocks"];
+  const [editingTransaction,setEditingTransaction]=useState<(ProfitDrilldownTransaction & {groupTicker:string})|null>(null);
+  const [draft,setDraft]=useState<ProfitDrilldownTransaction|null>(null);
+  const categoryOrder: ProfitDrilldownTransaction["category"][]=["Common Stocks","Sell Call","Sell Put","Buy Call","Buy Put"];
   const categoryTotals=categoryOrder.map(category=>{
     const categoryTransactions=transactions.filter(transaction=>transaction.category===category);
     return {
@@ -1665,8 +1698,36 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
       realizedProfit:categoryTransactions.reduce((sum,transaction)=>sum+transaction.realizedProfit,0),
       count:categoryTransactions.length,
     };
-  });
+  }).filter(item=>Math.abs(item.realizedProfit)>0.000001);
   const dateText=(value:string)=>new Date(`${value}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+  const openEditor=(transaction:ProfitDrilldownTransaction & {groupTicker:string})=>{
+    if(!onEditTransaction)return;
+    setEditingTransaction(transaction);
+    setDraft({...transaction});
+  };
+  const saveEditor=()=>{
+    if(!editingTransaction||!draft||!onEditTransaction)return;
+    onEditTransaction(editingTransaction.id,{
+      date:draft.date,
+      category:draft.category,
+      ticker:draft.ticker.trim().toUpperCase(),
+      label:draft.label,
+      quantity:draft.quantity,
+      price:draft.price,
+      proceeds:draft.proceeds,
+      realizedProfit:draft.realizedProfit,
+    });
+    setEditingTransaction(null);
+    setDraft(null);
+  };
+  const deleteEditor=()=>{
+    if(!editingTransaction||!onEditTransaction)return;
+    onEditTransaction(editingTransaction.id,{deleted:true});
+    setEditingTransaction(null);
+    setDraft(null);
+  };
+  const setDraftField=<K extends keyof ProfitDrilldownTransaction>(field:K,value:ProfitDrilldownTransaction[K])=>setDraft(current=>current?{...current,[field]:value}:current);
+
   return <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event)=>{if(event.currentTarget===event.target)onClose();}}>
     <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-3xl border border-white/10 bg-zinc-950 shadow-[0_30px_90px_rgba(0,0,0,.55)]">
       <div className="sticky top-0 z-10 flex items-start justify-between border-b border-white/[.07] bg-zinc-950/95 px-5 py-4 backdrop-blur-xl sm:px-6">
@@ -1681,7 +1742,7 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
               {categoryTotals.map(item=><div key={item.category} className="rounded-2xl border border-white/[.08] bg-white/[.025] p-4">
                 <p className="text-sm font-medium text-zinc-400">{item.category}</p>
-                <p className={cn("mt-3 text-2xl font-semibold",item.realizedProfit>0?"text-emerald-400":item.realizedProfit<0?"text-rose-400":"text-zinc-300")}>{money(item.realizedProfit)}</p>
+                <p className={cn("mt-3 text-2xl font-semibold",item.realizedProfit>0?"text-emerald-400":"text-rose-400")}>{money(item.realizedProfit)}</p>
                 <p className="mt-2 text-xs text-zinc-600">{item.count} {item.count===1?"Transaction":"Transactions"}</p>
               </div>)}
             </div>
@@ -1697,28 +1758,52 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
 
           <div className="mt-5 overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
             <div className="flex flex-col gap-1 border-b border-white/[.07] px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
-              <div><h3 className="text-sm font-semibold">Top Profit By Transaction</h3><p className="mt-1 text-xs text-zinc-600">Sorted By Realized Profit, Highest To Lowest.</p></div>
+              <div><h3 className="text-sm font-semibold">Top Profit By Transaction</h3><p className="mt-1 text-xs text-zinc-600">{onEditTransaction?"Click A Ticker To Edit Or Delete The Transaction.":"Sorted By Realized Profit, Highest To Lowest."}</p></div>
               <span className="text-xs text-zinc-600">{period}</span>
             </div>
             <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm">
               <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Rank</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Ticker</th><th className="px-4 py-3">Position</th><th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Price</th><th className="px-4 py-3 text-right">Proceeds</th><th className="px-4 py-3 text-right">Realized Profit</th></tr></thead>
               <tbody>{transactions.map((transaction,index)=><tr key={transaction.id} className="border-t border-white/[.06]">
                 <td className="px-4 py-3 font-semibold text-zinc-500">#{index+1}</td>
-                <EditableProfitCell kind="date" value={transaction.date} display={dateText(transaction.date)} className="whitespace-nowrap text-zinc-400" onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{date:String(value)}):undefined}/>
-                <EditableProfitCell kind="select" value={transaction.category} display={transaction.category} className="whitespace-nowrap" options={["Sell Call","Sell Put","Buy Call","Buy Put","Common Stocks"]} onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{category:String(value) as ProfitDrilldownTransaction["category"]}):undefined}/>
-                <EditableProfitCell value={transaction.ticker} display={transaction.groupTicker} className="font-semibold" onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{ticker:String(value).trim().toUpperCase()}):undefined}/>
-                <EditableProfitCell value={transaction.label} display={transaction.label} className="max-w-72 text-zinc-400" onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{label:String(value)}):undefined}/>
-                <EditableProfitCell kind="number" value={transaction.quantity} display={transaction.quantity===null?"—":transaction.quantity.toLocaleString()} className="text-right" onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{quantity:value===null?null:Number(value)}):undefined}/>
-                <EditableProfitCell kind="number" value={transaction.price} display={transaction.price===null?"—":money(transaction.price)} className="text-right" onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{price:value===null?null:Number(value)}):undefined}/>
-                <EditableProfitCell kind="number" value={transaction.proceeds} display={transaction.proceeds===null?"—":money(transaction.proceeds)} className="text-right" onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{proceeds:value===null?null:Number(value)}):undefined}/>
-                <EditableProfitCell kind="number" value={transaction.realizedProfit} display={money(transaction.realizedProfit)} className={cn("text-right font-semibold",transaction.realizedProfit>0?"text-emerald-400":transaction.realizedProfit<0?"text-rose-400":"text-zinc-400")} onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{realizedProfit:Number(value??0)}):undefined}/>
+                <td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateText(transaction.date)}</td>
+                <td className="whitespace-nowrap px-4 py-3">{transaction.category}</td>
+                <td className="px-4 py-3 font-semibold">{onEditTransaction?<button type="button" onClick={()=>openEditor(transaction)} className="rounded-md text-left text-emerald-400 transition hover:text-emerald-300 hover:underline">{transaction.groupTicker}</button>:transaction.groupTicker}</td>
+                <td className="max-w-72 px-4 py-3 text-zinc-400">{formatPositionLabel(transaction.label)}</td>
+                <td className="px-4 py-3 text-right">{transaction.quantity===null?"—":transaction.quantity.toLocaleString()}</td>
+                <td className="px-4 py-3 text-right">{transaction.price===null?"—":money(transaction.price)}</td>
+                <td className="px-4 py-3 text-right">{transaction.proceeds===null?"—":money(transaction.proceeds)}</td>
+                <td className={cn("px-4 py-3 text-right font-semibold",transaction.realizedProfit>0?"text-emerald-400":transaction.realizedProfit<0?"text-rose-400":"text-zinc-400")}>{money(transaction.realizedProfit)}</td>
               </tr>)}</tbody>
             </table></div>
           </div>
         </>}
       </div>
     </div>
+
+    {editingTransaction&&draft&&<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" onMouseDown={event=>{if(event.currentTarget===event.target){setEditingTransaction(null);setDraft(null);}}}>
+      <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-zinc-950 p-5 shadow-2xl sm:p-6">
+        <div className="mb-5 flex items-start justify-between"><div><h3 className="text-lg font-semibold">Edit Transaction</h3><p className="mt-1 text-sm text-zinc-500">{editingTransaction.groupTicker} · {dateText(editingTransaction.date)}</p></div><button type="button" onClick={()=>{setEditingTransaction(null);setDraft(null);}} className="grid size-9 place-items-center rounded-xl border border-white/10 text-zinc-500 hover:text-white"><X size={16}/></button></div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <EditField label="Date"><input type="date" value={draft.date} onChange={e=>setDraftField("date",e.target.value)} className="edit-modal-input"/></EditField>
+          <EditField label="Category"><select value={draft.category} onChange={e=>setDraftField("category",e.target.value as ProfitDrilldownTransaction["category"])} className="edit-modal-input">{["Common Stocks","Sell Call","Sell Put","Buy Call","Buy Put"].map(category=><option key={category}>{category}</option>)}</select></EditField>
+          <EditField label="Ticker"><input value={draft.ticker} onChange={e=>setDraftField("ticker",e.target.value)} className="edit-modal-input"/></EditField>
+          <EditField label="Position"><input value={draft.label} onChange={e=>setDraftField("label",e.target.value)} className="edit-modal-input"/></EditField>
+          <EditField label="Quantity"><input type="number" step="any" value={draft.quantity??""} onChange={e=>setDraftField("quantity",e.target.value===""?null:Number(e.target.value))} className="edit-modal-input"/></EditField>
+          <EditField label="Price"><input type="number" step="any" value={draft.price??""} onChange={e=>setDraftField("price",e.target.value===""?null:Number(e.target.value))} className="edit-modal-input"/></EditField>
+          <EditField label="Proceeds"><input type="number" step="any" value={draft.proceeds??""} onChange={e=>setDraftField("proceeds",e.target.value===""?null:Number(e.target.value))} className="edit-modal-input"/></EditField>
+          <EditField label="Realized P/L"><input type="number" step="any" value={draft.realizedProfit} onChange={e=>setDraftField("realizedProfit",Number(e.target.value)||0)} className="edit-modal-input"/></EditField>
+        </div>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <button type="button" onClick={deleteEditor} className="rounded-xl border border-rose-500/25 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-400 transition hover:bg-rose-500/15">Delete</button>
+          <div className="flex gap-2"><button type="button" onClick={()=>{setEditingTransaction(null);setDraft(null);}} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-400 transition hover:bg-white/[.04]">Cancel</button><button type="button" onClick={saveEditor} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-400">Save</button></div>
+        </div>
+      </div>
+    </div>}
   </div>;
+}
+
+function EditField({label,children}:{label:string;children?:ReactNode}) {
+  return <label className="space-y-1.5"><span className="text-xs font-medium text-zinc-500">{label}</span><div className="[&_.edit-modal-input]:h-10 [&_.edit-modal-input]:w-full [&_.edit-modal-input]:rounded-xl [&_.edit-modal-input]:border [&_.edit-modal-input]:border-white/10 [&_.edit-modal-input]:bg-white/[.025] [&_.edit-modal-input]:px-3 [&_.edit-modal-input]:text-sm [&_.edit-modal-input]:outline-none [&_.edit-modal-input:focus]:border-emerald-400/40">{children}</div></label>;
 }
 
 function YtdAccountChart({ account, data, currentYtd }: { account: string; data: { account: string; "2024": number; "2025": number; "2026": number }; currentYtd: number }) {
