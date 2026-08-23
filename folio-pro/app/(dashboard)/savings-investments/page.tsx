@@ -1646,7 +1646,7 @@ function QuarterlyChart({ title, subtitle, data, onProfitBarClick, selectedYear,
           <LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={9}/>
         </Bar>
       </BarChart></ResponsiveContainer></div>
-      {onProfitBarClick&&<p className="mt-2 text-center text-[11px] text-zinc-600">Click A Month Label Or Monthly Profit Bar For Details</p>}
+      
     </CardContent>
   </Card>;
 }
@@ -1731,7 +1731,7 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
   return <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event)=>{if(event.currentTarget===event.target)onClose();}}>
     <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-3xl border border-white/10 bg-zinc-950 shadow-[0_30px_90px_rgba(0,0,0,.55)]">
       <div className="sticky top-0 z-10 flex items-start justify-between border-b border-white/[.07] bg-zinc-950/95 px-5 py-4 backdrop-blur-xl sm:px-6">
-        <div><h2 className="text-xl font-semibold">{period} Details</h2><p className="mt-1 text-sm text-zinc-500">Realized Profit By Position Type And Transaction</p></div>
+        <div><h2 className="text-xl font-semibold">{period} Details</h2></div>
         <button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl border border-white/10 text-zinc-500 transition hover:bg-white/[.05] hover:text-white" aria-label="Close Details"><X size={17}/></button>
       </div>
       <div className="p-5 sm:p-6">
@@ -1749,29 +1749,29 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
           </div>
 
           <div className="mt-5 overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
-            <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Profit By Ticker</h3><p className="mt-1 text-xs text-zinc-600">Ticker Totals For {period}, Based On Close Date.</p></div>
+            <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Profit By Ticker</h3></div>
             <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm">
-              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Ticker</th><th className="px-4 py-3 text-right">Transactions</th><th className="px-4 py-3 text-right">Realized P/L</th><th className="px-4 py-3 text-right">% Of Month</th></tr></thead>
-              <tbody>{groups.map(group=><tr key={group.ticker} className="border-t border-white/[.06]"><td className="px-4 py-3 font-semibold">{group.ticker}</td><td className="px-4 py-3 text-right text-zinc-400">{group.transactions.length}</td><td className={cn("px-4 py-3 text-right font-semibold",group.realizedProfit>0?"text-emerald-400":group.realizedProfit<0?"text-rose-400":"text-zinc-400")}>{money(group.realizedProfit)}</td><td className="px-4 py-3 text-right text-zinc-400">{group.percent.toFixed(1)}%</td></tr>)}</tbody>
+              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Ticker</th><th className="px-4 py-3 text-right">Transactions</th><th className="px-4 py-3 text-right">Realized P/L</th></tr></thead>
+              <tbody>{groups.map(group=><tr key={group.ticker} className="border-t border-white/[.06]"><td className="px-4 py-3 font-semibold">{group.ticker}</td><td className="px-4 py-3 text-right text-zinc-400">{group.transactions.length}</td><td className={cn("px-4 py-3 text-right font-semibold",group.realizedProfit>0?"text-emerald-400":group.realizedProfit<0?"text-rose-400":"text-zinc-400")}>{money(group.realizedProfit)}</td></tr>)}</tbody>
             </table></div>
           </div>
 
           <div className="mt-5 overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
             <div className="flex flex-col gap-1 border-b border-white/[.07] px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
-              <div><h3 className="text-sm font-semibold">Top Profit By Transaction</h3><p className="mt-1 text-xs text-zinc-600">{onEditTransaction?"Click A Ticker To Edit Or Delete The Transaction.":"Sorted By Realized Profit, Highest To Lowest."}</p></div>
+              <div><h3 className="text-sm font-semibold">Top Profit By Transaction</h3><p className="mt-1 text-xs text-zinc-600">{onEditTransaction?"":"Sorted By Realized Profit, Highest To Lowest."}</p></div>
               <span className="text-xs text-zinc-600">{period}</span>
             </div>
-            <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm">
-              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Rank</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Ticker</th><th className="px-4 py-3">Position</th><th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Price</th><th className="px-4 py-3 text-right">Proceeds</th><th className="px-4 py-3 text-right">Realized Profit</th></tr></thead>
+            <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm">
+              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Rank</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Ticker</th><th className="px-4 py-3">Position</th><th className="px-4 py-3 text-right">Realized Profit</th></tr></thead>
               <tbody>{transactions.map((transaction,index)=><tr key={transaction.id} className="border-t border-white/[.06]">
                 <td className="px-4 py-3 font-semibold text-zinc-500">#{index+1}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateText(transaction.date)}</td>
                 <td className="whitespace-nowrap px-4 py-3">{transaction.category}</td>
                 <td className="px-4 py-3 font-semibold">{onEditTransaction?<button type="button" onClick={()=>openEditor(transaction)} className="rounded-md text-left text-emerald-400 transition hover:text-emerald-300 hover:underline">{transaction.groupTicker}</button>:transaction.groupTicker}</td>
                 <td className="max-w-72 px-4 py-3 text-zinc-400">{formatPositionLabel(transaction.label)}</td>
-                <td className="px-4 py-3 text-right">{transaction.quantity===null?"—":transaction.quantity.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right">{transaction.price===null?"—":money(transaction.price)}</td>
-                <td className="px-4 py-3 text-right">{transaction.proceeds===null?"—":money(transaction.proceeds)}</td>
+                
+                
+                
                 <td className={cn("px-4 py-3 text-right font-semibold",transaction.realizedProfit>0?"text-emerald-400":transaction.realizedProfit<0?"text-rose-400":"text-zinc-400")}>{money(transaction.realizedProfit)}</td>
               </tr>)}</tbody>
             </table></div>
