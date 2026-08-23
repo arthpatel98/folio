@@ -197,11 +197,12 @@ export default function TransactionsPage(){
       existingCounts.set(fingerprint,remaining-1);
       return false;
     });
-    return {
+    const merged: Record<DataPortfolioId, Transaction[]> = {
       robinhood:[...existingRobinhood,...importedToAdd],
       "fidelity-roth":transactionsByPortfolio["fidelity-roth"]??[],
       "fidelity-401k":transactionsByPortfolio["fidelity-401k"]??[],
     };
+    return merged;
   },[transactionsByPortfolio]);
 
   const allRows=useMemo<TransactionRow[]>(()=>{

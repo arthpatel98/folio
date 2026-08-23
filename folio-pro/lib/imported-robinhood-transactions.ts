@@ -2,7 +2,7 @@ import type { Transaction } from "@/types/portfolio";
 
 // Robinhood CSV history imported for the Transactions page only.
 // Source file contains Jan 2–Jul 10, 2026 activity and no Aug 2026 rows.
-export const importedRobinhoodTransactions = [
+export const importedRobinhoodTransactions: Transaction[] = [
   {
     "id": "csv-robinhood-2026-07-10-001",
     "symbol": "IREN",
@@ -4068,4 +4068,4 @@ export const importedRobinhoodTransactions = [
     "type": "dividend",
     "assetType": "stock"
   }
-] satisfies Transaction[];
+];
