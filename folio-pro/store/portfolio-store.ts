@@ -260,32 +260,11 @@ export const usePortfolioStore = create<State>()(
             }),
           ];
           const holdingsByPortfolio = { ...state.holdingsByPortfolio, [target]: updated };
-          const transaction: Transaction = {
-            id: `correction-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-            symbol: normalized.symbol,
-            type: "correction",
-            quantity: Math.abs(normalized.shares),
-            price: normalized.averageCost,
-            amount: 0,
-            date: new Date().toISOString().slice(0, 10),
-            fees: 0,
-            assetType: normalized.assetType,
-            optionType: normalized.optionType,
-            optionExpiry: normalized.optionExpiry,
-            optionStrike: normalized.optionStrike,
-            optionSymbol: normalized.optionSymbol,
-            notes: "Position details edited in Holdings",
-            source: "Holdings",
-            cashImpact: 0,
-          };
-          const transactionsByPortfolio = {
-            ...state.transactionsByPortfolio,
-            [target]: [transaction, ...state.transactionsByPortfolio[target]],
-          };
+          // Manual corrections to an existing holding update the holding only. They are not
+          // portfolio activity and therefore must not create a Transactions ledger entry.
           return {
             holdingsByPortfolio,
-            transactionsByPortfolio,
-            ...visibleState(state.activePortfolioId, holdingsByPortfolio, transactionsByPortfolio, state.cashByPortfolio),
+            ...visibleState(state.activePortfolioId, holdingsByPortfolio, state.transactionsByPortfolio, state.cashByPortfolio),
           };
         }),
       removeHolding: (holding) =>
@@ -633,6 +612,11 @@ export const usePortfolioStore = create<State>()(
           cash?: number;
         };
         const transactionsByPortfolio = normalizeTransactionsByPortfolio(migratedSaved.transactionsByPortfolio ?? legacyTransactions);
+        dataPortfolioIds.forEach((portfolioId) => {
+          transactionsByPortfolio[portfolioId] = transactionsByPortfolio[portfolioId].filter((transaction) => !(
+            transaction.type === "correction" && /^2026-08-/.test(transaction.date || "")
+          ));
+        });
         const holdingsByPortfolio = normalizeHoldingsByPortfolio(migratedSaved.holdingsByPortfolio ?? legacyHoldings);
         let recoveryVersion = migratedSaved.recoveryVersion ?? "";
 

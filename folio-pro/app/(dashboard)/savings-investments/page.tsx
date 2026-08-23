@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, Landmark, TrendingUp, WalletCards, X } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { portfolioSummary } from "@/lib/calculations/portfolio";
 import { cn, money } from "@/lib/utils";
@@ -33,6 +33,7 @@ type ProfitDrilldownTransaction = {
   proceeds: number | null;
   realizedProfit: number;
   category: "Sell Call" | "Sell Put" | "Buy Call" | "Buy Put" | "Common Stocks";
+  preserveLabelCasing?: boolean;
 };
 type ProfitTickerGroup = {
   ticker: string;
@@ -1076,6 +1077,40 @@ const ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS: Record<string, ProfitDrilldown
       "realizedProfit": 179.46,
       "category": "Common Stocks"
     }
+  ],
+  "Jul 2026": [
+    { "id": "gk-2026-07-30-amzn-94", "date": "2026-07-30", "ticker": "AMZN", "label": "AMAZON COM INC (AMZN)", "quantity": 7, "price": null, "proceeds": 1805.26, "realizedProfit": 5.29, "category": "Common Stocks" },
+    { "id": "gk-2026-07-31-amzn-95", "date": "2026-07-31", "ticker": "AMZN", "label": "AMAZON COM INC (AMZN)", "quantity": 8, "price": null, "proceeds": 2154.35, "realizedProfit": 234.91, "category": "Common Stocks" },
+    { "id": "gk-2026-07-21-amba-96", "date": "2026-07-21", "ticker": "AMBA", "label": "AMBARELLA, INC. (AMBA)", "quantity": 17, "price": null, "proceeds": 1164.48, "realizedProfit": 137.68, "category": "Common Stocks" },
+    { "id": "gk-2026-07-15-amzn-call-97", "date": "2026-07-15", "ticker": "AMZN", "label": "AMZN 17 JUN 2027 260.0 CALL", "quantity": 200, "price": null, "proceeds": 7739.75, "realizedProfit": 49.67, "category": "Buy Call" },
+    { "id": "gk-2026-07-21-crwv-98", "date": "2026-07-21", "ticker": "CRWV", "label": "COREWEAVE INC (CRWV)", "quantity": 20, "price": null, "proceeds": 1637.96, "realizedProfit": 99.96, "category": "Common Stocks" },
+    { "id": "gk-2026-07-07-qbtz-99", "date": "2026-07-07", "ticker": "QBTZ", "label": "DEFIANCE DAILY TARGET 2X SH (QBTZ)", "quantity": 200, "price": null, "proceeds": 925.94, "realizedProfit": 36.94, "category": "Common Stocks" },
+    { "id": "gk-2026-07-10-qbtz-100", "date": "2026-07-10", "ticker": "QBTZ", "label": "DEFIANCE DAILY TARGET 2X SH (QBTZ)", "quantity": 300, "price": null, "proceeds": 1432.41, "realizedProfit": 115.41, "category": "Common Stocks" },
+    { "id": "gk-2026-07-29-qbtz-101", "date": "2026-07-29", "ticker": "QBTZ", "label": "DEFIANCE DAILY TARGET 2X SH (QBTZ)", "quantity": 250, "price": null, "proceeds": 1379.92, "realizedProfit": 14.92, "category": "Common Stocks" },
+    { "id": "gk-2026-07-29-soxs-102", "date": "2026-07-29", "ticker": "SOXS", "label": "DIREXION DAILY SEMICONDUCTO (SOXS)", "quantity": 2, "price": null, "proceeds": 146.00, "realizedProfit": -4480.02, "category": "Common Stocks" },
+    { "id": "gk-2026-07-27-duol-103", "date": "2026-07-27", "ticker": "DUOL", "label": "DUOLINGO INC (DUOL)", "quantity": 3, "price": null, "proceeds": 400.20, "realizedProfit": -1035.44, "category": "Common Stocks" },
+    { "id": "gk-2026-07-28-iren-call-104", "date": "2026-07-28", "ticker": "IREN", "label": "IREN 07 AUG 2026 54.0 CALL", "quantity": 100, "price": null, "proceeds": 119.94, "realizedProfit": 105.90, "category": "Sell Call" },
+    { "id": "gk-2026-07-06-iren-call-105", "date": "2026-07-06", "ticker": "IREN", "label": "IREN 10 JUL 2026 57.0 CALL", "quantity": 100, "price": null, "proceeds": 108.94, "realizedProfit": 99.90, "category": "Sell Call" },
+    { "id": "gk-2026-07-13-iren-call-106", "date": "2026-07-13", "ticker": "IREN", "label": "IREN 17 JUL 2026 54.0 CALL", "quantity": 100, "price": null, "proceeds": 110.94, "realizedProfit": 94.90, "category": "Sell Call" },
+    { "id": "gk-2026-07-21-unhg-107", "date": "2026-07-21", "ticker": "UNHG", "label": "LEVERAGE SHARES 2X LONG UNH (UNHG)", "quantity": 107.228916, "price": null, "proceeds": 2600.22, "realizedProfit": 239.04, "category": "Common Stocks" },
+    { "id": "gk-2026-07-21-unhg-108", "date": "2026-07-21", "ticker": "UNHG", "label": "LEVERAGE SHARES 2X LONG UNH (UNHG)", "quantity": 192.771084, "price": null, "proceeds": 4674.56, "realizedProfit": 674.56, "category": "Common Stocks" },
+    { "id": "gk-2026-07-01-meta-109", "date": "2026-07-01", "ticker": "META", "label": "META PLATFORMS INC (META)", "quantity": 3, "price": null, "proceeds": 1845.09, "realizedProfit": 20.02, "category": "Common Stocks" },
+    { "id": "gk-2026-07-07-meta-110", "date": "2026-07-07", "ticker": "META", "label": "META PLATFORMS INC (META)", "quantity": 3, "price": null, "proceeds": 1835.96, "realizedProfit": 83.96, "category": "Common Stocks" },
+    { "id": "gk-2026-07-10-meta-111", "date": "2026-07-10", "ticker": "META", "label": "META PLATFORMS INC (META)", "quantity": 4, "price": null, "proceeds": 2707.93, "realizedProfit": 451.93, "category": "Common Stocks" },
+    { "id": "gk-2026-07-16-msft-call-112", "date": "2026-07-16", "ticker": "MSFT", "label": "MSFT 21 JAN 2028 500.0 CALL", "quantity": 100, "price": null, "proceeds": 4921.84, "realizedProfit": 671.80, "category": "Buy Call" },
+    { "id": "gk-2026-07-07-pltr-113", "date": "2026-07-07", "ticker": "PLTR", "label": "PALANTIR TECHNOLOGIES INC C (PLTR)", "quantity": 16, "price": null, "proceeds": 2155.15, "realizedProfit": -25.76, "category": "Common Stocks" },
+    { "id": "gk-2026-07-07-pltr-114", "date": "2026-07-07", "ticker": "PLTR", "label": "PALANTIR TECHNOLOGIES INC C (PLTR)", "quantity": 12.446245, "price": null, "proceeds": 0, "realizedProfit": 20.04, "category": "Common Stocks" },
+    { "id": "gk-2026-07-07-pltr-115", "date": "2026-07-07", "ticker": "PLTR", "label": "PALANTIR TECHNOLOGIES INC C (PLTR)", "quantity": 3.553755, "price": null, "proceeds": 0, "realizedProfit": 5.72, "category": "Common Stocks" },
+    { "id": "gk-2026-07-20-pltr-116", "date": "2026-07-20", "ticker": "PLTR", "label": "PALANTIR TECHNOLOGIES INC C (PLTR)", "quantity": 14, "price": null, "proceeds": 1894.16, "realizedProfit": 71.62, "category": "Common Stocks" },
+    { "id": "gk-2026-07-20-pltr-117", "date": "2026-07-20", "ticker": "PLTR", "label": "PALANTIR TECHNOLOGIES INC C (PLTR)", "quantity": 1.553755, "price": null, "proceeds": 0, "realizedProfit": 0.41, "category": "Common Stocks" },
+    { "id": "gk-2026-07-09-qcom-call-118", "date": "2026-07-09", "ticker": "QCOM", "label": "QCOM 21 JAN 2028 250.0 CALL", "quantity": 100, "price": null, "proceeds": 4764.85, "realizedProfit": 474.81, "category": "Buy Call" },
+    { "id": "gk-2026-07-17-robn-call-119", "date": "2026-07-17", "ticker": "ROBN", "label": "ROBN 17 JUL 2026 45.0 CALL", "quantity": 100, "price": null, "proceeds": 109.94, "realizedProfit": 99.90, "category": "Sell Call" },
+    { "id": "gk-2026-07-09-sitm-120", "date": "2026-07-09", "ticker": "SITM", "label": "SITIME CORPORATION (SITM)", "quantity": 2, "price": null, "proceeds": 1334.97, "realizedProfit": 63.78, "category": "Common Stocks" },
+    { "id": "gk-2026-07-16-mstz-121", "date": "2026-07-16", "ticker": "MSTZ", "label": "T-REX 2X INVERSE MSTR DAILY (MSTZ)", "quantity": 110, "price": null, "proceeds": 1372.75, "realizedProfit": 85.75, "category": "Common Stocks" },
+    { "id": "gk-2026-07-23-mstz-122", "date": "2026-07-23", "ticker": "MSTZ", "label": "T-REX 2X INVERSE MSTR DAILY (MSTZ)", "quantity": 120, "price": null, "proceeds": 1451.95, "realizedProfit": 47.95, "category": "Common Stocks" },
+    { "id": "gk-2026-07-29-mstz-123", "date": "2026-07-29", "ticker": "MSTZ", "label": "T-REX 2X INVERSE MSTR DAILY (MSTZ)", "quantity": 100, "price": null, "proceeds": 1175.95, "realizedProfit": 22.95, "category": "Common Stocks" },
+    { "id": "gk-2026-07-20-unhg-call-124", "date": "2026-07-20", "ticker": "UNHG", "label": "UNHG 17 JUL 2026 25.0 CALL", "quantity": 300, "price": null, "proceeds": 359.86, "realizedProfit": 359.86, "category": "Sell Call" },
+    { "id": "gk-2026-07-09-unhg-call-125", "date": "2026-07-09", "ticker": "UNHG", "label": "UNHG 18 SEP 2026 23.0 CALL", "quantity": 300, "price": null, "proceeds": 623.85, "realizedProfit": -441.27, "category": "Sell Call" }
   ]
 };
 
@@ -1189,8 +1224,9 @@ export default function SavingsInvestmentsPage() {
   const verifiedCloseDateTransactions=useMemo<Record<string,ProfitDrilldownTransaction[]>>(()=>{
     const rebucketed: Record<string,ProfitDrilldownTransaction[]> = {};
     Object.values(ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS).flat().forEach(transaction=>{
-      if(verifiedProfitEdits[transaction.id]?.deleted)return;
-      const edited={...transaction,...(verifiedProfitEdits[transaction.id]??{})};
+      const patch=verifiedProfitEdits[transaction.id]??{};
+      if(patch.deleted)return;
+      const edited={...transaction,...patch,preserveLabelCasing:typeof patch.label==="string"};
       const parsed=new Date(`${edited.date}T12:00:00`);
       if(Number.isNaN(parsed.getTime()))return;
       const period=new Intl.DateTimeFormat("en-US",{month:"short",year:"numeric"}).format(parsed);
@@ -1609,7 +1645,7 @@ export default function SavingsInvestmentsPage() {
 }
 
 function chartValueLabel(value: number) {
-  return money(value);
+  return wholeDollar(value);
 }
 
 function chartAxisValue(value: number) {
@@ -1642,17 +1678,19 @@ function QuarterlyChart({ title, subtitle, data, onProfitBarClick, selectedYear,
     </CardHeader>
     <CardContent className="pt-5">
       <div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:4}}>
-        <defs><linearGradient id={`${gradientId}-profit`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={1}/><stop offset="100%" stopColor="#10b981" stopOpacity={0.65}/></linearGradient><linearGradient id={`${gradientId}-income`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.65}/></linearGradient></defs>
+        <defs><linearGradient id={`${gradientId}-profit`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={1}/><stop offset="100%" stopColor="#10b981" stopOpacity={0.65}/></linearGradient><linearGradient id={`${gradientId}-income`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.65}/></linearGradient><linearGradient id={`${gradientId}-negative`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#fb7185" stopOpacity={1}/><stop offset="100%" stopColor="#e11d48" stopOpacity={0.72}/></linearGradient></defs>
         <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/>
         <XAxis dataKey="period" tick={<PeriodTick/>} axisLine={false} tickLine={false} interval={0} height={34}/>
         <YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>chartAxisValue(v)}/>
         <Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5",boxShadow:"0 12px 30px rgba(0,0,0,.25)"}} formatter={(value: any)=>money(Number(value))}/>
         <Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/>
         <Bar dataKey="realizedProfit" name="Profit" fill={`url(#${gradientId}-profit)`} radius={[7,7,2,2]} maxBarSize={34} onClick={openProfitDetail} style={{cursor:onProfitBarClick?"pointer":"default"}}>
-          <LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={9}/>
+          {data.map((row)=><Cell key={`profit-${row.period}`} fill={row.realizedProfit<0?`url(#${gradientId}-negative)`:`url(#${gradientId}-profit)`}/>)}
+          <LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/>
         </Bar>
         <Bar dataKey="income" name="Dividend, Interest & Bonus" fill={`url(#${gradientId}-income)`} radius={[7,7,2,2]} maxBarSize={34}>
-          <LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={9}/>
+          {data.map((row)=><Cell key={`income-${row.period}`} fill={row.income<0?`url(#${gradientId}-negative)`:`url(#${gradientId}-income)`}/>)}
+          <LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/>
         </Bar>
       </BarChart></ResponsiveContainer></div>
       
@@ -1742,7 +1780,7 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
   const openEditor=(transaction:ProfitDrilldownTransaction & {groupTicker:string})=>{
     if(!onEditTransaction)return;
     setEditingTransaction(transaction);
-    setDraft({...transaction,label:formatPositionLabel(transaction.label)});
+    setDraft({...transaction});
   };
   const saveEditor=()=>{
     if(!editingTransaction||!draft||!onEditTransaction)return;
@@ -1750,7 +1788,7 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
       date:draft.date,
       category:draft.category,
       ticker:draft.ticker.trim().toUpperCase(),
-      label:formatPositionLabel(draft.label.trim()),
+      label:draft.label.trim(),
       quantity:draft.quantity,
       price:draft.price,
       proceeds:draft.proceeds,
@@ -1810,7 +1848,7 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
                 <td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateText(transaction.date)}</td>
                 <td className="whitespace-nowrap px-4 py-3">{transaction.category}</td>
                 <td className="px-4 py-3 font-semibold">{onEditTransaction?<button type="button" onClick={()=>openEditor(transaction)} className="rounded-md text-left text-emerald-400 transition hover:text-emerald-300 hover:underline">{transaction.groupTicker}</button>:transaction.groupTicker}</td>
-                <td className="max-w-72 px-4 py-3 text-zinc-400">{onEditTransaction?<button type="button" onClick={()=>openEditor(transaction)} className="w-full rounded-md text-left transition hover:bg-white/[.035] hover:text-zinc-200" title="Click To Edit Position">{formatPositionLabel(transaction.label)}</button>:formatPositionLabel(transaction.label)}</td>
+                <td className="max-w-72 px-4 py-3 text-zinc-400">{transaction.preserveLabelCasing?transaction.label:formatPositionLabel(transaction.label)}</td>
                 
                 
                 
@@ -1851,9 +1889,9 @@ function YtdAccountChart({ account, data, currentYtd }: { account: string; data:
     { year: "2025", performance: data["2025"] * 100 },
     { year: "2026", performance: currentYtd * 100 },
   ];
-  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">{account} YTD Performance</h2><p className="text-xs text-zinc-500">Annual Portfolio Performance</p></CardHeader><CardContent className="pt-5"><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={chartData} margin={{left:4,right:12,top:28,bottom:0}}><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="year" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`${v.toFixed(0)}%`}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5"}} formatter={(value: any)=>`${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}%`}/><Bar dataKey="performance" name="YTD Performance" fill="#34d399" radius={[8,8,2,2]} maxBarSize={72}><LabelList dataKey="performance" position="top" formatter={(value: any)=>`${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(1)}%`} fill="#a1a1aa" fontSize={10}/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
+  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">{account} YTD Performance</h2><p className="text-xs text-zinc-500">Annual Portfolio Performance</p></CardHeader><CardContent className="pt-5"><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={chartData} margin={{left:4,right:12,top:28,bottom:0}}><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="year" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`${v.toFixed(0)}%`}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5"}} formatter={(value: any)=>`${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}%`}/><Bar dataKey="performance" name="YTD Performance" fill="#34d399" radius={[8,8,2,2]} maxBarSize={72}>{chartData.map(row=><Cell key={row.year} fill={row.performance<0?"#f87171":"#34d399"}/>) }<LabelList dataKey="performance" position="top" formatter={(value: any)=>`${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(1)}%`} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
 }
 
 function IncomeTotalsChart({ data }: { data: { account: string; realizedProfit: number; income: number }[] }) {
-  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">Realized Income Totals</h2><p className="text-xs text-zinc-500">Total Realized Profit Compared With Dividend, Interest & Bonus For Robinhood And Fidelity Roth IRA.</p></CardHeader><CardContent className="pt-5"><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={10} barCategoryGap="30%" margin={{left:4,right:12,top:28,bottom:0}}><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="account" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>chartAxisValue(v)}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5"}} formatter={(value: any)=>money(Number(value))}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/><Bar dataKey="realizedProfit" name="Realized Profit" fill="#34d399" radius={[8,8,2,2]} maxBarSize={50}><LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={10}/></Bar><Bar dataKey="income" name="Dividend, Interest & Bonus" fill="#60a5fa" radius={[8,8,2,2]} maxBarSize={50}><LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={10}/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
+  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">Realized Income Totals</h2><p className="text-xs text-zinc-500">Total Realized Profit Compared With Dividend, Interest & Bonus For Robinhood And Fidelity Roth IRA.</p></CardHeader><CardContent className="pt-5"><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={10} barCategoryGap="30%" margin={{left:4,right:12,top:28,bottom:0}}><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="account" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>chartAxisValue(v)}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5"}} formatter={(value: any)=>money(Number(value))}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/><Bar dataKey="realizedProfit" name="Realized Profit" fill="#34d399" radius={[8,8,2,2]} maxBarSize={50}>{data.map(row=><Cell key={`profit-${row.account}`} fill={row.realizedProfit<0?"#f87171":"#34d399"}/>)}<LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar><Bar dataKey="income" name="Dividend, Interest & Bonus" fill="#60a5fa" radius={[8,8,2,2]} maxBarSize={50}>{data.map(row=><Cell key={`income-${row.account}`} fill={row.income<0?"#f87171":"#60a5fa"}/>)}<LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
 }
