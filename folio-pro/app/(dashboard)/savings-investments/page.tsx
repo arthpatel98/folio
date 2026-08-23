@@ -40,6 +40,32 @@ type ProfitTickerGroup = {
   percent: number;
   transactions: ProfitDrilldownTransaction[];
 };
+
+const robinhoodVerifiedCloseDateProfit: Record<string, Record<string, number>> = {
+  "Jan 2026": {
+    IREN: 1042.77,
+    IRE: 409.66,
+    UNHG: 343.67,
+    CIFR: 161.74,
+    NBIS: 122.95,
+    MMYT: -1114.29,
+    WDAY: -793.66,
+  },
+  "Feb 2026": {
+    META: 1134.91,
+    AMZN: 414.91,
+    NBIS: 155.91,
+    NVDX: 128.84,
+    TSM: 61.85,
+    AMAT: 45.19,
+    WDAY: -826.42,
+    MMYT: -1121.82,
+  },
+};
+const robinhoodVerifiedCloseDateMonthlyTotals: Record<string, number> = {
+  "Jan 2026": 172.84,
+  "Feb 2026": -6.63,
+};
 type ExtrasByPortfolio = Record<"robinhood"|"fidelity-roth", ExtraRow[]>;
 const EXTRAS_STORAGE_KEY = "folio-portfolio-performance-extras-v1";
 type AllTimeHighEntry = { value: number; date: string };
@@ -283,7 +309,23 @@ export default function SavingsInvestmentsPage() {
       .sort((a,b) => b.realizedProfit - a.realizedProfit);
   }, [profitDrilldown, transactionsByPortfolio]);
 
-  const profitDrilldownTotal = profitDrilldownGroups.reduce((sum, group) => sum + group.realizedProfit, 0);
+  const displayedProfitDrilldownGroups = useMemo<ProfitTickerGroup[]>(()=>{
+    if(!profitDrilldown || profitDrilldown.portfolioId!=="robinhood") return profitDrilldownGroups;
+    const verified=robinhoodVerifiedCloseDateProfit[profitDrilldown.period];
+    if(!verified) return profitDrilldownGroups;
+    const transactionByTicker=new Map(profitDrilldownGroups.map(group=>[group.ticker,group.transactions]));
+    const total=Object.values(verified).reduce((sum,value)=>sum+value,0);
+    return Object.entries(verified)
+      .map(([ticker,realizedProfit])=>({
+        ticker,
+        realizedProfit,
+        percent:total?realizedProfit/total*100:0,
+        transactions:transactionByTicker.get(ticker)??[],
+      }))
+      .sort((a,b)=>b.realizedProfit-a.realizedProfit);
+  },[profitDrilldown,profitDrilldownGroups]);
+
+  const profitDrilldownTotal = displayedProfitDrilldownGroups.reduce((sum, group) => sum + group.realizedProfit, 0);
 
   const mergeMonthlySales = (
     base: { period: string; realizedProfit: number; income: number }[],
@@ -306,10 +348,18 @@ export default function SavingsInvestmentsPage() {
     });
   };
 
-  const robinhoodQuarterly = useMemo(() => mergeMonthlySales(quarterlyIncome.map((row) => {
-    const realizedProfit = row.robinhoodProfit - (row.period === "Q1 2025" ? 311.71 : 0);
-    return { period: row.period, realizedProfit, income: row.robinhoodIncome };
-  }), realizedSalesByMonth.robinhood), [realizedSalesByMonth]);
+  const robinhoodQuarterly = useMemo(() => {
+    const base=quarterlyIncome.map((row) => {
+      const realizedProfit = row.period === "Q1 2026"
+        ? -3854.32
+        : row.robinhoodProfit - (row.period === "Q1 2025" ? 311.71 : 0);
+      return { period: row.period, realizedProfit, income: row.robinhoodIncome };
+    });
+    Object.entries(robinhoodVerifiedCloseDateMonthlyTotals).forEach(([period,realizedProfit])=>{
+      base.push({period,realizedProfit,income:0});
+    });
+    return mergeMonthlySales(base, realizedSalesByMonth.robinhood);
+  }, [realizedSalesByMonth]);
 
   const rothQuarterly = useMemo(() => mergeMonthlySales(quarterlyIncome.map((row) => ({
     period: row.period,
@@ -438,7 +488,7 @@ export default function SavingsInvestmentsPage() {
 
     {profitDrilldown && <ProfitDrilldownModal
       period={profitDrilldown.period}
-      groups={profitDrilldownGroups}
+      groups={displayedProfitDrilldownGroups}
       total={profitDrilldownTotal}
       onClose={()=>setProfitDrilldown(null)}
     />}
