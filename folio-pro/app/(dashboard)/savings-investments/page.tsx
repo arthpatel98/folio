@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BarChart3, Landmark, TrendingUp, WalletCards, X } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { portfolioSummary } from "@/lib/calculations/portfolio";
 import { cn, money } from "@/lib/utils";
@@ -32,6 +32,7 @@ type ProfitDrilldownTransaction = {
   price: number | null;
   proceeds: number | null;
   realizedProfit: number;
+  category: "Sell Call" | "Sell Put" | "Buy Call" | "Buy Put" | "Common Stocks";
 };
 type ProfitTickerGroup = {
   ticker: string;
@@ -248,6 +249,15 @@ export default function SavingsInvestmentsPage() {
       const label = transaction.assetType === "option"
         ? `${ticker}${strike} ${optionType || "Option"}${expiry}`
         : ticker;
+      const category: ProfitDrilldownTransaction["category"] = transaction.assetType !== "option"
+        ? "Common Stocks"
+        : transaction.optionType === "sell-call"
+          ? "Sell Call"
+          : transaction.optionType === "sell-put"
+            ? "Sell Put"
+            : transaction.optionType === "buy-put"
+              ? "Buy Put"
+              : "Buy Call";
       const row: ProfitDrilldownTransaction = {
         id: transaction.id,
         date: transaction.date,
@@ -259,6 +269,7 @@ export default function SavingsInvestmentsPage() {
           ? transaction.realizedProceeds
           : transaction.amount ? Math.abs(transaction.amount) : null,
         realizedProfit: Number(transaction.realizedGain) || 0,
+        category,
       };
       groups.set(ticker, [...(groups.get(ticker) ?? []), row]);
     });
@@ -517,36 +528,58 @@ function QuarterlyChart({ title, subtitle, data, onProfitBarClick }: { title: st
 }
 
 function ProfitDrilldownModal({period,groups,total,onClose}:{period:string;groups:ProfitTickerGroup[];total:number;onClose:()=>void}) {
-  const palette=["#34d399","#60a5fa","#fbbf24","#a78bfa","#2dd4bf","#fb7185","#38bdf8","#f97316"];
-  const transactions=groups.flatMap(group=>group.transactions.map(transaction=>({...transaction,groupTicker:group.ticker})))
-    .sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+  const transactions=groups
+    .flatMap(group=>group.transactions.map(transaction=>({...transaction,groupTicker:group.ticker})))
+    .sort((a,b)=>b.realizedProfit-a.realizedProfit||b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+  const categoryOrder: ProfitDrilldownTransaction["category"][]=["Sell Call","Sell Put","Buy Call","Buy Put","Common Stocks"];
+  const categoryTotals=categoryOrder.map(category=>{
+    const categoryTransactions=transactions.filter(transaction=>transaction.category===category);
+    return {
+      category,
+      realizedProfit:categoryTransactions.reduce((sum,transaction)=>sum+transaction.realizedProfit,0),
+      count:categoryTransactions.length,
+    };
+  });
   const dateText=(value:string)=>new Date(`${value}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
   return <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event)=>{if(event.currentTarget===event.target)onClose();}}>
     <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-3xl border border-white/10 bg-zinc-950 shadow-[0_30px_90px_rgba(0,0,0,.55)]">
       <div className="sticky top-0 z-10 flex items-start justify-between border-b border-white/[.07] bg-zinc-950/95 px-5 py-4 backdrop-blur-xl sm:px-6">
-        <div><h2 className="text-xl font-semibold">{period} Details</h2><p className="mt-1 text-sm text-zinc-500">Realized Profit By Ticker And Transaction</p></div>
+        <div><h2 className="text-xl font-semibold">{period} Details</h2><p className="mt-1 text-sm text-zinc-500">Realized Profit By Position Type And Transaction</p></div>
         <button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl border border-white/10 text-zinc-500 transition hover:bg-white/[.05] hover:text-white" aria-label="Close Details"><X size={17}/></button>
       </div>
       <div className="p-5 sm:p-6">
         <div className="mb-5"><p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Profit</p><p className={cn("mt-1 text-3xl font-semibold",total>=0?"text-emerald-400":"text-rose-400")}>{money(total)}</p></div>
         {groups.length===0?<div className="rounded-2xl border border-white/10 bg-white/[.025] px-6 py-16 text-center text-sm text-zinc-500">No transaction-level profit details are available for {period}.</div>:<>
-          <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
-            <div className="rounded-2xl border border-white/[.08] bg-white/[.02] p-4 sm:p-5">
-              <h3 className="text-sm font-semibold">Profit By Ticker</h3>
-              <div className="mt-3 h-72"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={groups} dataKey="realizedProfit" nameKey="ticker" cx="50%" cy="50%" innerRadius={70} outerRadius={105} paddingAngle={2} stroke="rgba(0,0,0,.25)" strokeWidth={2}>{groups.map((group,index)=><Cell key={group.ticker} fill={palette[index%palette.length]}/>)}</Pie><Tooltip contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,color:"#f4f4f5"}} formatter={(value:any)=>money(Number(value))}/></PieChart></ResponsiveContainer></div>
-              <div className="-mt-40 pointer-events-none relative mx-auto flex h-24 w-32 flex-col items-center justify-center text-center"><p className="text-xl font-semibold">{money(total)}</p><p className="text-[10px] uppercase tracking-wide text-zinc-600">Total Profit</p></div>
-              <div className="mt-20 grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
-                {groups.map((group,index)=><div key={group.ticker} className="flex items-center justify-between gap-3 rounded-xl px-2 py-1.5 text-sm"><div className="flex min-w-0 items-center gap-2"><span className="size-2.5 shrink-0 rounded-full" style={{backgroundColor:palette[index%palette.length]}}/><span className="truncate font-medium">{group.ticker}</span></div><div className="flex shrink-0 items-center gap-3"><span className="font-medium">{money(group.realizedProfit)}</span><span className="w-12 text-right text-xs text-zinc-500">{group.percent.toFixed(1)}%</span></div></div>)}
-              </div>
-            </div>
-            <div className="overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
-              <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Ticker Summary</h3></div>
-              <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm"><thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Ticker</th><th className="px-4 py-3 text-right">Transactions</th><th className="px-4 py-3 text-right">Realized Profit</th><th className="px-4 py-3 text-right">% Of Total</th></tr></thead><tbody>{groups.map((group,index)=><tr key={group.ticker} className="border-t border-white/[.06]"><td className="px-4 py-3"><span className="mr-2 inline-block size-2.5 rounded-full" style={{backgroundColor:palette[index%palette.length]}}/><span className="font-medium">{group.ticker}</span></td><td className="px-4 py-3 text-right text-zinc-400">{group.transactions.length}</td><td className={cn("px-4 py-3 text-right font-semibold",group.realizedProfit>=0?"text-emerald-400":"text-rose-400")}>{money(group.realizedProfit)}</td><td className="px-4 py-3 text-right text-zinc-400">{group.percent.toFixed(1)}%</td></tr>)}<tr className="border-t border-white/10 bg-white/[.025] font-semibold"><td className="px-4 py-3">Total</td><td className="px-4 py-3 text-right">{transactions.length}</td><td className={cn("px-4 py-3 text-right",total>=0?"text-emerald-400":"text-rose-400")}>{money(total)}</td><td className="px-4 py-3 text-right">100%</td></tr></tbody></table></div>
+          <div>
+            <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-semibold">Profit By Position Type</h3><span className="text-xs text-zinc-600">{transactions.length} Transactions</span></div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              {categoryTotals.map(item=><div key={item.category} className="rounded-2xl border border-white/[.08] bg-white/[.025] p-4">
+                <p className="text-sm font-medium text-zinc-400">{item.category}</p>
+                <p className={cn("mt-3 text-2xl font-semibold",item.realizedProfit>0?"text-emerald-400":item.realizedProfit<0?"text-rose-400":"text-zinc-300")}>{money(item.realizedProfit)}</p>
+                <p className="mt-2 text-xs text-zinc-600">{item.count} {item.count===1?"Transaction":"Transactions"}</p>
+              </div>)}
             </div>
           </div>
+
           <div className="mt-5 overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
-            <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Transaction Detail</h3><p className="mt-1 text-xs text-zinc-600">Each transaction contributing to the {period} profit bar.</p></div>
-            <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Ticker</th><th className="px-4 py-3">Position</th><th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Price</th><th className="px-4 py-3 text-right">Proceeds</th><th className="px-4 py-3 text-right">Realized Profit</th></tr></thead><tbody>{transactions.map(transaction=><tr key={transaction.id} className="border-t border-white/[.06]"><td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateText(transaction.date)}</td><td className="px-4 py-3 font-semibold">{transaction.groupTicker}</td><td className="max-w-72 px-4 py-3 text-zinc-400">{transaction.label}</td><td className="px-4 py-3 text-right">{transaction.quantity===null?"—":transaction.quantity.toLocaleString()}</td><td className="px-4 py-3 text-right">{transaction.price===null?"—":money(transaction.price)}</td><td className="px-4 py-3 text-right">{transaction.proceeds===null?"—":money(transaction.proceeds)}</td><td className={cn("px-4 py-3 text-right font-semibold",transaction.realizedProfit>=0?"text-emerald-400":"text-rose-400")}>{money(transaction.realizedProfit)}</td></tr>)}</tbody></table></div>
+            <div className="flex flex-col gap-1 border-b border-white/[.07] px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
+              <div><h3 className="text-sm font-semibold">Top Profit By Transaction</h3><p className="mt-1 text-xs text-zinc-600">Sorted By Realized Profit, Highest To Lowest.</p></div>
+              <span className="text-xs text-zinc-600">{period}</span>
+            </div>
+            <div className="overflow-x-auto"><table className="w-full min-w-[980px] text-sm">
+              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Rank</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Ticker</th><th className="px-4 py-3">Position</th><th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Price</th><th className="px-4 py-3 text-right">Proceeds</th><th className="px-4 py-3 text-right">Realized Profit</th></tr></thead>
+              <tbody>{transactions.map((transaction,index)=><tr key={transaction.id} className="border-t border-white/[.06]">
+                <td className="px-4 py-3 font-semibold text-zinc-500">#{index+1}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateText(transaction.date)}</td>
+                <td className="whitespace-nowrap px-4 py-3"><span className="inline-flex rounded-lg border border-white/10 bg-white/[.035] px-2 py-1 text-xs font-medium text-zinc-300">{transaction.category}</span></td>
+                <td className="px-4 py-3 font-semibold">{transaction.groupTicker}</td>
+                <td className="max-w-72 px-4 py-3 text-zinc-400">{transaction.label}</td>
+                <td className="px-4 py-3 text-right">{transaction.quantity===null?"—":transaction.quantity.toLocaleString()}</td>
+                <td className="px-4 py-3 text-right">{transaction.price===null?"—":money(transaction.price)}</td>
+                <td className="px-4 py-3 text-right">{transaction.proceeds===null?"—":money(transaction.proceeds)}</td>
+                <td className={cn("px-4 py-3 text-right font-semibold",transaction.realizedProfit>0?"text-emerald-400":transaction.realizedProfit<0?"text-rose-400":"text-zinc-400")}>{money(transaction.realizedProfit)}</td>
+              </tr>)}</tbody>
+            </table></div>
           </div>
         </>}
       </div>

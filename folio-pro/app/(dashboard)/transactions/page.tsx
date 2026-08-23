@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { CalendarDays, CircleDollarSign, Plus, ReceiptText, Search, TrendingUp, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
@@ -37,6 +37,14 @@ const TYPE_LABELS: Record<TransactionType,string> = {
 type Category = "all" | "stocks" | "options" | "income" | "cash";
 type CashEntryType = "dividend" | "interest" | "deposit" | "withdrawal" | "transfer" | "cash-adjustment";
 type TransactionRow = { transaction: Transaction; portfolioId: DataPortfolioId };
+type TransactionEditOverride = Partial<Transaction> & {
+  cashValueOverride?: number;
+  realizedPctOverride?: number;
+  avgDaysOverride?: number;
+};
+type TransactionEditOverrides = Record<string, TransactionEditOverride>;
+const TRANSACTION_EDIT_OVERRIDES_KEY = "folio-transaction-edit-overrides-v1";
+const editKey=(portfolioId:DataPortfolioId,id:string)=>`${portfolioId}:${id}`;
 
 const money=(value:number)=>Number(value||0).toLocaleString("en-US",{style:"currency",currency:"USD",minimumFractionDigits:2,maximumFractionDigits:2});
 const signedMoney=(value:number)=>`${value>0?"+":""}${money(value)}`;
@@ -181,7 +189,24 @@ export default function TransactionsPage(){
   const [entrySymbol,setEntrySymbol]=useState("");
   const [entryNotes,setEntryNotes]=useState("");
   const [page,setPage]=useState(1);
+  const [transactionEdits,setTransactionEdits]=useState<TransactionEditOverrides>({});
   const PAGE_SIZE=30;
+
+  useEffect(()=>{
+    try{
+      const raw=window.localStorage.getItem(TRANSACTION_EDIT_OVERRIDES_KEY);
+      if(raw)setTransactionEdits(JSON.parse(raw));
+    }catch{}
+  },[]);
+
+  const saveTransactionEdit=(portfolioId:DataPortfolioId,id:string,patch:TransactionEditOverride)=>{
+    setTransactionEdits(current=>{
+      const key=editKey(portfolioId,id);
+      const next={...current,[key]:{...(current[key]??{}),...patch}};
+      try{window.localStorage.setItem(TRANSACTION_EDIT_OVERRIDES_KEY,JSON.stringify(next));}catch{}
+      return next;
+    });
+  };
 
   const pageTransactionsByPortfolio=useMemo(()=>{
     const existingRobinhood=transactionsByPortfolio.robinhood??[];
@@ -197,13 +222,19 @@ export default function TransactionsPage(){
       existingCounts.set(fingerprint,remaining-1);
       return false;
     });
+    const applyEdits=(portfolioId:DataPortfolioId,tx:Transaction):Transaction=>{
+      const patch=transactionEdits[editKey(portfolioId,tx.id)];
+      if(!patch)return tx;
+      const {cashValueOverride: _cashValueOverride,realizedPctOverride: _realizedPctOverride,avgDaysOverride: _avgDaysOverride,...transactionPatch}=patch;
+      return {...tx,...transactionPatch};
+    };
     const merged: Record<DataPortfolioId, Transaction[]> = {
-      robinhood:[...existingRobinhood,...importedToAdd],
-      "fidelity-roth":transactionsByPortfolio["fidelity-roth"]??[],
-      "fidelity-401k":transactionsByPortfolio["fidelity-401k"]??[],
+      robinhood:[...existingRobinhood,...importedToAdd].map(tx=>applyEdits("robinhood",tx)),
+      "fidelity-roth":(transactionsByPortfolio["fidelity-roth"]??[]).map(tx=>applyEdits("fidelity-roth",tx)),
+      "fidelity-401k":(transactionsByPortfolio["fidelity-401k"]??[]).map(tx=>applyEdits("fidelity-401k",tx)),
     };
     return merged;
-  },[transactionsByPortfolio]);
+  },[transactionsByPortfolio,transactionEdits]);
 
   const allRows=useMemo<TransactionRow[]>(()=>{
     const ids:DataPortfolioId[]=activeId==="all"?["robinhood","fidelity-roth","fidelity-401k"]:[activeId];
@@ -365,21 +396,23 @@ export default function TransactionsPage(){
         <table className="w-full min-w-[1320px] text-sm">
           <thead className="bg-white/[.025] text-left text-xs tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Date</th>{activeId==="all"&&<th className="px-4 py-3">Portfolio</th>}<th className="px-4 py-3">Type</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Quantity</th><th className="px-4 py-3">Price</th><th className="px-4 py-3">Cash Impact</th><th className="px-4 py-3">Cash Value</th><th className="px-4 py-3">Realized P/L</th><th className="px-4 py-3">Realized P/L %</th><th className="px-4 py-3">Avg. Days Held</th></tr></thead>
           <tbody>{filteredRows.length===0?<tr><td colSpan={activeId==="all"?11:10} className="px-4 py-16 text-center text-zinc-500"><ReceiptText className="mx-auto mb-3 size-8 opacity-40"/><div>No transactions match these filters.</div></td></tr>:pagedRows.map(({transaction:tx,portfolioId})=>{
+            const editOverride=transactionEdits[editKey(portfolioId,tx.id)];
             const cashImpact=transactionCashImpact(tx);
-            const realizedPct=realizedPlPct(tx);
-            const avgDays=explicitAverageDaysHeld(tx)??historicalDaysByTransactionId.get(`${portfolioId}:${tx.id}`)??null;
+            const realizedPct=typeof editOverride?.realizedPctOverride==="number" ? editOverride.realizedPctOverride : realizedPlPct(tx);
+            const avgDays=typeof editOverride?.avgDaysOverride==="number" ? editOverride.avgDaysOverride : (explicitAverageDaysHeld(tx)??historicalDaysByTransactionId.get(`${portfolioId}:${tx.id}`)??null);
+            const cashValue=typeof editOverride?.cashValueOverride==="number" ? editOverride.cashValueOverride : (cashValueByTransaction.get(`${portfolioId}:${tx.id}`)??0);
             return <tr key={`${portfolioId}:${tx.id}`} className="border-t border-white/[.06] align-top hover:bg-white/[.018]">
-              <td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateLabel(tx.date)}</td>
+              <EditableCell kind="date" value={tx.date} display={dateLabel(tx.date)} className="whitespace-nowrap text-zinc-400" onSave={value=>saveTransactionEdit(portfolioId,tx.id,{date:String(value)})}/>
               {activeId==="all"&&<td className="whitespace-nowrap px-4 py-3 text-xs text-zinc-400">{PORTFOLIO_NAMES[portfolioId]}</td>}
-              <td className="px-4 py-3"><span className={cn("inline-flex whitespace-nowrap rounded-lg border px-2 py-1 text-xs font-medium",typeBadgeClass(tx))}>{displayType(tx)}</span></td>
-              <td className="max-w-64 px-4 py-3 font-medium">{optionLabel(tx)}</td>
-              <td className="px-4 py-3">{typeof tx.quantity==="number"?Math.abs(tx.quantity).toLocaleString():"—"}</td>
-              <td className="px-4 py-3">{typeof tx.price==="number"?money(tx.price):"—"}</td>
-              <td className={cn("px-4 py-3 font-medium",cashImpact>0?"text-emerald-400":cashImpact<0?"text-red-400":"text-zinc-500")}>{cashImpact?signedMoney(cashImpact):"—"}</td>
-              <td className="whitespace-nowrap px-4 py-3 font-medium text-zinc-300">{money(cashValueByTransaction.get(`${portfolioId}:${tx.id}`)??0)}</td>
-              <td className={cn("px-4 py-3 font-medium",(tx.realizedGain||0)>0?"text-emerald-400":(tx.realizedGain||0)<0?"text-red-400":"text-zinc-500")}>{typeof tx.realizedGain==="number"?signedMoney(tx.realizedGain):"—"}</td>
-              <td className={cn("whitespace-nowrap px-4 py-3 font-medium",realizedPct!==null&&realizedPct>0?"text-emerald-400":realizedPct!==null&&realizedPct<0?"text-red-400":"text-zinc-500")}>{realizedPct!==null?`${realizedPct>=0?"+":""}${realizedPct.toFixed(2)}%`:"—"}</td>
-              <td className="whitespace-nowrap px-4 py-3 font-medium text-zinc-400">{avgDays!==null?`${Math.round(avgDays).toLocaleString()} ${Math.round(avgDays)===1?"Day":"Days"}`:"—"}</td>
+              <EditableCell kind="select" value={tx.type} display={<span className={cn("inline-flex whitespace-nowrap rounded-lg border px-2 py-1 text-xs font-medium",typeBadgeClass(tx))}>{displayType(tx)}</span>} options={(["buy","sell","dividend","interest","transfer","deposit","withdrawal","cash-adjustment","split","option-expired","option-assigned","option-exercised"] as TransactionType[]).map(value=>({value,label:TYPE_LABELS[value]}))} onSave={value=>saveTransactionEdit(portfolioId,tx.id,{type:value as TransactionType})}/>
+              <EditableCell kind="text" value={tx.symbol??""} display={optionLabel(tx)} className="max-w-64 font-medium" onSave={value=>saveTransactionEdit(portfolioId,tx.id,{symbol:String(value).trim().toUpperCase()||undefined})}/>
+              <EditableCell kind="number" value={tx.quantity??""} display={typeof tx.quantity==="number"?Math.abs(tx.quantity).toLocaleString():"—"} onSave={value=>saveTransactionEdit(portfolioId,tx.id,{quantity:value===""?undefined:Number(value)})}/>
+              <EditableCell kind="number" value={tx.price??""} display={typeof tx.price==="number"?money(tx.price):"—"} onSave={value=>saveTransactionEdit(portfolioId,tx.id,{price:value===""?undefined:Number(value)})}/>
+              <EditableCell kind="number" value={cashImpact} display={cashImpact?signedMoney(cashImpact):"—"} className={cn("font-medium",cashImpact>0?"text-emerald-400":cashImpact<0?"text-red-400":"text-zinc-500")} onSave={value=>saveTransactionEdit(portfolioId,tx.id,{cashImpact:Number(value)||0})}/>
+              <EditableCell kind="number" value={cashValue} display={money(cashValue)} className="whitespace-nowrap font-medium text-zinc-300" onSave={value=>saveTransactionEdit(portfolioId,tx.id,{cashValueOverride:Number(value)||0})}/>
+              <EditableCell kind="number" value={tx.realizedGain??""} display={typeof tx.realizedGain==="number"?signedMoney(tx.realizedGain):"—"} className={cn("font-medium",(tx.realizedGain||0)>0?"text-emerald-400":(tx.realizedGain||0)<0?"text-red-400":"text-zinc-500")} onSave={value=>saveTransactionEdit(portfolioId,tx.id,{realizedGain:value===""?undefined:Number(value)})}/>
+              <EditableCell kind="number" value={realizedPct??""} display={realizedPct!==null?`${realizedPct>=0?"+":""}${realizedPct.toFixed(2)}%`:"—"} className={cn("whitespace-nowrap font-medium",realizedPct!==null&&realizedPct>0?"text-emerald-400":realizedPct!==null&&realizedPct<0?"text-red-400":"text-zinc-500")} onSave={value=>saveTransactionEdit(portfolioId,tx.id,{realizedPctOverride:value===""?undefined:Number(value)})}/>
+              <EditableCell kind="number" value={avgDays??""} display={avgDays!==null?`${Math.round(avgDays).toLocaleString()} ${Math.round(avgDays)===1?"Day":"Days"}`:"—"} className="whitespace-nowrap font-medium text-zinc-400" onSave={value=>saveTransactionEdit(portfolioId,tx.id,{avgDaysOverride:value===""?undefined:Number(value)})}/>
             </tr>
           })}</tbody>
         </table>
@@ -409,6 +442,26 @@ export default function TransactionsPage(){
       </Card>
     </div>}
   </div>
+}
+
+function EditableCell({kind,value,display,onSave,className,options}:{kind:"text"|"number"|"date"|"select";value:string|number;display:ReactNode;onSave:(value:string|number)=>void;className?:string;options?:Array<{value:string;label:string}>}) {
+  const [editing,setEditing]=useState(false);
+  const [draft,setDraft]=useState(String(value??""));
+  useEffect(()=>{if(!editing)setDraft(String(value??""));},[value,editing]);
+  const commit=()=>{
+    if(!editing)return;
+    setEditing(false);
+    onSave(kind==="number"&&draft!==""?Number(draft):draft);
+  };
+  const cancel=()=>{setDraft(String(value??""));setEditing(false);};
+  const keyDown=(event:KeyboardEvent<HTMLInputElement|HTMLSelectElement>)=>{
+    if(event.key==="Enter"){event.preventDefault();commit();}
+    if(event.key==="Escape"){event.preventDefault();cancel();}
+  };
+  return <td className={cn("px-4 py-3",className)}>
+    {editing ? kind==="select" ? <select autoFocus value={draft} onChange={event=>setDraft(event.target.value)} onBlur={commit} onKeyDown={keyDown} className="h-9 min-w-28 rounded-lg border border-emerald-400/30 bg-zinc-950 px-2 text-sm text-zinc-100 outline-none">{(options??[]).map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input autoFocus type={kind} step={kind==="number"?"any":undefined} value={draft} onChange={event=>setDraft(event.target.value)} onBlur={commit} onKeyDown={keyDown} className="h-9 min-w-24 max-w-44 rounded-lg border border-emerald-400/30 bg-zinc-950 px-2 text-sm text-zinc-100 outline-none"/>
+    : <button type="button" onClick={()=>setEditing(true)} className="w-full cursor-text rounded-md text-left outline-none transition hover:bg-white/[.035] focus-visible:ring-1 focus-visible:ring-emerald-400/40" title="Click To Edit">{display}</button>}
+  </td>;
 }
 
 function Summary({icon:Icon,label,value,good=false}:{icon:any;label:string;value:string;good?:boolean}){
