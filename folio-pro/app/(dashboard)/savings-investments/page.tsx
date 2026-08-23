@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { BarChart3, Landmark, TrendingUp, WalletCards, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, Landmark, TrendingUp, WalletCards, X } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { portfolioSummary } from "@/lib/calculations/portfolio";
@@ -1609,10 +1609,15 @@ export default function SavingsInvestmentsPage() {
 }
 
 function chartValueLabel(value: number) {
-  const sign = value < 0 ? "-" : "";
-  const absolute = Math.abs(value);
-  if (absolute >= 1000) return `${sign}$${(absolute / 1000).toFixed(absolute >= 10000 ? 0 : 1)}k`;
-  return `${sign}$${absolute.toFixed(0)}`;
+  return money(value);
+}
+
+function chartAxisValue(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
 }
 
 function QuarterlyChart({ title, subtitle, data, onProfitBarClick, selectedYear, onYearChange, yearOptions }: { title: string; subtitle: string; data: { period: string; realizedProfit: number; income: number }[]; onProfitBarClick?: (period:string)=>void; selectedYear?:string; onYearChange?:(year:string)=>void; yearOptions?:string[] }) {
@@ -1640,7 +1645,7 @@ function QuarterlyChart({ title, subtitle, data, onProfitBarClick, selectedYear,
         <defs><linearGradient id={`${gradientId}-profit`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={1}/><stop offset="100%" stopColor="#10b981" stopOpacity={0.65}/></linearGradient><linearGradient id={`${gradientId}-income`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.65}/></linearGradient></defs>
         <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/>
         <XAxis dataKey="period" tick={<PeriodTick/>} axisLine={false} tickLine={false} interval={0} height={34}/>
-        <YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`$${Math.round(v/1000)}k`}/>
+        <YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>chartAxisValue(v)}/>
         <Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5",boxShadow:"0 12px 30px rgba(0,0,0,.25)"}} formatter={(value: any)=>money(Number(value))}/>
         <Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/>
         <Bar dataKey="realizedProfit" name="Profit" fill={`url(#${gradientId}-profit)`} radius={[7,7,2,2]} maxBarSize={34} onClick={openProfitDetail} style={{cursor:onProfitBarClick?"pointer":"default"}}>
@@ -1698,9 +1703,17 @@ function formatPositionLabel(value:string) {
 }
 
 function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{period:string;groups:ProfitTickerGroup[];total:number;onEditTransaction?:(id:string,patch:VerifiedProfitEdit)=>void;onClose:()=>void}) {
+  const [transactionSort,setTransactionSort]=useState<"date"|"realizedProfit">("realizedProfit");
+  const [transactionSortDirection,setTransactionSortDirection]=useState<"asc"|"desc">("desc");
   const transactions=groups
     .flatMap(group=>group.transactions.map(transaction=>({...transaction,groupTicker:group.ticker})))
-    .sort((a,b)=>b.realizedProfit-a.realizedProfit||b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+    .sort((a,b)=>{
+      const comparison=transactionSort==="date"
+        ? a.date.localeCompare(b.date)
+        : a.realizedProfit-b.realizedProfit;
+      if(comparison!==0)return transactionSortDirection==="asc"?comparison:-comparison;
+      return b.date.localeCompare(a.date)||b.id.localeCompare(a.id);
+    });
   const [editingTransaction,setEditingTransaction]=useState<(ProfitDrilldownTransaction & {groupTicker:string})|null>(null);
   const [draft,setDraft]=useState<ProfitDrilldownTransaction|null>(null);
   const categoryOrder: ProfitDrilldownTransaction["category"][]=["Common Stocks","Sell Call","Sell Put","Buy Call","Buy Put"];
@@ -1711,7 +1724,20 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
       realizedProfit:categoryTransactions.reduce((sum,transaction)=>sum+transaction.realizedProfit,0),
       count:categoryTransactions.length,
     };
-  }).filter(item=>Math.abs(item.realizedProfit)>0.000001);
+  }).filter(item=>Math.abs(item.realizedProfit)>0.000001)
+    .sort((a,b)=>b.realizedProfit-a.realizedProfit);
+  const changeTransactionSort=(column:"date"|"realizedProfit")=>{
+    if(transactionSort===column)setTransactionSortDirection(current=>current==="asc"?"desc":"asc");
+    else {
+      setTransactionSort(column);
+      setTransactionSortDirection("desc");
+    }
+  };
+  const TransactionSortHeader=({label,column,right=false}:{label:string;column:"date"|"realizedProfit";right?:boolean})=>{
+    const active=transactionSort===column;
+    const SortIcon=!active?ArrowUpDown:transactionSortDirection==="asc"?ArrowUp:ArrowDown;
+    return <button type="button" onClick={()=>changeTransactionSort(column)} className={cn("inline-flex w-full items-center gap-2 transition hover:text-zinc-200",right&&"justify-end",active&&"text-emerald-400")} aria-label={`Sort By ${label} ${active?(transactionSortDirection==="asc"?"Ascending":"Descending"):""}`} title={active?`${label}: ${transactionSortDirection==="asc"?"Ascending":"Descending"}`:`Sort By ${label}`}>{label}<SortIcon size={14} className={active?"text-emerald-400":"opacity-25"}/></button>;
+  };
   const dateText=(value:string)=>new Date(`${value}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
   const openEditor=(transaction:ProfitDrilldownTransaction & {groupTicker:string})=>{
     if(!onEditTransaction)return;
@@ -1724,7 +1750,7 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
       date:draft.date,
       category:draft.category,
       ticker:draft.ticker.trim().toUpperCase(),
-      label:formatPositionLabel(draft.label),
+      label:formatPositionLabel(draft.label.trim()),
       quantity:draft.quantity,
       price:draft.price,
       proceeds:draft.proceeds,
@@ -1748,11 +1774,15 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
         <button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-xl border border-white/10 text-zinc-500 transition hover:bg-white/[.05] hover:text-white" aria-label="Close Details"><X size={17}/></button>
       </div>
       <div className="p-5 sm:p-6">
-        <div className="mb-5"><p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Profit</p><p className={cn("mt-1 text-3xl font-semibold",total>=0?"text-emerald-400":"text-rose-400")}>{money(total)}</p></div>
-        {groups.length===0?<div className="rounded-2xl border border-white/10 bg-white/[.025] px-6 py-16 text-center text-sm text-zinc-500">No transaction-level profit details are available for {period}.</div>:<>
+        {groups.length===0?<><div className="mb-5"><p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Profit</p><p className={cn("mt-1 text-3xl font-semibold",total>=0?"text-emerald-400":"text-rose-400")}>{money(total)}</p></div><div className="rounded-2xl border border-white/10 bg-white/[.025] px-6 py-16 text-center text-sm text-zinc-500">No transaction-level profit details are available for {period}.</div></>:<>
           <div>
             <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-semibold">Profit By Position Type</h3><span className="text-xs text-zinc-600">{transactions.length} Transactions</span></div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div className={cn("grid gap-3 sm:grid-cols-2",categoryTotals.length===1&&"xl:grid-cols-2",categoryTotals.length===2&&"xl:grid-cols-3",categoryTotals.length===3&&"xl:grid-cols-4",categoryTotals.length===4&&"xl:grid-cols-5",categoryTotals.length>=5&&"xl:grid-cols-3")}>
+              <div className="rounded-2xl border border-white/[.08] bg-white/[.025] p-4">
+                <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Profit</p>
+                <p className={cn("mt-3 text-2xl font-semibold",total>=0?"text-emerald-400":"text-rose-400")}>{money(total)}</p>
+                <p className="mt-2 text-xs text-zinc-600">{transactions.length} {transactions.length===1?"Transaction":"Transactions"}</p>
+              </div>
               {categoryTotals.map(item=><div key={item.category} className="rounded-2xl border border-white/[.08] bg-white/[.025] p-4">
                 <p className="text-sm font-medium text-zinc-400">{item.category}</p>
                 <p className={cn("mt-3 text-2xl font-semibold",item.realizedProfit>0?"text-emerald-400":"text-rose-400")}>{money(item.realizedProfit)}</p>
@@ -1770,18 +1800,17 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{p
           </div>
 
           <div className="mt-5 overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
-            <div className="flex flex-col gap-1 border-b border-white/[.07] px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
-              <div><h3 className="text-sm font-semibold">Top Profit By Transaction</h3><p className="mt-1 text-xs text-zinc-600">{onEditTransaction?"":"Sorted By Realized Profit, Highest To Lowest."}</p></div>
-              <span className="text-xs text-zinc-600">{period}</span>
+            <div className="border-b border-white/[.07] px-4 py-3">
+              <h3 className="text-sm font-semibold">Profit By Transaction</h3>
             </div>
             <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm">
-              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Rank</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Ticker</th><th className="px-4 py-3">Position</th><th className="px-4 py-3 text-right">Realized Profit</th></tr></thead>
+              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Rank</th><th className="px-4 py-3"><TransactionSortHeader label="Date" column="date" /></th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Ticker</th><th className="px-4 py-3">Position</th><th className="px-4 py-3 text-right"><TransactionSortHeader label="Realized Profit" column="realizedProfit" right /></th></tr></thead>
               <tbody>{transactions.map((transaction,index)=><tr key={transaction.id} className="border-t border-white/[.06]">
                 <td className="px-4 py-3 font-semibold text-zinc-500">#{index+1}</td>
                 <td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateText(transaction.date)}</td>
                 <td className="whitespace-nowrap px-4 py-3">{transaction.category}</td>
                 <td className="px-4 py-3 font-semibold">{onEditTransaction?<button type="button" onClick={()=>openEditor(transaction)} className="rounded-md text-left text-emerald-400 transition hover:text-emerald-300 hover:underline">{transaction.groupTicker}</button>:transaction.groupTicker}</td>
-                <td className="max-w-72 px-4 py-3 text-zinc-400">{formatPositionLabel(transaction.label)}</td>
+                <td className="max-w-72 px-4 py-3 text-zinc-400">{onEditTransaction?<button type="button" onClick={()=>openEditor(transaction)} className="w-full rounded-md text-left transition hover:bg-white/[.035] hover:text-zinc-200" title="Click To Edit Position">{formatPositionLabel(transaction.label)}</button>:formatPositionLabel(transaction.label)}</td>
                 
                 
                 
@@ -1826,5 +1855,5 @@ function YtdAccountChart({ account, data, currentYtd }: { account: string; data:
 }
 
 function IncomeTotalsChart({ data }: { data: { account: string; realizedProfit: number; income: number }[] }) {
-  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">Realized Income Totals</h2><p className="text-xs text-zinc-500">Total Realized Profit Compared With Dividend, Interest & Bonus For Robinhood And Fidelity Roth IRA.</p></CardHeader><CardContent className="pt-5"><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={10} barCategoryGap="30%" margin={{left:4,right:12,top:28,bottom:0}}><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="account" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`$${Math.round(v/1000)}k`}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5"}} formatter={(value: any)=>money(Number(value))}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/><Bar dataKey="realizedProfit" name="Realized Profit" fill="#34d399" radius={[8,8,2,2]} maxBarSize={50}><LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={10}/></Bar><Bar dataKey="income" name="Dividend, Interest & Bonus" fill="#60a5fa" radius={[8,8,2,2]} maxBarSize={50}><LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={10}/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
+  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">Realized Income Totals</h2><p className="text-xs text-zinc-500">Total Realized Profit Compared With Dividend, Interest & Bonus For Robinhood And Fidelity Roth IRA.</p></CardHeader><CardContent className="pt-5"><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={10} barCategoryGap="30%" margin={{left:4,right:12,top:28,bottom:0}}><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="account" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>chartAxisValue(v)}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5"}} formatter={(value: any)=>money(Number(value))}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/><Bar dataKey="realizedProfit" name="Realized Profit" fill="#34d399" radius={[8,8,2,2]} maxBarSize={50}><LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={10}/></Bar><Bar dataKey="income" name="Dividend, Interest & Bonus" fill="#60a5fa" radius={[8,8,2,2]} maxBarSize={50}><LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#a1a1aa" fontSize={10}/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
 }
