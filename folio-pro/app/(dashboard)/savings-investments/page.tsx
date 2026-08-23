@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, Landmark, TrendingUp, WalletCards, X } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -41,31 +41,1047 @@ type ProfitTickerGroup = {
   transactions: ProfitDrilldownTransaction[];
 };
 
-const robinhoodVerifiedCloseDateProfit: Record<string, Record<string, number>> = {
-  "Jan 2026": {
-    IREN: 1042.77,
-    IRE: 409.66,
-    UNHG: 343.67,
-    CIFR: 161.74,
-    NBIS: 122.95,
-    MMYT: -1114.29,
-    WDAY: -793.66,
-  },
-  "Feb 2026": {
-    META: 1134.91,
-    AMZN: 414.91,
-    NBIS: 155.91,
-    NVDX: 128.84,
-    TSM: 61.85,
-    AMAT: 45.19,
-    WDAY: -826.42,
-    MMYT: -1121.82,
-  },
+const ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS: Record<string, ProfitDrilldownTransaction[]> = {
+  "Jan 2026": [
+    {
+      "id": "gk-2026-01-12-ire-1",
+      "date": "2026-01-12",
+      "ticker": "IRE",
+      "label": "DEFIANCE DAILY TARGET 2X LO (IRE)",
+      "quantity": 446.842306,
+      "price": null,
+      "proceeds": 4528.66,
+      "realizedProfit": 409.66,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-01-20-cifr-2",
+      "date": "2026-01-20",
+      "ticker": "CIFR",
+      "label": "CIFR 16 JAN 2026 20.0 CALL",
+      "quantity": 600.0,
+      "price": null,
+      "proceeds": 161.74,
+      "realizedProfit": 161.74,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-01-20-iren-3",
+      "date": "2026-01-20",
+      "ticker": "IREN",
+      "label": "IREN 16 JAN 2026 58.0 CALL",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 101.91,
+      "realizedProfit": 101.91,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-01-20-nbis-4",
+      "date": "2026-01-20",
+      "ticker": "NBIS",
+      "label": "NBIS 16 JAN 2026 119.0 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 122.95,
+      "realizedProfit": 122.95,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-01-23-iren-5",
+      "date": "2026-01-23",
+      "ticker": "IREN",
+      "label": "IREN LIMITED (IREN)",
+      "quantity": 57.838945,
+      "price": null,
+      "proceeds": 3360.55,
+      "realizedProfit": 940.86,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-01-29-mmyt-6",
+      "date": "2026-01-29",
+      "ticker": "MMYT",
+      "label": "MAKEMYTRIP LTD (MMYT)",
+      "quantity": 35.419271,
+      "price": null,
+      "proceeds": 2164.83,
+      "realizedProfit": -1114.29,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-01-29-unhg-7",
+      "date": "2026-01-29",
+      "ticker": "UNHG",
+      "label": "UNHG 20 FEB 2026 20.0 CALL",
+      "quantity": 400.0,
+      "price": null,
+      "proceeds": 363.83,
+      "realizedProfit": 343.67,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-01-30-wday-8",
+      "date": "2026-01-30",
+      "ticker": "WDAY",
+      "label": "WORKDAY, INC. (WDAY)",
+      "quantity": 7.94806,
+      "price": null,
+      "proceeds": 1393.33,
+      "realizedProfit": -606.67,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-01-30-wday-9",
+      "date": "2026-01-30",
+      "ticker": "WDAY",
+      "label": "WORKDAY, INC. (WDAY)",
+      "quantity": 3.583963,
+      "price": null,
+      "proceeds": 628.29,
+      "realizedProfit": -186.99,
+      "category": "Common Stocks"
+    }
+  ],
+  "Feb 2026": [
+    {
+      "id": "gk-2026-02-04-wday-10",
+      "date": "2026-02-04",
+      "ticker": "WDAY",
+      "label": "WORKDAY, INC. (WDAY)",
+      "quantity": 14.0,
+      "price": null,
+      "proceeds": 2358.3,
+      "realizedProfit": -826.42,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-02-06-nvdx-11",
+      "date": "2026-02-06",
+      "ticker": "NVDX",
+      "label": "T-REX 2X LONG NVIDIA DAILY (NVDX)",
+      "quantity": 162.232316,
+      "price": null,
+      "proceeds": 2628.84,
+      "realizedProfit": 128.84,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-02-06-tsm-12",
+      "date": "2026-02-06",
+      "ticker": "TSM",
+      "label": "TAIWAN SEMICONDUCTOR MANUFA (TSM)",
+      "quantity": 4.544215,
+      "price": null,
+      "proceeds": 1561.85,
+      "realizedProfit": 61.85,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-02-10-amat-13",
+      "date": "2026-02-10",
+      "ticker": "AMAT",
+      "label": "APPLIED MATERIALS INC (AMAT)",
+      "quantity": 2.117778,
+      "price": null,
+      "proceeds": 708.19,
+      "realizedProfit": 8.19,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-02-10-amat-14",
+      "date": "2026-02-10",
+      "ticker": "AMAT",
+      "label": "APPLIED MATERIALS INC (AMAT)",
+      "quantity": 3.998216,
+      "price": null,
+      "proceeds": 1337.0,
+      "realizedProfit": 37.0,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-02-10-mmyt-15",
+      "date": "2026-02-10",
+      "ticker": "MMYT",
+      "label": "MAKEMYTRIP LTD (MMYT)",
+      "quantity": 33.213396,
+      "price": null,
+      "proceeds": 2105.45,
+      "realizedProfit": -894.55,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-02-10-mmyt-16",
+      "date": "2026-02-10",
+      "ticker": "MMYT",
+      "label": "MAKEMYTRIP LTD (MMYT)",
+      "quantity": 7.786604,
+      "price": null,
+      "proceeds": 493.61,
+      "realizedProfit": -227.27,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-02-20-amzn-17",
+      "date": "2026-02-20",
+      "ticker": "AMZN",
+      "label": "AMZN 15 JAN 2027 205.0 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 3454.95,
+      "realizedProfit": 414.91,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-02-26-meta-18",
+      "date": "2026-02-26",
+      "ticker": "META",
+      "label": "META 18 DEC 2026 640.0 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 10379.95,
+      "realizedProfit": 1134.91,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-02-27-nbis-19",
+      "date": "2026-02-27",
+      "ticker": "NBIS",
+      "label": "NBIS 27 FEB 2026 117.0 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 161.95,
+      "realizedProfit": 155.91,
+      "category": "Sell Call"
+    }
+  ],
+  "Mar 2026": [
+    {
+      "id": "gk-2026-03-02-cifr-20",
+      "date": "2026-03-02",
+      "ticker": "CIFR",
+      "label": "CIFR 06 MAR 2026 20.0 CALL",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 67.91,
+      "realizedProfit": 57.83,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-03-03-cifr-21",
+      "date": "2026-03-03",
+      "ticker": "CIFR",
+      "label": "CIFR 06 MAR 2026 20.0 CALL",
+      "quantity": 400.0,
+      "price": null,
+      "proceeds": 135.83,
+      "realizedProfit": 123.67,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-03-04-cifr-22",
+      "date": "2026-03-04",
+      "ticker": "CIFR",
+      "label": "CIFR 16 OCT 2026 15.0 CALL",
+      "quantity": 500.0,
+      "price": null,
+      "proceeds": 2849.78,
+      "realizedProfit": 399.58,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-03-05-mstz-23",
+      "date": "2026-03-05",
+      "ticker": "MSTZ",
+      "label": "T-REX 2X INVERSE MSTR DAILY (MSTZ)",
+      "quantity": 220.820189,
+      "price": null,
+      "proceeds": 2288.76,
+      "realizedProfit": 188.76,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-03-10-nvda-24",
+      "date": "2026-03-10",
+      "ticker": "NVDA",
+      "label": "NVDA 18 DEC 2026 179.0 CALL",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 6999.9,
+      "realizedProfit": 529.82,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-03-13-nbis-25",
+      "date": "2026-03-13",
+      "ticker": "NBIS",
+      "label": "NEBIUS GROUP NV (NBIS)",
+      "quantity": 23.250422,
+      "price": null,
+      "proceeds": 2468.71,
+      "realizedProfit": -530.71,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-03-13-nbis-26",
+      "date": "2026-03-13",
+      "ticker": "NBIS",
+      "label": "NEBIUS GROUP NV (NBIS)",
+      "quantity": 33.749578,
+      "price": null,
+      "proceeds": 3583.51,
+      "realizedProfit": -416.49,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-03-13-nbis-27",
+      "date": "2026-03-13",
+      "ticker": "NBIS",
+      "label": "NEBIUS GROUP NV (NBIS)",
+      "quantity": 43.0,
+      "price": null,
+      "proceeds": 4565.71,
+      "realizedProfit": -95.06,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-03-23-bmnr-28",
+      "date": "2026-03-23",
+      "ticker": "BMNR",
+      "label": "BMNR 20 MAR 2026 24.0 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 63.95,
+      "realizedProfit": 63.95,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-03-23-ibit-29",
+      "date": "2026-03-23",
+      "ticker": "IBIT",
+      "label": "IBIT 20 MAR 2026 43.0 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 52.95,
+      "realizedProfit": 52.95,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-03-25-duol-30",
+      "date": "2026-03-25",
+      "ticker": "DUOL",
+      "label": "DUOLINGO INC (DUOL)",
+      "quantity": 2.22415,
+      "price": null,
+      "proceeds": 219.72,
+      "realizedProfit": -844.64,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-03-26-qbtz-31",
+      "date": "2026-03-26",
+      "ticker": "QBTZ",
+      "label": "DEFIANCE DAILY TARGET 2X SH (QBTZ)",
+      "quantity": 13.333333,
+      "price": null,
+      "proceeds": 673.73,
+      "realizedProfit": -558.7,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-03-30-cifr-32",
+      "date": "2026-03-30",
+      "ticker": "CIFR",
+      "label": "CIFR 02 APR 2026 17.5 CALL",
+      "quantity": 400.0,
+      "price": null,
+      "proceeds": 227.83,
+      "realizedProfit": 203.67,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-03-30-iren-33",
+      "date": "2026-03-30",
+      "ticker": "IREN",
+      "label": "IREN 27 MAR 2026 39.0 PUT",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 101.95,
+      "realizedProfit": -252.09,
+      "category": "Sell Put"
+    },
+    {
+      "id": "gk-2026-03-30-qbtz-34",
+      "date": "2026-03-30",
+      "ticker": "QBTZ",
+      "label": "DEFIANCE DAILY TARGET 2X SH (QBTZ)",
+      "quantity": 10.0,
+      "price": null,
+      "proceeds": 630.65,
+      "realizedProfit": -293.68,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-03-30-soxs-35",
+      "date": "2026-03-30",
+      "ticker": "SOXS",
+      "label": "DIREXION DAILY SEMICONDUCTO (SOXS)",
+      "quantity": 14.586943,
+      "price": null,
+      "proceeds": 665.63,
+      "realizedProfit": -2708.34,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-03-31-ibit-36",
+      "date": "2026-03-31",
+      "ticker": "IBIT",
+      "label": "IBIT 30 MAR 2026 41.5 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 58.95,
+      "realizedProfit": 58.95,
+      "category": "Sell Call"
+    }
+  ],
+  "Apr 2026": [
+    {
+      "id": "gk-2026-04-08-nvda-37",
+      "date": "2026-04-08",
+      "ticker": "NVDA",
+      "label": "NVDA 18 DEC 2026 177.0 CALL",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 6169.78,
+      "realizedProfit": 310.7,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-04-09-cifr-38",
+      "date": "2026-04-09",
+      "ticker": "CIFR",
+      "label": "CIPHER DIGITAL INC (CIFR)",
+      "quantity": 82.20339,
+      "price": null,
+      "proceeds": 1341.92,
+      "realizedProfit": 305.75,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-04-10-iren-39",
+      "date": "2026-04-10",
+      "ticker": "IREN",
+      "label": "IREN 10 APR 2026 38.5 PUT",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 443.95,
+      "realizedProfit": 313.91,
+      "category": "Sell Put"
+    },
+    {
+      "id": "gk-2026-04-10-nvda-40",
+      "date": "2026-04-10",
+      "ticker": "NVDA",
+      "label": "NVDA 18 DEC 2026 177.0 CALL",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 6469.77,
+      "realizedProfit": 610.69,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-04-13-bmnr-41",
+      "date": "2026-04-13",
+      "ticker": "BMNR",
+      "label": "BMNR 10 APR 2026 21.5 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 50.94,
+      "realizedProfit": 50.94,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-04-14-ibit-42",
+      "date": "2026-04-14",
+      "ticker": "IBIT",
+      "label": "IBIT 13 APR 2026 41.5 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 46.94,
+      "realizedProfit": 39.9,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-04-14-meta-43",
+      "date": "2026-04-14",
+      "ticker": "META",
+      "label": "META 20 NOV 2026 640.0 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 9609.75,
+      "realizedProfit": 724.71,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-04-17-cifr-44",
+      "date": "2026-04-17",
+      "ticker": "CIFR",
+      "label": "CIPHER DIGITAL INC (CIFR)",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 3101.79,
+      "realizedProfit": -674.21,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-04-17-cifr-45",
+      "date": "2026-04-17",
+      "ticker": "CIFR",
+      "label": "CIPHER DIGITAL INC (CIFR)",
+      "quantity": 117.79661,
+      "price": null,
+      "proceeds": 2243.37,
+      "realizedProfit": 19.37,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-04-17-cifr-46",
+      "date": "2026-04-17",
+      "ticker": "CIFR",
+      "label": "CIPHER DIGITAL INC (CIFR)",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 0.0,
+      "realizedProfit": 674.21,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-04-20-cifr-47",
+      "date": "2026-04-20",
+      "ticker": "CIFR",
+      "label": "CIFR 17 APR 2026 16.0 CALL",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 101.9,
+      "realizedProfit": -128.18,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-04-20-unhg-48",
+      "date": "2026-04-20",
+      "ticker": "UNHG",
+      "label": "UNHG 17 APR 2026 13.0 CALL",
+      "quantity": 400.0,
+      "price": null,
+      "proceeds": 219.83,
+      "realizedProfit": -332.33,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-04-30-tsla-49",
+      "date": "2026-04-30",
+      "ticker": "TSLA",
+      "label": "TSLA 15 JAN 2027 370.0 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 6979.8,
+      "realizedProfit": 889.76,
+      "category": "Buy Call"
+    }
+  ],
+  "May 2026": [
+    {
+      "id": "gk-2026-05-01-mu-50",
+      "date": "2026-05-01",
+      "ticker": "MU",
+      "label": "MU 15 JAN 2027 500.0 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 15359.63,
+      "realizedProfit": 3009.59,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-05-04-cifr-51",
+      "date": "2026-05-04",
+      "ticker": "CIFR",
+      "label": "CIFR 01 MAY 2026 21.0 CALL",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 133.88,
+      "realizedProfit": 133.88,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-05-05-cifr-52",
+      "date": "2026-05-05",
+      "ticker": "CIFR",
+      "label": "CIPHER DIGITAL INC (CIFR)",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 4073.9,
+      "realizedProfit": -421.1,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-05-05-cifr-53",
+      "date": "2026-05-05",
+      "ticker": "CIFR",
+      "label": "CIPHER DIGITAL INC (CIFR)",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 4073.89,
+      "realizedProfit": 807.59,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-05-05-spxc-54",
+      "date": "2026-05-05",
+      "ticker": "SPXC",
+      "label": "SPX TECHNOLOGIES INC (SPXC)",
+      "quantity": 4.830021,
+      "price": null,
+      "proceeds": 1011.05,
+      "realizedProfit": 11.05,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-05-06-crwv-55",
+      "date": "2026-05-06",
+      "ticker": "CRWV",
+      "label": "COREWEAVE INC (CRWV)",
+      "quantity": 18.92744,
+      "price": null,
+      "proceeds": 2585.14,
+      "realizedProfit": -414.86,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-05-06-iren-56",
+      "date": "2026-05-06",
+      "ticker": "IREN",
+      "label": "IREN LIMITED (IREN)",
+      "quantity": 42.161055,
+      "price": null,
+      "proceeds": 2586.52,
+      "realizedProfit": 119.81,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-05-06-tsm-57",
+      "date": "2026-05-06",
+      "ticker": "TSM",
+      "label": "TSM 15 JAN 2027 400.0 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 7304.79,
+      "realizedProfit": 1214.75,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-05-12-qbtz-58",
+      "date": "2026-05-12",
+      "ticker": "QBTZ",
+      "label": "DEFIANCE DAILY TARGET 2X SH (QBTZ)",
+      "quantity": 137.0,
+      "price": null,
+      "proceeds": 1637.08,
+      "realizedProfit": 146.53,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-05-12-qqq-59",
+      "date": "2026-05-12",
+      "ticker": "QQQ",
+      "label": "QQQ 30 SEP 2026 650.0 PUT",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 3849.83,
+      "realizedProfit": 201.75,
+      "category": "Buy Put"
+    },
+    {
+      "id": "gk-2026-05-12-unhg-60",
+      "date": "2026-05-12",
+      "ticker": "UNHG",
+      "label": "LEVERAGE SHARES 2X LONG UNH (UNHG)",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 1527.9,
+      "realizedProfit": -674.1,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-05-14-asts-61",
+      "date": "2026-05-14",
+      "ticker": "ASTS",
+      "label": "AST SPACEMOBILE INC CL A (ASTS)",
+      "quantity": 12.440131,
+      "price": null,
+      "proceeds": 1043.02,
+      "realizedProfit": 43.02,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-05-14-asts-62",
+      "date": "2026-05-14",
+      "ticker": "ASTS",
+      "label": "AST SPACEMOBILE INC CL A (ASTS)",
+      "quantity": 13.117334,
+      "price": null,
+      "proceeds": 1099.8,
+      "realizedProfit": 99.8,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-05-14-unhg-63",
+      "date": "2026-05-14",
+      "ticker": "UNHG",
+      "label": "UNHG 15 MAY 2026 14.0 CALL",
+      "quantity": 300.0,
+      "price": null,
+      "proceeds": 383.86,
+      "realizedProfit": -1860.26,
+      "category": "Sell Call"
+    },
+    {
+      "id": "gk-2026-05-15-robn-64",
+      "date": "2026-05-15",
+      "ticker": "ROBN",
+      "label": "ROBN 15 MAY 2026 24.0 PUT",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 299.94,
+      "realizedProfit": 54.9,
+      "category": "Sell Put"
+    },
+    {
+      "id": "gk-2026-05-20-vsat-65",
+      "date": "2026-05-20",
+      "ticker": "VSAT",
+      "label": "VSAT 15 JAN 2027 75.0 CALL",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 3719.83,
+      "realizedProfit": 379.75,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-05-21-iren-66",
+      "date": "2026-05-21",
+      "ticker": "IREN",
+      "label": "IREN 15 JAN 2027 60.0 CALL",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 3659.83,
+      "realizedProfit": 389.75,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-05-21-nbis-67",
+      "date": "2026-05-21",
+      "ticker": "NBIS",
+      "label": "NEBIUS GROUP NV (NBIS)",
+      "quantity": 10.0,
+      "price": null,
+      "proceeds": 2193.95,
+      "realizedProfit": 217.65,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-05-26-amat-68",
+      "date": "2026-05-26",
+      "ticker": "AMAT",
+      "label": "AMAT 15 JAN 2027 450.0 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 8354.77,
+      "realizedProfit": 619.73,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-05-27-iren-69",
+      "date": "2026-05-27",
+      "ticker": "IREN",
+      "label": "IREN LIMITED (IREN)",
+      "quantity": 15.884965,
+      "price": null,
+      "proceeds": 1010.26,
+      "realizedProfit": 16.02,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-05-27-iren-70",
+      "date": "2026-05-27",
+      "ticker": "IREN",
+      "label": "IREN LIMITED (IREN)",
+      "quantity": 9.115035,
+      "price": null,
+      "proceeds": 579.7,
+      "realizedProfit": 46.41,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-05-27-iren-71",
+      "date": "2026-05-27",
+      "ticker": "IREN",
+      "label": "IREN LIMITED (IREN)",
+      "quantity": 20.0,
+      "price": null,
+      "proceeds": 1339.97,
+      "realizedProfit": 88.17,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-05-27-meta-72",
+      "date": "2026-05-27",
+      "ticker": "META",
+      "label": "META 18 DEC 2026 620.0 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 8639.77,
+      "realizedProfit": 822.73,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-05-28-pltr-73",
+      "date": "2026-05-28",
+      "ticker": "PLTR",
+      "label": "PLTR 19 MAR 2027 135.0 CALL",
+      "quantity": 300.0,
+      "price": null,
+      "proceeds": 8819.68,
+      "realizedProfit": 1019.56,
+      "category": "Buy Call"
+    }
+  ],
+  "Jun 2026": [
+    {
+      "id": "gk-2026-06-01-nvda-74",
+      "date": "2026-06-01",
+      "ticker": "NVDA",
+      "label": "NVDA 19 MAR 2027 220.0 CALL",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 7639.74,
+      "realizedProfit": 659.66,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-06-01-pltr-75",
+      "date": "2026-06-01",
+      "ticker": "PLTR",
+      "label": "PALANTIR TECHNOLOGIES INC C (PLTR)",
+      "quantity": 17.553755,
+      "price": null,
+      "proceeds": 2865.59,
+      "realizedProfit": -134.41,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-06-01-pltr-76",
+      "date": "2026-06-01",
+      "ticker": "PLTR",
+      "label": "PALANTIR TECHNOLOGIES INC C (PLTR)",
+      "quantity": 1.553755,
+      "price": null,
+      "proceeds": 0.0,
+      "realizedProfit": 11.9,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-06-01-pltr-77",
+      "date": "2026-06-01",
+      "ticker": "PLTR",
+      "label": "PALANTIR TECHNOLOGIES INC C (PLTR)",
+      "quantity": 16.0,
+      "price": null,
+      "proceeds": 0.0,
+      "realizedProfit": 122.51,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-06-01-pltr-78",
+      "date": "2026-06-01",
+      "ticker": "PLTR",
+      "label": "PALANTIR TECHNOLOGIES INC C (PLTR)",
+      "quantity": 8.446245,
+      "price": null,
+      "proceeds": 1378.82,
+      "realizedProfit": 279.37,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-06-01-robn-79",
+      "date": "2026-06-01",
+      "ticker": "ROBN",
+      "label": "ROBN 18 JUN 2026 17.0 PUT",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 184.94,
+      "realizedProfit": 149.9,
+      "category": "Sell Put"
+    },
+    {
+      "id": "gk-2026-06-01-robn-80",
+      "date": "2026-06-01",
+      "ticker": "ROBN",
+      "label": "ROBN 18 JUN 2026 18.0 PUT",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 204.94,
+      "realizedProfit": 159.9,
+      "category": "Sell Put"
+    },
+    {
+      "id": "gk-2026-06-02-asts-81",
+      "date": "2026-06-02",
+      "ticker": "ASTS",
+      "label": "ASTS 19 MAR 2027 115.0 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 4689.85,
+      "realizedProfit": 429.81,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-06-02-nvda-82",
+      "date": "2026-06-02",
+      "ticker": "NVDA",
+      "label": "NVDA 19 MAR 2027 215.0 CALL",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 9319.7,
+      "realizedProfit": 2239.62,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-06-04-meta-83",
+      "date": "2026-06-04",
+      "ticker": "META",
+      "label": "META 16 JUN 2028 640.0 CALL",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 16569.6,
+      "realizedProfit": 2159.56,
+      "category": "Buy Call"
+    },
+    {
+      "id": "gk-2026-06-05-unhg-84",
+      "date": "2026-06-05",
+      "ticker": "UNHG",
+      "label": "LEVERAGE SHARES 2X LONG UNH (UNHG)",
+      "quantity": 19.837387,
+      "price": null,
+      "proceeds": 427.0,
+      "realizedProfit": -9.82,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-06-12-ibit-85",
+      "date": "2026-06-12",
+      "ticker": "IBIT",
+      "label": "IBIT 12 JUN 2026 39.0 PUT",
+      "quantity": 100.0,
+      "price": null,
+      "proceeds": 152.94,
+      "realizedProfit": -142.06,
+      "category": "Sell Put"
+    },
+    {
+      "id": "gk-2026-06-15-spcx-86",
+      "date": "2026-06-15",
+      "ticker": "SPCX",
+      "label": "SPACE EXPLORATION TECHNOLOG (SPCX)",
+      "quantity": 1.0,
+      "price": null,
+      "proceeds": 179.0,
+      "realizedProfit": 44.0,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-06-16-qbtz-87",
+      "date": "2026-06-16",
+      "ticker": "QBTZ",
+      "label": "DEFIANCE DAILY TARGET 2X SH (QBTZ)",
+      "quantity": 350.0,
+      "price": null,
+      "proceeds": 1303.65,
+      "realizedProfit": 99.65,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-06-18-robn-88",
+      "date": "2026-06-18",
+      "ticker": "ROBN",
+      "label": "ROBN 17 JUL 2026 19.0 PUT",
+      "quantity": 200.0,
+      "price": null,
+      "proceeds": 479.9,
+      "realizedProfit": 403.82,
+      "category": "Sell Put"
+    },
+    {
+      "id": "gk-2026-06-22-mstz-89",
+      "date": "2026-06-22",
+      "ticker": "MSTZ",
+      "label": "T-REX 2X INVERSE MSTR DAILY (MSTZ)",
+      "quantity": 86.896827,
+      "price": null,
+      "proceeds": 1001.32,
+      "realizedProfit": 1.32,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-06-22-qbtz-90",
+      "date": "2026-06-22",
+      "ticker": "QBTZ",
+      "label": "DEFIANCE DAILY TARGET 2X SH (QBTZ)",
+      "quantity": 400.0,
+      "price": null,
+      "proceeds": 1639.88,
+      "realizedProfit": 107.88,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-06-25-dram-91",
+      "date": "2026-06-25",
+      "ticker": "DRAM",
+      "label": "ROUNDHILL MEMORY ETF (DRAM)",
+      "quantity": 20.0,
+      "price": null,
+      "proceeds": 1518.96,
+      "realizedProfit": 119.57,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-06-29-asts-92",
+      "date": "2026-06-29",
+      "ticker": "ASTS",
+      "label": "AST SPACEMOBILE INC CL A (ASTS)",
+      "quantity": 20.0,
+      "price": null,
+      "proceeds": 1637.97,
+      "realizedProfit": 67.17,
+      "category": "Common Stocks"
+    },
+    {
+      "id": "gk-2026-06-29-asts-93",
+      "date": "2026-06-29",
+      "ticker": "ASTS",
+      "label": "AST SPACEMOBILE INC CL A (ASTS)",
+      "quantity": 20.0,
+      "price": null,
+      "proceeds": 1637.96,
+      "realizedProfit": 179.46,
+      "category": "Common Stocks"
+    }
+  ]
 };
-const robinhoodVerifiedCloseDateMonthlyTotals: Record<string, number> = {
-  "Jan 2026": 172.84,
-  "Feb 2026": -6.63,
-};
+
+type VerifiedProfitEdit = Partial<ProfitDrilldownTransaction>;
+type VerifiedProfitEdits = Record<string, VerifiedProfitEdit>;
+const VERIFIED_PROFIT_EDITS_KEY = "folio-robinhood-verified-profit-edits-v1";
 type ExtrasByPortfolio = Record<"robinhood"|"fidelity-roth", ExtraRow[]>;
 const EXTRAS_STORAGE_KEY = "folio-portfolio-performance-extras-v1";
 type AllTimeHighEntry = { value: number; date: string };
@@ -155,6 +1171,35 @@ export default function SavingsInvestmentsPage() {
   const [allTimeHighs,setAllTimeHighs]=useState<AllTimeHighByPortfolio>(DEFAULT_ALL_TIME_HIGHS);
   const [editingAllTimeHigh,setEditingAllTimeHigh]=useState<{portfolioId:DataPortfolioId;field:"value"|"date"}|null>(null);
   const [profitDrilldown,setProfitDrilldown]=useState<{portfolioId:DataPortfolioId;period:string}|null>(null);
+  const [verifiedProfitEdits,setVerifiedProfitEdits]=useState<VerifiedProfitEdits>({});
+  useEffect(()=>{
+    try{
+      const raw=window.localStorage.getItem(VERIFIED_PROFIT_EDITS_KEY);
+      if(raw)setVerifiedProfitEdits(JSON.parse(raw));
+    }catch{}
+  },[]);
+  const saveVerifiedProfitEdit=(id:string,patch:VerifiedProfitEdit)=>{
+    setVerifiedProfitEdits(current=>{
+      const next={...current,[id]:{...(current[id]??{}),...patch}};
+      try{window.localStorage.setItem(VERIFIED_PROFIT_EDITS_KEY,JSON.stringify(next));}catch{}
+      return next;
+    });
+  };
+  const verifiedCloseDateTransactions=useMemo<Record<string,ProfitDrilldownTransaction[]>>(()=>{
+    return Object.fromEntries(Object.entries(ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS).map(([period,transactions])=>[
+      period,
+      transactions.map(transaction=>({...transaction,...(verifiedProfitEdits[transaction.id]??{})})),
+    ]));
+  },[verifiedProfitEdits]);
+  const verifiedCloseDateMonthlyTotals=useMemo<Record<string,number>>(()=>{
+    const totals:Record<string,number>={};
+    Object.keys(verifiedCloseDateTransactions).forEach(period=>{
+      const transactions:ProfitDrilldownTransaction[]=verifiedCloseDateTransactions[period]??[];
+      totals[period]=transactions.reduce((sum:number,transaction:ProfitDrilldownTransaction)=>sum+transaction.realizedProfit,0);
+    });
+    return totals;
+  },[verifiedCloseDateTransactions]);
+
   useEffect(()=>{
     try {
       const saved=window.localStorage.getItem(ALL_TIME_HIGH_STORAGE_KEY);
@@ -311,19 +1356,20 @@ export default function SavingsInvestmentsPage() {
 
   const displayedProfitDrilldownGroups = useMemo<ProfitTickerGroup[]>(()=>{
     if(!profitDrilldown || profitDrilldown.portfolioId!=="robinhood") return profitDrilldownGroups;
-    const verified=robinhoodVerifiedCloseDateProfit[profitDrilldown.period];
+    const verified=verifiedCloseDateTransactions[profitDrilldown.period];
     if(!verified) return profitDrilldownGroups;
-    const transactionByTicker=new Map(profitDrilldownGroups.map(group=>[group.ticker,group.transactions]));
-    const total=Object.values(verified).reduce((sum,value)=>sum+value,0);
-    return Object.entries(verified)
-      .map(([ticker,realizedProfit])=>({
-        ticker,
-        realizedProfit,
-        percent:total?realizedProfit/total*100:0,
-        transactions:transactionByTicker.get(ticker)??[],
-      }))
+    const total=verified.reduce((sum,transaction)=>sum+transaction.realizedProfit,0);
+    const groupedByTicker=new Map<string,ProfitDrilldownTransaction[]>();
+    verified.forEach(transaction=>{
+      groupedByTicker.set(transaction.ticker,[...(groupedByTicker.get(transaction.ticker)??[]),transaction]);
+    });
+    return Array.from(groupedByTicker.entries())
+      .map(([ticker,transactions])=>{
+        const realizedProfit=transactions.reduce((sum,transaction)=>sum+transaction.realizedProfit,0);
+        return {ticker,realizedProfit,percent:total?realizedProfit/total*100:0,transactions};
+      })
       .sort((a,b)=>b.realizedProfit-a.realizedProfit);
-  },[profitDrilldown,profitDrilldownGroups]);
+  },[profitDrilldown,profitDrilldownGroups,verifiedCloseDateTransactions]);
 
   const profitDrilldownTotal = displayedProfitDrilldownGroups.reduce((sum, group) => sum + group.realizedProfit, 0);
 
@@ -349,17 +1395,22 @@ export default function SavingsInvestmentsPage() {
   };
 
   const robinhoodQuarterly = useMemo(() => {
+    const q1=(verifiedCloseDateMonthlyTotals["Jan 2026"]??0)+(verifiedCloseDateMonthlyTotals["Feb 2026"]??0)+(verifiedCloseDateMonthlyTotals["Mar 2026"]??0);
+    const q2=(verifiedCloseDateMonthlyTotals["Apr 2026"]??0)+(verifiedCloseDateMonthlyTotals["May 2026"]??0)+(verifiedCloseDateMonthlyTotals["Jun 2026"]??0);
     const base: { period: string; realizedProfit: number; income: number }[] = quarterlyIncome.map((row) => {
       const realizedProfit = row.period === "Q1 2026"
-        ? -3854.32
-        : row.robinhoodProfit - (row.period === "Q1 2025" ? 311.71 : 0);
+        ? q1
+        : row.period === "Q2 2026"
+          ? q2
+          : row.robinhoodProfit - (row.period === "Q1 2025" ? 311.71 : 0);
       return { period: row.period, realizedProfit, income: row.robinhoodIncome };
     });
-    Object.entries(robinhoodVerifiedCloseDateMonthlyTotals).forEach(([period,realizedProfit])=>{
+    Object.keys(verifiedCloseDateMonthlyTotals).forEach(period=>{
+      const realizedProfit:number=verifiedCloseDateMonthlyTotals[period]??0;
       base.push({period,realizedProfit,income:0});
     });
     return mergeMonthlySales(base, realizedSalesByMonth.robinhood);
-  }, [realizedSalesByMonth]);
+  }, [realizedSalesByMonth,verifiedCloseDateMonthlyTotals]);
 
   const rothQuarterly = useMemo(() => mergeMonthlySales(quarterlyIncome.map((row) => ({
     period: row.period,
@@ -490,6 +1541,7 @@ export default function SavingsInvestmentsPage() {
       period={profitDrilldown.period}
       groups={displayedProfitDrilldownGroups}
       total={profitDrilldownTotal}
+      onEditTransaction={profitDrilldown.portfolioId==="robinhood"&&verifiedCloseDateTransactions[profitDrilldown.period]?saveVerifiedProfitEdit:undefined}
       onClose={()=>setProfitDrilldown(null)}
     />}
 
@@ -577,7 +1629,31 @@ function QuarterlyChart({ title, subtitle, data, onProfitBarClick }: { title: st
   </Card>;
 }
 
-function ProfitDrilldownModal({period,groups,total,onClose}:{period:string;groups:ProfitTickerGroup[];total:number;onClose:()=>void}) {
+function EditableProfitCell({value,display,kind="text",onSave,options,className}:{value:string|number|null;display:string;kind?:"text"|"number"|"date"|"select";onSave?:(value:string|number|null)=>void;options?:string[];className?:string}) {
+  const [editing,setEditing]=useState(false);
+  const [draft,setDraft]=useState(value===null?"":String(value));
+  const cancelBlur=useRef(false);
+  useEffect(()=>{if(!editing)setDraft(value===null?"":String(value));},[value,editing]);
+  if(!onSave)return <td className={cn("px-4 py-3",className)}>{display}</td>;
+  const commit=()=>{
+    if(cancelBlur.current){cancelBlur.current=false;setEditing(false);return;}
+    const next=kind==="number"?(draft.trim()===""?null:Number(draft)):draft;
+    onSave(next);
+    setEditing(false);
+  };
+  const keyDown=(event:any)=>{
+    if(event.key==="Enter"){event.preventDefault();event.currentTarget.blur();}
+    if(event.key==="Escape"){event.preventDefault();cancelBlur.current=true;setDraft(value===null?"":String(value));event.currentTarget.blur();}
+  };
+  return <td className={cn("px-4 py-3",className)}>
+    {editing ? kind==="select"
+      ? <select autoFocus value={draft} onChange={event=>setDraft(event.target.value)} onBlur={commit} onKeyDown={keyDown} className="h-9 rounded-lg border border-emerald-400/30 bg-zinc-950 px-2 text-sm outline-none">{(options??[]).map(option=><option key={option} value={option}>{option}</option>)}</select>
+      : <input autoFocus type={kind} step={kind==="number"?"any":undefined} value={draft} onChange={event=>setDraft(event.target.value)} onBlur={commit} onKeyDown={keyDown} className="h-9 min-w-24 max-w-56 rounded-lg border border-emerald-400/30 bg-zinc-950 px-2 text-sm outline-none"/>
+      : <button type="button" onClick={()=>setEditing(true)} className="w-full cursor-text rounded-md text-left transition hover:bg-white/[.035] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400/40" title="Click To Edit">{display}</button>}
+  </td>;
+}
+
+function ProfitDrilldownModal({period,groups,total,onEditTransaction,onClose}:{period:string;groups:ProfitTickerGroup[];total:number;onEditTransaction?:(id:string,patch:VerifiedProfitEdit)=>void;onClose:()=>void}) {
   const transactions=groups
     .flatMap(group=>group.transactions.map(transaction=>({...transaction,groupTicker:group.ticker})))
     .sort((a,b)=>b.realizedProfit-a.realizedProfit||b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
@@ -612,6 +1688,14 @@ function ProfitDrilldownModal({period,groups,total,onClose}:{period:string;group
           </div>
 
           <div className="mt-5 overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
+            <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Profit By Ticker</h3><p className="mt-1 text-xs text-zinc-600">Ticker Totals For {period}, Based On Close Date.</p></div>
+            <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm">
+              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Ticker</th><th className="px-4 py-3 text-right">Transactions</th><th className="px-4 py-3 text-right">Realized P/L</th><th className="px-4 py-3 text-right">% Of Month</th></tr></thead>
+              <tbody>{groups.map(group=><tr key={group.ticker} className="border-t border-white/[.06]"><td className="px-4 py-3 font-semibold">{group.ticker}</td><td className="px-4 py-3 text-right text-zinc-400">{group.transactions.length}</td><td className={cn("px-4 py-3 text-right font-semibold",group.realizedProfit>0?"text-emerald-400":group.realizedProfit<0?"text-rose-400":"text-zinc-400")}>{money(group.realizedProfit)}</td><td className="px-4 py-3 text-right text-zinc-400">{group.percent.toFixed(1)}%</td></tr>)}</tbody>
+            </table></div>
+          </div>
+
+          <div className="mt-5 overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
             <div className="flex flex-col gap-1 border-b border-white/[.07] px-4 py-3 sm:flex-row sm:items-end sm:justify-between">
               <div><h3 className="text-sm font-semibold">Top Profit By Transaction</h3><p className="mt-1 text-xs text-zinc-600">Sorted By Realized Profit, Highest To Lowest.</p></div>
               <span className="text-xs text-zinc-600">{period}</span>
@@ -620,14 +1704,14 @@ function ProfitDrilldownModal({period,groups,total,onClose}:{period:string;group
               <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Rank</th><th className="px-4 py-3">Date</th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Ticker</th><th className="px-4 py-3">Position</th><th className="px-4 py-3 text-right">Quantity</th><th className="px-4 py-3 text-right">Price</th><th className="px-4 py-3 text-right">Proceeds</th><th className="px-4 py-3 text-right">Realized Profit</th></tr></thead>
               <tbody>{transactions.map((transaction,index)=><tr key={transaction.id} className="border-t border-white/[.06]">
                 <td className="px-4 py-3 font-semibold text-zinc-500">#{index+1}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateText(transaction.date)}</td>
-                <td className="whitespace-nowrap px-4 py-3"><span className="inline-flex rounded-lg border border-white/10 bg-white/[.035] px-2 py-1 text-xs font-medium text-zinc-300">{transaction.category}</span></td>
-                <td className="px-4 py-3 font-semibold">{transaction.groupTicker}</td>
-                <td className="max-w-72 px-4 py-3 text-zinc-400">{transaction.label}</td>
-                <td className="px-4 py-3 text-right">{transaction.quantity===null?"—":transaction.quantity.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right">{transaction.price===null?"—":money(transaction.price)}</td>
-                <td className="px-4 py-3 text-right">{transaction.proceeds===null?"—":money(transaction.proceeds)}</td>
-                <td className={cn("px-4 py-3 text-right font-semibold",transaction.realizedProfit>0?"text-emerald-400":transaction.realizedProfit<0?"text-rose-400":"text-zinc-400")}>{money(transaction.realizedProfit)}</td>
+                <EditableProfitCell kind="date" value={transaction.date} display={dateText(transaction.date)} className="whitespace-nowrap text-zinc-400" onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{date:String(value)}):undefined}/>
+                <EditableProfitCell kind="select" value={transaction.category} display={transaction.category} className="whitespace-nowrap" options={["Sell Call","Sell Put","Buy Call","Buy Put","Common Stocks"]} onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{category:String(value) as ProfitDrilldownTransaction["category"]}):undefined}/>
+                <EditableProfitCell value={transaction.ticker} display={transaction.groupTicker} className="font-semibold" onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{ticker:String(value).trim().toUpperCase()}):undefined}/>
+                <EditableProfitCell value={transaction.label} display={transaction.label} className="max-w-72 text-zinc-400" onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{label:String(value)}):undefined}/>
+                <EditableProfitCell kind="number" value={transaction.quantity} display={transaction.quantity===null?"—":transaction.quantity.toLocaleString()} className="text-right" onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{quantity:value===null?null:Number(value)}):undefined}/>
+                <EditableProfitCell kind="number" value={transaction.price} display={transaction.price===null?"—":money(transaction.price)} className="text-right" onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{price:value===null?null:Number(value)}):undefined}/>
+                <EditableProfitCell kind="number" value={transaction.proceeds} display={transaction.proceeds===null?"—":money(transaction.proceeds)} className="text-right" onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{proceeds:value===null?null:Number(value)}):undefined}/>
+                <EditableProfitCell kind="number" value={transaction.realizedProfit} display={money(transaction.realizedProfit)} className={cn("text-right font-semibold",transaction.realizedProfit>0?"text-emerald-400":transaction.realizedProfit<0?"text-rose-400":"text-zinc-400")} onSave={onEditTransaction?value=>onEditTransaction(transaction.id,{realizedProfit:Number(value??0)}):undefined}/>
               </tr>)}</tbody>
             </table></div>
           </div>
