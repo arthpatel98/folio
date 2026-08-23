@@ -1117,6 +1117,7 @@ const ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS: Record<string, ProfitDrilldown
 type VerifiedProfitEdit = Partial<ProfitDrilldownTransaction> & { deleted?: boolean };
 type VerifiedProfitEdits = Record<string, VerifiedProfitEdit>;
 const VERIFIED_PROFIT_EDITS_KEY = "folio-robinhood-verified-profit-edits-v1";
+const DYNAMIC_PROFIT_EDITS_KEY = "folio-robinhood-dynamic-profit-edits-v1";
 type ExtrasByPortfolio = Record<"robinhood"|"fidelity-roth", ExtraRow[]>;
 const EXTRAS_STORAGE_KEY = "folio-portfolio-performance-extras-v1";
 type AllTimeHighEntry = { value: number; date: string };
@@ -1207,17 +1208,32 @@ export default function SavingsInvestmentsPage() {
   const [editingAllTimeHigh,setEditingAllTimeHigh]=useState<{portfolioId:DataPortfolioId;field:"value"|"date"}|null>(null);
   const [profitDrilldown,setProfitDrilldown]=useState<{portfolioId:DataPortfolioId;period:string}|null>(null);
   const [robinhoodChartYear,setRobinhoodChartYear]=useState("2026");
+  const [robinhoodChartView,setRobinhoodChartView]=useState<"month"|"year">("month");
   const [verifiedProfitEdits,setVerifiedProfitEdits]=useState<VerifiedProfitEdits>({});
+  const [dynamicProfitEdits,setDynamicProfitEdits]=useState<VerifiedProfitEdits>({});
   useEffect(()=>{
     try{
       const raw=window.localStorage.getItem(VERIFIED_PROFIT_EDITS_KEY);
       if(raw)setVerifiedProfitEdits(JSON.parse(raw));
     }catch{}
   },[]);
+  useEffect(()=>{
+    try{
+      const raw=window.localStorage.getItem(DYNAMIC_PROFIT_EDITS_KEY);
+      if(raw)setDynamicProfitEdits(JSON.parse(raw));
+    }catch{}
+  },[]);
   const saveVerifiedProfitEdit=(id:string,patch:VerifiedProfitEdit)=>{
     setVerifiedProfitEdits(current=>{
       const next={...current,[id]:{...(current[id]??{}),...patch}};
       try{window.localStorage.setItem(VERIFIED_PROFIT_EDITS_KEY,JSON.stringify(next));}catch{}
+      return next;
+    });
+  };
+  const saveDynamicProfitEdit=(id:string,patch:VerifiedProfitEdit)=>{
+    setDynamicProfitEdits(current=>{
+      const next={...current,[id]:{...(current[id]??{}),...patch}};
+      try{window.localStorage.setItem(DYNAMIC_PROFIT_EDITS_KEY,JSON.stringify(next));}catch{}
       return next;
     });
   };
@@ -1322,10 +1338,14 @@ export default function SavingsInvestmentsPage() {
         if (transaction.type !== "sell" || !Number.isFinite(transaction.realizedGain)) return;
         if (!transaction.notes?.includes("Sold from Holdings")) return;
         if (!isFutureHoldingsSale(transaction.id)) return;
-        const date = new Date(`${transaction.date}T12:00:00`);
+        const patch=portfolioId==="robinhood"?(dynamicProfitEdits[transaction.id]??{}):{};
+        if(patch.deleted)return;
+        const effectiveDate=typeof patch.date==="string"?patch.date:transaction.date;
+        const realizedProfit=typeof patch.realizedProfit==="number"?patch.realizedProfit:(transaction.realizedGain??0);
+        const date = new Date(`${effectiveDate}T12:00:00`);
         if (Number.isNaN(date.getTime())) return;
         const period = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(date);
-        monthly.set(period, (monthly.get(period) ?? 0) + (transaction.realizedGain ?? 0));
+        monthly.set(period, (monthly.get(period) ?? 0) + realizedProfit);
       });
       return monthly;
     };
@@ -1333,24 +1353,26 @@ export default function SavingsInvestmentsPage() {
       robinhood: aggregate("robinhood"),
       roth: aggregate("fidelity-roth"),
     };
-  }, [transactionsByPortfolio]);
+  }, [transactionsByPortfolio,dynamicProfitEdits]);
 
   const profitDrilldownGroups = useMemo<ProfitTickerGroup[]>(() => {
     if (!profitDrilldown) return [];
     const transactions = transactionsByPortfolio[profitDrilldown.portfolioId] ?? [];
-    const matching = transactions.filter((transaction) => {
+    const matching = transactions.map(transaction=>({transaction,patch:profitDrilldown.portfolioId==="robinhood"?(dynamicProfitEdits[transaction.id]??{}):{}})).filter(({transaction,patch}) => {
       if (transaction.type !== "sell" || !Number.isFinite(transaction.realizedGain)) return false;
       if (!transaction.notes?.includes("Sold from Holdings")) return false;
       if (!isFutureHoldingsSale(transaction.id)) return false;
-      const date = new Date(`${transaction.date}T12:00:00`);
+      if(patch.deleted)return false;
+      const effectiveDate=typeof patch.date==="string"?patch.date:transaction.date;
+      const date = new Date(`${effectiveDate}T12:00:00`);
       if (Number.isNaN(date.getTime())) return false;
       const period = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(date);
       return period === profitDrilldown.period;
     });
 
     const groups = new Map<string, ProfitDrilldownTransaction[]>();
-    matching.forEach((transaction) => {
-      const ticker = (transaction.symbol ?? "Other").trim().toUpperCase() || "Other";
+    matching.forEach(({transaction,patch}) => {
+      const ticker = (typeof patch.ticker==="string"?patch.ticker:(transaction.symbol ?? "Other")).trim().toUpperCase() || "Other";
       const optionType = transaction.assetType === "option"
         ? transaction.optionType?.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")
         : "";
@@ -1374,28 +1396,29 @@ export default function SavingsInvestmentsPage() {
               : "Buy Call";
       const row: ProfitDrilldownTransaction = {
         id: transaction.id,
-        date: transaction.date,
+        date: typeof patch.date==="string"?patch.date:transaction.date,
         ticker,
-        label,
+        label: typeof patch.label==="string"?patch.label:label,
         quantity: typeof transaction.quantity === "number" ? Math.abs(transaction.quantity) : null,
         price: typeof transaction.price === "number" ? transaction.price : null,
         proceeds: typeof transaction.realizedProceeds === "number"
           ? transaction.realizedProceeds
           : transaction.amount ? Math.abs(transaction.amount) : null,
-        realizedProfit: Number(transaction.realizedGain) || 0,
-        category,
+        realizedProfit: typeof patch.realizedProfit==="number"?patch.realizedProfit:(Number(transaction.realizedGain) || 0),
+        category: patch.category??category,
+        preserveLabelCasing: typeof patch.label==="string",
       };
       groups.set(ticker, [...(groups.get(ticker) ?? []), row]);
     });
 
-    const total = matching.reduce((sum, transaction) => sum + (Number(transaction.realizedGain) || 0), 0);
+    const total = matching.reduce((sum, {transaction,patch}) => sum + (typeof patch.realizedProfit==="number"?patch.realizedProfit:(Number(transaction.realizedGain) || 0)), 0);
     return Array.from(groups.entries())
       .map(([ticker, transactions]) => {
         const realizedProfit = transactions.reduce((sum, transaction) => sum + transaction.realizedProfit, 0);
         return { ticker, realizedProfit, percent: total ? realizedProfit / total * 100 : 0, transactions };
       })
       .sort((a,b) => b.realizedProfit - a.realizedProfit);
-  }, [profitDrilldown, transactionsByPortfolio]);
+  }, [profitDrilldown, transactionsByPortfolio,dynamicProfitEdits]);
 
   const displayedProfitDrilldownGroups = useMemo<ProfitTickerGroup[]>(()=>{
     if(!profitDrilldown || profitDrilldown.portfolioId!=="robinhood") return profitDrilldownGroups;
@@ -1450,6 +1473,12 @@ export default function SavingsInvestmentsPage() {
     });
     Object.keys(verifiedCloseDateMonthlyTotals).forEach(period=>{
       const realizedProfit:number=verifiedCloseDateMonthlyTotals[period]??0;
+      if(period==="Jul 2026") {
+        const existing=base.find(row=>row.period===period);
+        if(existing) existing.realizedProfit+=realizedProfit;
+        else base.push({period,realizedProfit,income:0});
+        return;
+      }
       base.push({period,realizedProfit,income:0});
     });
     return mergeMonthlySales(base, realizedSalesByMonth.robinhood);
@@ -1531,9 +1560,22 @@ export default function SavingsInvestmentsPage() {
     if(robinhoodChartYear==="2026"&&/^Q[12] 2026$/.test(row.period))return false;
     return true;
   }),[robinhoodQuarterly,robinhoodChartYear]);
+  const robinhoodAnnualChartData=useMemo(()=>{
+    const annual=new Map<string,{period:string;realizedProfit:number;income:number}>();
+    robinhoodQuarterly.forEach(row=>{
+      const year=row.period.match(/(20\d{2})/)?.[1];
+      if(!year)return;
+      if(year==="2026"&&/^Q[12] 2026$/.test(row.period))return;
+      const current=annual.get(year)??{period:year,realizedProfit:0,income:0};
+      current.realizedProfit+=row.realizedProfit;
+      current.income+=row.income;
+      annual.set(year,current);
+    });
+    return Array.from(annual.values()).sort((a,b)=>a.period.localeCompare(b.period));
+  },[robinhoodQuarterly]);
 
   const selectedVisual = activeId === "robinhood"
-    ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus" data={robinhoodChartData} selectedYear={robinhoodChartYear} onYearChange={setRobinhoodChartYear} yearOptions={["2026","2025","2024"]} onProfitBarClick={(period)=>setProfitDrilldown({portfolioId:"robinhood",period})}/>
+    ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus" data={robinhoodChartView==="year"?robinhoodAnnualChartData:robinhoodChartData} selectedYear={robinhoodChartYear} onYearChange={setRobinhoodChartYear} yearOptions={["2026","2025","2024"]} selectedView={robinhoodChartView} onViewChange={setRobinhoodChartView} onProfitBarClick={(period)=>{if(robinhoodChartView==="year"){setRobinhoodChartYear(period);setRobinhoodChartView("month");return;}setProfitDrilldown({portfolioId:"robinhood",period});}}/>
     : activeId === "fidelity-roth"
       ? <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={rothQuarterly} onProfitBarClick={(period)=>setProfitDrilldown({portfolioId:"fidelity-roth",period})}/>
       : activeId === "fidelity-401k"
@@ -1591,7 +1633,7 @@ export default function SavingsInvestmentsPage() {
       period={profitDrilldown.period}
       groups={displayedProfitDrilldownGroups}
       total={profitDrilldownTotal}
-      onEditTransaction={profitDrilldown.portfolioId==="robinhood"&&verifiedCloseDateTransactions[profitDrilldown.period]?saveVerifiedProfitEdit:undefined}
+      onEditTransaction={profitDrilldown.portfolioId==="robinhood"?(verifiedCloseDateTransactions[profitDrilldown.period]?saveVerifiedProfitEdit:saveDynamicProfitEdit):undefined}
       onClose={()=>setProfitDrilldown(null)}
     />}
 
@@ -1656,17 +1698,18 @@ function chartAxisValue(value: number) {
   }).format(value);
 }
 
-function QuarterlyChart({ title, subtitle, data, onProfitBarClick, selectedYear, onYearChange, yearOptions }: { title: string; subtitle: string; data: { period: string; realizedProfit: number; income: number }[]; onProfitBarClick?: (period:string)=>void; selectedYear?:string; onYearChange?:(year:string)=>void; yearOptions?:string[] }) {
+function QuarterlyChart({ title, subtitle, data, onProfitBarClick, selectedYear, onYearChange, yearOptions, selectedView, onViewChange }: { title: string; subtitle: string; data: { period: string; realizedProfit: number; income: number }[]; onProfitBarClick?: (period:string)=>void; selectedYear?:string; onYearChange?:(year:string)=>void; yearOptions?:string[]; selectedView?:"month"|"year"; onViewChange?:(view:"month"|"year")=>void }) {
   const gradientId=title.replace(/\W/g, "");
   const isMonthly=(period:string)=>/^[A-Z][a-z]{2} 20\d{2}$/.test(period);
+  const canOpenPeriod=(period:string)=>isMonthly(period)||(selectedView==="year"&&/^20\d{2}$/.test(period));
   const openProfitDetail=(entry:any)=>{
     const period=entry?.payload?.period??entry?.period;
-    if(typeof period==="string"&&isMonthly(period)) onProfitBarClick?.(period);
+    if(typeof period==="string"&&canOpenPeriod(period)) onProfitBarClick?.(period);
   };
   const PeriodTick=(props:any)=>{
     const {x,y,payload}=props;
     const period=String(payload?.value??"");
-    const clickable=Boolean(onProfitBarClick&&isMonthly(period));
+    const clickable=Boolean(onProfitBarClick&&canOpenPeriod(period));
     return <g transform={`translate(${x},${y})`} onClick={()=>clickable&&onProfitBarClick?.(period)} style={{cursor:clickable?"pointer":"default"}}>
       <text x={0} y={0} dy={16} textAnchor="middle" fill={clickable?"#a1a1aa":"#71717a"} fontSize={10} fontWeight={clickable?600:400}>{period}</text>
     </g>;
@@ -1674,7 +1717,10 @@ function QuarterlyChart({ title, subtitle, data, onProfitBarClick, selectedYear,
   return <Card className="overflow-hidden">
     <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-zinc-200/70 dark:border-white/[.06]">
       <div><h2 className="font-medium">{title}</h2><p className="mt-1 text-xs text-zinc-500">{subtitle}</p></div>
-      {selectedYear&&onYearChange&&<select value={selectedYear} onChange={event=>onYearChange(event.target.value)} className="h-9 rounded-xl border border-zinc-200 bg-transparent px-3 text-sm font-medium outline-none dark:border-white/10 dark:bg-zinc-950">{(yearOptions??[]).map(year=><option key={year} value={year}>{year}</option>)}</select>}
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {selectedView&&onViewChange&&<div className="inline-flex h-9 overflow-hidden rounded-xl border border-zinc-200 dark:border-white/10">{(["month","year"] as const).map(view=><button key={view} type="button" onClick={()=>onViewChange(view)} className={cn("px-3 text-xs font-semibold capitalize transition",selectedView===view?"bg-emerald-500 text-zinc-950":"text-zinc-500 hover:text-zinc-200")}>{view}</button>)}</div>}
+        {selectedYear&&onYearChange&&selectedView!=="year"&&<select value={selectedYear} onChange={event=>onYearChange(event.target.value)} className="h-9 rounded-xl border border-zinc-200 bg-transparent px-3 text-sm font-medium outline-none dark:border-white/10 dark:bg-zinc-950">{(yearOptions??[]).map(year=><option key={year} value={year}>{year}</option>)}</select>}
+      </div>
     </CardHeader>
     <CardContent className="pt-5">
       <div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:4}}>
