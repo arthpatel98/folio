@@ -42,6 +42,30 @@ type ProfitTickerGroup = {
   transactions: ProfitDrilldownTransaction[];
 };
 
+
+type DividendTransaction = { date: string; ticker: string; amount: number };
+const ROBINHOOD_DIVIDENDS: DividendTransaction[] = [
+  { date: "2024-10-01", ticker: "SOXL", amount: 20.98 },
+  { date: "2024-12-16", ticker: "SCHD", amount: 34.00 },
+  { date: "2024-12-31", ticker: "SOXL", amount: 27.07 },
+  { date: "2025-03-27", ticker: "VRT", amount: 1.28 },
+  { date: "2025-03-31", ticker: "SCHD", amount: 31.98 },
+  { date: "2025-04-01", ticker: "SOXL", amount: 12.61 },
+  { date: "2025-06-30", ticker: "SCHD", amount: 33.45 },
+  { date: "2025-07-01", ticker: "SOXS", amount: 29.11 },
+  { date: "2025-09-30", ticker: "SOXS", amount: 29.20 },
+  { date: "2025-12-15", ticker: "GOOGL", amount: 0.79 },
+  { date: "2025-12-29", ticker: "BMNR", amount: 1.09 },
+  { date: "2025-12-31", ticker: "SOXS", amount: 21.20 },
+  { date: "2026-01-02", ticker: "UNHG", amount: 796.74 },
+  { date: "2026-03-31", ticker: "SOXS", amount: 9.92 },
+  { date: "2026-06-15", ticker: "META", amount: 5.25 },
+  { date: "2026-06-30", ticker: "SOXS", amount: 0.75 },
+  { date: "2026-07-31", ticker: "Robinhood", amount: 26.54 },
+];
+
+const dividendPeriod = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+
 const ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS: Record<string, ProfitDrilldownTransaction[]> = {
   "Jan 2025": [{"id":"gk-2025-01-16-amat-5","date":"2025-01-16","ticker":"AMAT","label":"APPLIED MATERIALS INC (AMAT)","quantity":0.72469,"price":null,"proceeds":134.91,"realizedProfit":-15.09,"category":"Common Stocks"},{"id":"gk-2025-01-16-amat-6","date":"2025-01-16","ticker":"AMAT","label":"APPLIED MATERIALS INC (AMAT)","quantity":1.378359,"price":null,"proceeds":256.61,"realizedProfit":-43.39,"category":"Common Stocks"},{"id":"gk-2025-01-16-amat-7","date":"2025-01-16","ticker":"AMAT","label":"APPLIED MATERIALS INC (AMAT)","quantity":13.98113,"price":null,"proceeds":2602.81,"realizedProfit":52.81,"category":"Common Stocks"},{"id":"gk-2025-01-31-app-8","date":"2025-01-31","ticker":"APP","label":"APPLOVIN CORPORATION CL A (APP)","quantity":5.64365,"price":null,"proceeds":2126.69,"realizedProfit":126.69,"category":"Common Stocks"},{"id":"gk-2025-01-15-hood-94","date":"2025-01-15","ticker":"HOOD","label":"ROBINHOOD MARKETS INC (HOOD)","quantity":50.3588,"price":null,"proceeds":2318.57,"realizedProfit":318.57,"category":"Common Stocks"},{"id":"gk-2025-01-15-hood-95","date":"2025-01-15","ticker":"HOOD","label":"ROBINHOOD MARKETS INC (HOOD)","quantity":51.0733,"price":null,"proceeds":2351.47,"realizedProfit":351.47,"category":"Common Stocks"},{"id":"gk-2025-01-15-hood-96","date":"2025-01-15","ticker":"HOOD","label":"ROBINHOOD MARKETS INC (HOOD)","quantity":17.89109,"price":null,"proceeds":823.73,"realizedProfit":123.73,"category":"Common Stocks"},{"id":"gk-2025-01-15-vrt-150","date":"2025-01-15","ticker":"VRT","label":"VERTIV HOLDINGS LLC (VRT)","quantity":26.535253,"price":null,"proceeds":3504.28,"realizedProfit":4.28,"category":"Common Stocks"},{"id":"gk-2025-01-15-vst-152","date":"2025-01-15","ticker":"VST","label":"VISTRA CORP (VST)","quantity":22.620501,"price":null,"proceeds":4018.98,"realizedProfit":518.98,"category":"Common Stocks"},{"id":"gk-2025-01-15-vst-153","date":"2025-01-15","ticker":"VST","label":"VISTRA CORP (VST)","quantity":3.38604,"price":null,"proceeds":601.6,"realizedProfit":101.6,"category":"Common Stocks"}],
   "Feb 2025": [{"id":"gk-2025-02-06-amr-3","date":"2025-02-06","ticker":"AMR","label":"ALPHA METALLURGICAL RESOURC (AMR)","quantity":3.824509,"price":null,"proceeds":714.02,"realizedProfit":14.02,"category":"Common Stocks"},{"id":"gk-2025-02-21-rtc-11","date":"2025-02-21","ticker":"RTC","label":"BAIJIAYUN GROUP LIMITED CL (RTC)","quantity":7000.0,"price":null,"proceeds":5262.7,"realizedProfit":1239.11,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-38","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":28.159853,"price":null,"proceeds":893.46,"realizedProfit":-549.73,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-39","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":36.107514,"price":null,"proceeds":1145.62,"realizedProfit":-611.19,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-40","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":90.57971,"price":null,"proceeds":2873.91,"realizedProfit":-626.09,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-41","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":0.152923,"price":null,"proceeds":4.85,"realizedProfit":-1.04,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-42","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":215.137822,"price":null,"proceeds":6825.9,"realizedProfit":531.79,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-43","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":29.862178,"price":null,"proceeds":947.47,"realizedProfit":48.94,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-44","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":28.159853,"price":null,"proceeds":0.0,"realizedProfit":549.73,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-45","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":36.107514,"price":null,"proceeds":0.0,"realizedProfit":611.19,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-46","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":90.57971,"price":null,"proceeds":0.0,"realizedProfit":626.09,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-47","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":0.152923,"price":null,"proceeds":0.0,"realizedProfit":1.04,"category":"Common Stocks"},{"id":"gk-2025-02-10-dkng-52","date":"2025-02-10","ticker":"DKNG","label":"DRAFTKINGS INC (DKNG)","quantity":76.90631,"price":null,"proceeds":3300.12,"realizedProfit":300.12,"category":"Common Stocks"},{"id":"gk-2025-02-13-hims-54","date":"2025-02-13","ticker":"HIMS","label":"HIMS & HERS HEALTH INC (HIMS)","quantity":112.90887,"price":null,"proceeds":6265.47,"realizedProfit":1265.47,"category":"Common Stocks"},{"id":"gk-2025-02-13-iren-60","date":"2025-02-13","ticker":"IREN","label":"IREN LIMITED (IREN)","quantity":413.24765,"price":null,"proceeds":5434.68,"realizedProfit":1254.68,"category":"Common Stocks"},{"id":"gk-2025-02-05-mmyt-67","date":"2025-02-05","ticker":"MMYT","label":"MAKEMYTRIP LTD (MMYT)","quantity":47.4878,"price":null,"proceeds":5661.81,"realizedProfit":661.81,"category":"Common Stocks"},{"id":"gk-2025-02-06-pltr-86","date":"2025-02-06","ticker":"PLTR","label":"PALANTIR TECHNOLOGIES INC C (PLTR)","quantity":17.34495,"price":null,"proceeds":1878.24,"realizedProfit":428.24,"category":"Common Stocks"},{"id":"gk-2025-02-06-rhp-112","date":"2025-02-06","ticker":"RHP","label":"RYMAN HOSPITALITY PROPERTIE (RHP)","quantity":9.768266,"price":null,"proceeds":1014.25,"realizedProfit":14.25,"category":"Common Stocks"}],
@@ -1503,6 +1527,13 @@ export default function SavingsInvestmentsPage() {
       if(existing) existing.realizedProfit=realizedProfit;
       else base.push({period,realizedProfit,income:0});
     });
+    const dividendTotals=new Map<string,number>();
+    ROBINHOOD_DIVIDENDS.forEach(dividend=>{const period=dividendPeriod(dividend.date);dividendTotals.set(period,(dividendTotals.get(period)??0)+dividend.amount);});
+    dividendTotals.forEach((income,period)=>{
+      const existing=base.find(row=>row.period===period);
+      if(existing) existing.income=income;
+      else base.push({period,realizedProfit:0,income});
+    });
     const nonVerifiedMonthlySales = new Map(
       Array.from(realizedSalesByMonth.robinhood.entries()).filter(
         ([period]) => verifiedCloseDateMonthlyTotals[period] === undefined,
@@ -1622,7 +1653,7 @@ export default function SavingsInvestmentsPage() {
   },[profitDrilldown,robinhoodQuarterly,rothQuarterly,verifiedCloseDateTransactions]);
 
   const selectedVisual = activeId === "robinhood"
-    ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus" data={robinhoodChartView==="year"?robinhoodAnnualChartData:robinhoodChartData} selectedYear={robinhoodChartYear} onYearChange={setRobinhoodChartYear} yearOptions={["2026","2025","2024"]} selectedView={robinhoodChartView} onViewChange={setRobinhoodChartView} onProfitBarClick={(period)=>{if(robinhoodChartView==="year"){setRobinhoodChartYear(period);setRobinhoodChartView("month");return;}setProfitDrilldown({portfolioId:"robinhood",period});}}/>
+    ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Realized P/L Vs Dividends" data={robinhoodChartView==="year"?robinhoodAnnualChartData:robinhoodChartData} selectedYear={robinhoodChartYear} onYearChange={setRobinhoodChartYear} yearOptions={["2026","2025","2024"]} selectedView={robinhoodChartView} onViewChange={setRobinhoodChartView} onProfitBarClick={(period)=>{if(robinhoodChartView==="year"){setRobinhoodChartYear(period);setRobinhoodChartView("month");return;}setProfitDrilldown({portfolioId:"robinhood",period});}}/>
     : activeId === "fidelity-roth"
       ? <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={rothQuarterly} onProfitBarClick={(period)=>setProfitDrilldown({portfolioId:"fidelity-roth",period})}/>
       : activeId === "fidelity-401k"
@@ -1680,6 +1711,7 @@ export default function SavingsInvestmentsPage() {
       period={profitDrilldown.period}
       groups={displayedProfitDrilldownGroups}
       total={profitDrilldownTotal}
+      dividends={profitDrilldown.portfolioId==="robinhood"?ROBINHOOD_DIVIDENDS.filter(dividend=>dividendPeriod(dividend.date)===profitDrilldown.period):[]}
       onEditTransaction={profitDrilldown.portfolioId==="robinhood"?(verifiedCloseDateTransactions[profitDrilldown.period]?saveVerifiedProfitEdit:saveDynamicProfitEdit):undefined}
       onPrevious={drilldownAdjacentPeriods.previous?()=>setProfitDrilldown(current=>current?{...current,period:drilldownAdjacentPeriods.previous!}:current):undefined}
       onNext={drilldownAdjacentPeriods.next?()=>setProfitDrilldown(current=>current?{...current,period:drilldownAdjacentPeriods.next!}:current):undefined}
@@ -1767,7 +1799,7 @@ function QuarterlyChart({ title, subtitle, data, onProfitBarClick, selectedYear,
           {data.map((row)=><Cell key={`profit-${row.period}`} fill={row.realizedProfit<0?`url(#${gradientId}-negative)`:`url(#${gradientId}-profit)`}/>)}
           <LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/>
         </Bar>
-        <Bar dataKey="income" name="Dividend, Interest & Bonus" fill={`url(#${gradientId}-income)`} radius={[7,7,2,2]} maxBarSize={34}>
+        <Bar dataKey="income" name="Dividends" fill={`url(#${gradientId}-income)`} radius={[7,7,2,2]} maxBarSize={34} onClick={openProfitDetail} style={{cursor:onProfitBarClick?"pointer":"default"}}>
           {data.map((row)=><Cell key={`income-${row.period}`} fill={row.income<0?`url(#${gradientId}-negative)`:`url(#${gradientId}-income)`}/>)}
           <LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/>
         </Bar>
@@ -1819,7 +1851,10 @@ function formatPositionLabel(value:string) {
   return [ticker,...formatted].join(" ");
 }
 
-function ProfitDrilldownModal({period,groups,total,onEditTransaction,onPrevious,onNext,onClose}:{period:string;groups:ProfitTickerGroup[];total:number;onEditTransaction?:(id:string,patch:VerifiedProfitEdit)=>void;onPrevious?:()=>void;onNext?:()=>void;onClose:()=>void}) {
+function ProfitDrilldownModal({period,groups,total,dividends,onEditTransaction,onPrevious,onNext,onClose}:{period:string;groups:ProfitTickerGroup[];total:number;dividends:DividendTransaction[];onEditTransaction?:(id:string,patch:VerifiedProfitEdit)=>void;onPrevious?:()=>void;onNext?:()=>void;onClose:()=>void}) {
+  const [detailView,setDetailView]=useState<"profit"|"dividends">("profit");
+  useEffect(()=>setDetailView("profit"),[period]);
+  const dividendTotal=dividends.reduce((sum,dividend)=>sum+dividend.amount,0);
   const [transactionSort,setTransactionSort]=useState<"date"|"realizedProfit">("realizedProfit");
   const [transactionSortDirection,setTransactionSortDirection]=useState<"asc"|"desc">("desc");
   const transactions=groups
@@ -1886,16 +1921,33 @@ function ProfitDrilldownModal({period,groups,total,onEditTransaction,onPrevious,
 
   return <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event)=>{if(event.currentTarget===event.target)onClose();}}>
     <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-3xl border border-white/10 bg-zinc-950 shadow-[0_30px_90px_rgba(0,0,0,.55)]">
-      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/[.07] bg-zinc-950/95 px-5 py-4 backdrop-blur-xl sm:px-6">
+      <div className="sticky top-0 z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-white/[.07] bg-zinc-950/95 px-5 py-4 backdrop-blur-xl sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           {onPrevious&&<button type="button" onClick={onPrevious} className="grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 text-zinc-400 transition hover:bg-white/[.05] hover:text-white" aria-label="Previous Month" title="Previous Month"><ChevronLeft size={18}/></button>}
           <h2 className="truncate text-xl font-semibold">{period} Details</h2>
           {onNext&&<button type="button" onClick={onNext} className="grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 text-zinc-400 transition hover:bg-white/[.05] hover:text-white" aria-label="Next Month" title="Next Month"><ChevronRight size={18}/></button>}
         </div>
-        <button type="button" onClick={onClose} className="grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 text-zinc-500 transition hover:bg-white/[.05] hover:text-white" aria-label="Close Details"><X size={17}/></button>
+        <div className="inline-flex h-9 overflow-hidden rounded-xl border border-white/10">
+          <button type="button" onClick={()=>setDetailView("profit")} className={cn("px-4 text-xs font-semibold transition",detailView==="profit"?"bg-emerald-500 text-zinc-950":"text-zinc-400 hover:text-white")}>Realized P/L</button>
+          <button type="button" onClick={()=>setDetailView("dividends")} className={cn("px-4 text-xs font-semibold transition",detailView==="dividends"?"bg-blue-500 text-white":"text-zinc-400 hover:text-white")}>Dividends</button>
+        </div>
+        <button type="button" onClick={onClose} className="grid size-9 shrink-0 place-items-center justify-self-end rounded-xl border border-white/10 text-zinc-500 transition hover:bg-white/[.05] hover:text-white" aria-label="Close Details"><X size={17}/></button>
       </div>
       <div className="p-5 sm:p-6">
-        {groups.length===0?<><div className="mb-5"><p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Profit</p><p className={cn("mt-1 text-3xl font-semibold",total>=0?"text-emerald-400":"text-rose-400")}>{money(total)}</p></div><div className="rounded-2xl border border-white/10 bg-white/[.025] px-6 py-16 text-center text-sm text-zinc-500">No transaction-level profit details are available for {period}.</div></>:<>
+        {detailView==="dividends" ? <div>
+          <div className="mb-5 rounded-2xl border border-white/[.08] bg-white/[.025] p-5">
+            <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Dividends</p>
+            <p className="mt-3 text-3xl font-semibold text-blue-400">{money(dividendTotal)}</p>
+            <p className="mt-2 text-xs text-zinc-600">{dividends.length} {dividends.length===1?"Dividend":"Dividends"}</p>
+          </div>
+          <div className="overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
+            <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Dividends By Transaction</h3></div>
+            {dividends.length===0?<div className="px-6 py-14 text-center text-sm text-zinc-500">No dividend entries are available for {period}.</div>:<div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm">
+              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Ticker</th><th className="px-4 py-3 text-right">Dividend</th></tr></thead>
+              <tbody>{[...dividends].sort((a,b)=>a.date.localeCompare(b.date)).map((dividend,index)=><tr key={`${dividend.date}-${dividend.ticker}-${index}`} className="border-t border-white/[.06]"><td className="px-4 py-3 text-zinc-400">{new Date(`${dividend.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</td><td className="px-4 py-3 font-semibold">{dividend.ticker}</td><td className="px-4 py-3 text-right font-semibold text-blue-400">{money(dividend.amount)}</td></tr>)}</tbody>
+            </table></div>}
+          </div>
+        </div> : groups.length===0?<><div className="mb-5"><p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Profit</p><p className={cn("mt-1 text-3xl font-semibold",total>=0?"text-emerald-400":"text-rose-400")}>{money(total)}</p></div><div className="rounded-2xl border border-white/10 bg-white/[.025] px-6 py-16 text-center text-sm text-zinc-500">No transaction-level profit details are available for {period}.</div></>:<>
           <div>
             <div className="mb-3"><h3 className="text-sm font-semibold">Profit By Position Type</h3></div>
             <div className={cn("grid gap-3 sm:grid-cols-2",categoryTotals.length===1&&"xl:grid-cols-2",categoryTotals.length===2&&"xl:grid-cols-3",categoryTotals.length===3&&"xl:grid-cols-4",categoryTotals.length===4&&"xl:grid-cols-5",categoryTotals.length>=5&&"xl:grid-cols-3")}>
