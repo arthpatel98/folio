@@ -1134,14 +1134,24 @@ export function RobinhoodQuarterlyData() {
       (out[period]??=[]).push(edited);
     }); return out;
   },[edits]);
-  const verifiedTotals=useMemo(()=>Object.fromEntries(Object.entries(transactionsByPeriod).map(([p,txs])=>[p,txs.reduce((s,t)=>s+t.realizedProfit,0)])),[transactionsByPeriod]);
+  const verifiedTotals=useMemo<Record<string,number>>(()=>{
+    const totals:Record<string,number>={};
+    Object.entries(transactionsByPeriod).forEach(([period,txs])=>{
+      totals[period]=txs.reduce((sum,tx)=>sum+tx.realizedProfit,0);
+    });
+    return totals;
+  },[transactionsByPeriod]);
   const monthlyData=useMemo(()=>{
-    const rows=quarterlyIncome.filter(row=>!/^Q[1-4] 2025$/.test(row.period)).map(row=>({period:row.period,realizedProfit:verifiedTotals[row.period]??row.robinhoodProfit,income:row.robinhoodIncome}));
+    const rows: Array<{period:string;realizedProfit:number;income:number}> = quarterlyIncome
+      .filter(row=>!/^Q[1-4] 2025$/.test(row.period))
+      .map(row=>({period:String(row.period),realizedProfit:verifiedTotals[row.period]??row.robinhoodProfit,income:row.robinhoodIncome}));
     Object.entries(verifiedTotals).forEach(([period,realizedProfit])=>{const existing=rows.find(r=>r.period===period);if(existing)existing.realizedProfit=realizedProfit;else rows.push({period,realizedProfit,income:0});});
     return rows.filter(r=>r.period.match(/(20\d{2})/)?.[1]===selectedYear && !/^Q/.test(r.period)).sort((a,b)=>periodTime(a.period)-periodTime(b.period));
   },[selectedYear,verifiedTotals]);
   const annualData=useMemo(()=>{const m=new Map<string,{period:string;realizedProfit:number;income:number}>();
-    const source=quarterlyIncome.filter(row=>!/^Q[1-4] 2025$/.test(row.period)).map(row=>({period:row.period,realizedProfit:verifiedTotals[row.period]??row.robinhoodProfit,income:row.robinhoodIncome}));
+    const source: Array<{period:string;realizedProfit:number;income:number}> = quarterlyIncome
+      .filter(row=>!/^Q[1-4] 2025$/.test(row.period))
+      .map(row=>({period:String(row.period),realizedProfit:verifiedTotals[row.period]??row.robinhoodProfit,income:row.robinhoodIncome}));
     Object.entries(verifiedTotals).forEach(([period,realizedProfit])=>{const e=source.find(r=>r.period===period);if(e)e.realizedProfit=realizedProfit;else source.push({period,realizedProfit,income:0});});
     source.forEach(r=>{const y=r.period.match(/(20\d{2})/)?.[1];if(!y)return;const cur=m.get(y)??{period:y,realizedProfit:0,income:0};cur.realizedProfit+=r.realizedProfit;cur.income+=r.income;m.set(y,cur);});return Array.from(m.values()).sort((a,b)=>a.period.localeCompare(b.period));},[verifiedTotals]);
   const data=view==="year"?annualData:monthlyData;
