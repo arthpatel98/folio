@@ -1503,7 +1503,12 @@ export default function SavingsInvestmentsPage() {
       if(existing) existing.realizedProfit=realizedProfit;
       else base.push({period,realizedProfit,income:0});
     });
-    return mergeMonthlySales(base, realizedSalesByMonth.robinhood);
+    const nonVerifiedMonthlySales = new Map(
+      Array.from(realizedSalesByMonth.robinhood.entries()).filter(
+        ([period]) => verifiedCloseDateMonthlyTotals[period] === undefined,
+      ),
+    );
+    return mergeMonthlySales(base, nonVerifiedMonthlySales);
   }, [realizedSalesByMonth,verifiedCloseDateMonthlyTotals]);
 
   const rothQuarterly = useMemo(() => mergeMonthlySales(quarterlyIncome.map((row) => ({
@@ -1681,22 +1686,7 @@ export default function SavingsInvestmentsPage() {
       onClose={()=>setProfitDrilldown(null)}
     />}
 
-    <div className="grid gap-6 xl:grid-cols-[1fr_1.4fr]">
-      <Card>
-        <CardHeader><h2 className="font-medium">Yearly Realized Income</h2></CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
-          {yearlyRealizedIncome.map((row)=><div key={row.year} className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/[.025]">
-            <div className="text-xs text-zinc-500">{row.year}</div>
-            <div className={cn("mt-1 text-xl font-semibold", row.total >= 0 ? "positive" : "negative")}>{money(row.total)}</div>
-            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-zinc-200/70 pt-3 text-xs dark:border-white/[.06]">
-              <div><div className="text-zinc-500">Profit</div><div className={cn("mt-1 font-medium", row.realizedProfit >= 0 ? "positive" : "negative")}>{money(row.realizedProfit)}</div></div>
-              <div><div className="text-zinc-500">Dividend, Interest & Bonus</div><div className={cn("mt-1 font-medium", row.income >= 0 ? "positive" : "negative")}>{money(row.income)}</div></div>
-            </div>
-          </div>)}
-        </CardContent>
-      </Card>
-
-      <div className="space-y-6">
+    <div className="space-y-6">
         <Card className="overflow-hidden">
           <CardHeader><h2 className="font-medium">YTD Performance</h2></CardHeader>
           <CardContent>
@@ -1725,7 +1715,6 @@ export default function SavingsInvestmentsPage() {
         </Card>
         {activeId==="robinhood"&&<ExtrasTable rows={extras.robinhood} onSave={rows=>saveExtras("robinhood",rows)}/>}
         {activeId==="fidelity-roth"&&<ExtrasTable rows={extras["fidelity-roth"]} onSave={rows=>saveExtras("fidelity-roth",rows)}/>}
-      </div>
     </div>
   </div>;
 }
