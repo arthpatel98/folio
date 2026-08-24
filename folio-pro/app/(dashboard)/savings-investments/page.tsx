@@ -45,25 +45,109 @@ type ProfitTickerGroup = {
 
 type DividendTransaction = { date: string; ticker: string; amount: number };
 const ROBINHOOD_DIVIDENDS: DividendTransaction[] = [
-  { date: "2024-10-01", ticker: "SOXL", amount: 20.98 },
-  { date: "2024-12-16", ticker: "SCHD", amount: 34.00 },
-  { date: "2024-12-31", ticker: "SOXL", amount: 27.07 },
-  { date: "2025-03-27", ticker: "VRT", amount: 1.28 },
-  { date: "2025-03-31", ticker: "SCHD", amount: 31.98 },
-  { date: "2025-04-01", ticker: "SOXL", amount: 12.61 },
-  { date: "2025-06-30", ticker: "SCHD", amount: 33.45 },
-  { date: "2025-07-01", ticker: "SOXS", amount: 29.11 },
-  { date: "2025-09-30", ticker: "SOXS", amount: 29.20 },
-  { date: "2025-12-15", ticker: "GOOGL", amount: 0.79 },
-  { date: "2025-12-29", ticker: "BMNR", amount: 1.09 },
-  { date: "2025-12-31", ticker: "SOXS", amount: 21.20 },
-  { date: "2026-01-02", ticker: "UNHG", amount: 796.74 },
-  { date: "2026-03-31", ticker: "SOXS", amount: 9.92 },
-  { date: "2026-06-15", ticker: "META", amount: 5.25 },
-  { date: "2026-06-30", ticker: "SOXS", amount: 0.75 },
-  { date: "2026-07-31", ticker: "Robinhood", amount: 26.54 },
-];
+  // Dividends
+  { date: "2024-10-01", ticker: "SOXL Dividend", amount: 20.98 },
+  { date: "2024-12-16", ticker: "SCHD Dividend", amount: 34.00 },
+  { date: "2024-12-31", ticker: "SOXL Dividend", amount: 27.07 },
+  { date: "2025-03-27", ticker: "VRT Dividend", amount: 1.28 },
+  { date: "2025-03-31", ticker: "SCHD Dividend", amount: 31.98 },
+  { date: "2025-04-01", ticker: "SOXL Dividend", amount: 12.61 },
+  { date: "2025-06-30", ticker: "SCHD Dividend", amount: 33.45 },
+  { date: "2025-07-01", ticker: "SOXS Dividend", amount: 29.11 },
+  { date: "2025-09-30", ticker: "SOXS Dividend", amount: 29.20 },
+  { date: "2025-12-15", ticker: "GOOGL Dividend", amount: 0.79 },
+  { date: "2025-12-29", ticker: "BMNR Dividend", amount: 1.09 },
+  { date: "2025-12-31", ticker: "SOXS Dividend", amount: 21.20 },
+  { date: "2026-01-02", ticker: "UNHG Dividend", amount: 796.74 },
+  { date: "2026-03-31", ticker: "SOXS Dividend", amount: 9.92 },
+  { date: "2026-06-15", ticker: "META Dividend", amount: 5.25 },
+  { date: "2026-06-30", ticker: "SOXS Dividend", amount: 0.75 },
 
+  // Robinhood Gold membership charges / plan credits
+  { date: "2024-08-18", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2024-09-16", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2024-10-16", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2024-11-15", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2024-12-15", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-01-14", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-02-13", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-03-15", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-04-14", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-05-14", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-06-13", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-07-13", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-08-12", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-09-11", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-10-11", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-11-10", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-12-10", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2026-01-09", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2026-02-08", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2026-02-09", ticker: "Robinhood Gold", amount: -50.00 },
+  { date: "2026-02-09", ticker: "Gold Plan Credit", amount: 4.83 },
+  { date: "2026-03-04", ticker: "Gold Plan Credit", amount: 46.85 },
+
+  // Gold deposit boost payouts
+  { date: "2024-07-31", ticker: "Gold deposit boost payout", amount: 0.80 },
+  { date: "2024-08-31", ticker: "Gold deposit boost payout", amount: 6.46 },
+  { date: "2024-09-30", ticker: "Gold deposit boost payout", amount: 8.15 },
+  { date: "2024-10-31", ticker: "Gold deposit boost payout", amount: 8.36 },
+  { date: "2024-11-30", ticker: "Gold deposit boost payout", amount: 8.36 },
+  { date: "2024-12-31", ticker: "Gold deposit boost payout", amount: 8.36 },
+  { date: "2025-01-31", ticker: "Gold deposit boost payout", amount: 8.36 },
+  { date: "2025-02-28", ticker: "Gold deposit boost payout", amount: 8.36 },
+  { date: "2025-03-31", ticker: "Gold deposit boost payout", amount: 8.36 },
+  { date: "2025-04-30", ticker: "Gold deposit boost payout", amount: 8.34 },
+  { date: "2025-05-31", ticker: "Gold deposit boost payout", amount: 8.33 },
+  { date: "2025-06-30", ticker: "Gold deposit boost payout", amount: 8.33 },
+  { date: "2025-07-31", ticker: "Gold deposit boost payout", amount: 8.33 },
+  { date: "2025-08-31", ticker: "Gold deposit boost payout", amount: 8.33 },
+  { date: "2025-09-30", ticker: "Gold deposit boost payout", amount: 8.33 },
+  { date: "2025-10-31", ticker: "Gold deposit boost payout", amount: 8.33 },
+  { date: "2025-11-30", ticker: "Gold deposit boost payout", amount: 8.31 },
+  { date: "2025-12-31", ticker: "Gold deposit boost payout", amount: 8.31 },
+  { date: "2026-01-31", ticker: "Gold deposit boost payout", amount: 8.31 },
+  { date: "2026-02-28", ticker: "Gold deposit boost payout", amount: 8.31 },
+  { date: "2026-03-31", ticker: "Gold deposit boost payout", amount: 8.31 },
+  { date: "2026-04-30", ticker: "Gold deposit boost payout", amount: 8.31 },
+  { date: "2026-05-31", ticker: "Gold deposit boost payout", amount: 8.31 },
+  { date: "2026-06-30", ticker: "Gold deposit boost payout", amount: 8.31 },
+  { date: "2026-07-31", ticker: "Gold deposit boost payout", amount: 7.34 },
+
+  // Interest payments
+  { date: "2024-07-31", ticker: "Interest payment", amount: 3.39 },
+  { date: "2024-08-30", ticker: "Interest payment", amount: 5.06 },
+  { date: "2024-09-30", ticker: "Interest payment", amount: 2.61 },
+  { date: "2024-10-31", ticker: "Interest payment", amount: 18.41 },
+  { date: "2024-11-29", ticker: "Interest payment", amount: 34.19 },
+  { date: "2024-12-31", ticker: "Interest payment", amount: 5.35 },
+  { date: "2025-01-31", ticker: "Interest payment", amount: 11.02 },
+  { date: "2025-02-28", ticker: "Interest payment", amount: 10.02 },
+  { date: "2025-03-31", ticker: "Interest payment", amount: 7.41 },
+  { date: "2025-04-30", ticker: "Interest payment", amount: 13.26 },
+  { date: "2025-05-30", ticker: "Interest payment", amount: 47.70 },
+  { date: "2025-06-30", ticker: "Interest payment", amount: 24.29 },
+  { date: "2025-07-30", ticker: "Interest payment", amount: 15.10 },
+  { date: "2025-07-31", ticker: "Interest payment", amount: 6.10 },
+  { date: "2025-08-29", ticker: "Interest payment", amount: 17.02 },
+  { date: "2025-09-30", ticker: "Interest payment", amount: 35.68 },
+  { date: "2025-10-21", ticker: "Interest payment", amount: 45.48 },
+  { date: "2025-10-31", ticker: "Interest payment", amount: 30.72 },
+  { date: "2025-11-20", ticker: "Interest payment", amount: 12.28 },
+  { date: "2025-11-28", ticker: "Interest payment", amount: 5.57 },
+  { date: "2025-12-22", ticker: "Interest payment", amount: 2.20 },
+  { date: "2025-12-31", ticker: "Interest payment", amount: 0.14 },
+  { date: "2026-01-30", ticker: "Interest payment", amount: 7.66 },
+  { date: "2026-02-27", ticker: "Interest payment", amount: 21.51 },
+  { date: "2026-03-31", ticker: "Interest payment", amount: 28.08 },
+  { date: "2026-04-30", ticker: "Interest payment", amount: 54.89 },
+  { date: "2026-05-21", ticker: "Interest payment", amount: 35.86 },
+  { date: "2026-05-29", ticker: "Interest payment", amount: 56.12 },
+  { date: "2026-06-22", ticker: "Interest payment", amount: 24.52 },
+  { date: "2026-06-29", ticker: "Interest payment", amount: 5.43 },
+  { date: "2026-06-30", ticker: "Interest payment", amount: 40.01 },
+  { date: "2026-07-31", ticker: "Interest payment", amount: 19.20 },
+];
 const dividendPeriod = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { month: "short", year: "numeric" });
 
 const ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS: Record<string, ProfitDrilldownTransaction[]> = {
@@ -1653,7 +1737,7 @@ export default function SavingsInvestmentsPage() {
   },[profitDrilldown,robinhoodQuarterly,rothQuarterly,verifiedCloseDateTransactions]);
 
   const selectedVisual = activeId === "robinhood"
-    ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Realized P/L Vs Dividends" data={robinhoodChartView==="year"?robinhoodAnnualChartData:robinhoodChartData} selectedYear={robinhoodChartYear} onYearChange={setRobinhoodChartYear} yearOptions={["2026","2025","2024"]} selectedView={robinhoodChartView} onViewChange={setRobinhoodChartView} onProfitBarClick={(period)=>{if(robinhoodChartView==="year"){setRobinhoodChartYear(period);setRobinhoodChartView("month");return;}setProfitDrilldown({portfolioId:"robinhood",period});}}/>
+    ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Realized P/L Vs Dividends & Interest" data={robinhoodChartView==="year"?robinhoodAnnualChartData:robinhoodChartData} selectedYear={robinhoodChartYear} onYearChange={setRobinhoodChartYear} yearOptions={["2026","2025","2024"]} selectedView={robinhoodChartView} onViewChange={setRobinhoodChartView} onProfitBarClick={(period)=>{if(robinhoodChartView==="year"){setRobinhoodChartYear(period);setRobinhoodChartView("month");return;}setProfitDrilldown({portfolioId:"robinhood",period});}}/>
     : activeId === "fidelity-roth"
       ? <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={rothQuarterly} onProfitBarClick={(period)=>setProfitDrilldown({portfolioId:"fidelity-roth",period})}/>
       : activeId === "fidelity-401k"
@@ -1788,7 +1872,7 @@ function QuarterlyChart({ title, subtitle, data, onProfitBarClick, selectedYear,
       </div>
     </CardHeader>
     <CardContent className="pt-5">
-      <div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:4}}>
+      <div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:4}} onClick={(state:any)=>{const period=state?.activePayload?.[0]?.payload?.period;if(typeof period==="string"&&canOpenPeriod(period)) onProfitBarClick?.(period);}} style={{cursor:onProfitBarClick?"pointer":"default"}}>
         <defs><linearGradient id={`${gradientId}-profit`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={1}/><stop offset="100%" stopColor="#10b981" stopOpacity={0.65}/></linearGradient><linearGradient id={`${gradientId}-income`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.65}/></linearGradient><linearGradient id={`${gradientId}-negative`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#fb7185" stopOpacity={1}/><stop offset="100%" stopColor="#e11d48" stopOpacity={0.72}/></linearGradient></defs>
         <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/>
         <XAxis dataKey="period" tick={<PeriodTick/>} axisLine={false} tickLine={false} interval={0} height={34}/>
@@ -1799,7 +1883,7 @@ function QuarterlyChart({ title, subtitle, data, onProfitBarClick, selectedYear,
           {data.map((row)=><Cell key={`profit-${row.period}`} fill={row.realizedProfit<0?`url(#${gradientId}-negative)`:`url(#${gradientId}-profit)`}/>)}
           <LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/>
         </Bar>
-        <Bar dataKey="income" name="Dividends" fill={`url(#${gradientId}-income)`} radius={[7,7,2,2]} maxBarSize={34} onClick={openProfitDetail} style={{cursor:onProfitBarClick?"pointer":"default"}}>
+        <Bar dataKey="income" name="Dividends & Interest" fill={`url(#${gradientId}-income)`} radius={[7,7,2,2]} maxBarSize={34} onClick={openProfitDetail} style={{cursor:onProfitBarClick?"pointer":"default"}}>
           {data.map((row)=><Cell key={`income-${row.period}`} fill={row.income<0?`url(#${gradientId}-negative)`:`url(#${gradientId}-income)`}/>)}
           <LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/>
         </Bar>
@@ -1929,21 +2013,21 @@ function ProfitDrilldownModal({period,groups,total,dividends,onEditTransaction,o
         </div>
         <div className="inline-flex h-9 overflow-hidden rounded-xl border border-white/10">
           <button type="button" onClick={()=>setDetailView("profit")} className={cn("px-4 text-xs font-semibold transition",detailView==="profit"?"bg-emerald-500 text-zinc-950":"text-zinc-400 hover:text-white")}>Realized P/L</button>
-          <button type="button" onClick={()=>setDetailView("dividends")} className={cn("px-4 text-xs font-semibold transition",detailView==="dividends"?"bg-blue-500 text-white":"text-zinc-400 hover:text-white")}>Dividends</button>
+          <button type="button" onClick={()=>setDetailView("dividends")} className={cn("px-4 text-xs font-semibold transition",detailView==="dividends"?"bg-blue-500 text-white":"text-zinc-400 hover:text-white")}>Dividends & Interest</button>
         </div>
         <button type="button" onClick={onClose} className="grid size-9 shrink-0 place-items-center justify-self-end rounded-xl border border-white/10 text-zinc-500 transition hover:bg-white/[.05] hover:text-white" aria-label="Close Details"><X size={17}/></button>
       </div>
       <div className="p-5 sm:p-6">
         {detailView==="dividends" ? <div>
           <div className="mb-5 rounded-2xl border border-white/[.08] bg-white/[.025] p-5">
-            <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Dividends</p>
+            <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Dividends & Interest</p>
             <p className="mt-3 text-3xl font-semibold text-blue-400">{money(dividendTotal)}</p>
-            <p className="mt-2 text-xs text-zinc-600">{dividends.length} {dividends.length===1?"Dividend":"Dividends"}</p>
+            <p className="mt-2 text-xs text-zinc-600">{dividends.length} {dividends.length===1?"Entry":"Entries"}</p>
           </div>
           <div className="overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
-            <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Dividends By Transaction</h3></div>
-            {dividends.length===0?<div className="px-6 py-14 text-center text-sm text-zinc-500">No dividend entries are available for {period}.</div>:<div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm">
-              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Ticker</th><th className="px-4 py-3 text-right">Dividend</th></tr></thead>
+            <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Dividends & Interest By Transaction</h3></div>
+            {dividends.length===0?<div className="px-6 py-14 text-center text-sm text-zinc-500">No dividend or interest entries are available for {period}.</div>:<div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm">
+              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Source</th><th className="px-4 py-3 text-right">Amount</th></tr></thead>
               <tbody>{[...dividends].sort((a,b)=>a.date.localeCompare(b.date)).map((dividend,index)=><tr key={`${dividend.date}-${dividend.ticker}-${index}`} className="border-t border-white/[.06]"><td className="px-4 py-3 text-zinc-400">{new Date(`${dividend.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</td><td className="px-4 py-3 font-semibold">{dividend.ticker}</td><td className="px-4 py-3 text-right font-semibold text-blue-400">{money(dividend.amount)}</td></tr>)}</tbody>
             </table></div>}
           </div>
