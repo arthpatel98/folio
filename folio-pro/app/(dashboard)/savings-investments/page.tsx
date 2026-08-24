@@ -1622,7 +1622,7 @@ export default function SavingsInvestmentsPage() {
   },[profitDrilldown,robinhoodQuarterly,rothQuarterly,verifiedCloseDateTransactions]);
 
   const selectedVisual = activeId === "robinhood"
-    ? null
+    ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus" data={robinhoodChartView==="year"?robinhoodAnnualChartData:robinhoodChartData} selectedYear={robinhoodChartYear} onYearChange={setRobinhoodChartYear} yearOptions={["2026","2025","2024"]} selectedView={robinhoodChartView} onViewChange={setRobinhoodChartView} onProfitBarClick={(period)=>{if(robinhoodChartView==="year"){setRobinhoodChartYear(period);setRobinhoodChartView("month");return;}setProfitDrilldown({portfolioId:"robinhood",period});}}/>
     : activeId === "fidelity-roth"
       ? <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={rothQuarterly} onProfitBarClick={(period)=>setProfitDrilldown({portfolioId:"fidelity-roth",period})}/>
       : activeId === "fidelity-401k"
@@ -1632,6 +1632,13 @@ export default function SavingsInvestmentsPage() {
   return <div className="space-y-6">
     <div>
       <h1 className="text-3xl font-semibold tracking-tight">Portfolio Performance</h1>
+    </div>
+
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <Metric label="Total Investments" value={money(totals.current)} detail={`${money(totals.invested)} Invested`} icon={WalletCards}/>
+      <Metric label="Total Gain" value={money(totals.gain)} detail={`${pct(totals.totalReturn)} Total Return`} icon={TrendingUp} positive={totals.gain >= 0}/>
+      <Metric label="Realized Income" value={money(selectedRealizedIncome)} icon={Landmark} positive={selectedRealizedIncome >= 0}/>
+      <Metric label="2026 Realized YTD" value={money(selected2026Income)} detail="Through July 2026" icon={BarChart3} positive={selected2026Income >= 0}/>
     </div>
 
     <div className="grid gap-4 xl:grid-cols-3">

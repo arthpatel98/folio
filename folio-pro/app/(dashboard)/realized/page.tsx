@@ -3,7 +3,6 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Download, Pencil, Search, Trash2, Upload, X } from "lucide-react";
 import { MetricCard } from "@/components/dashboard/metric-card";
-import { RobinhoodQuarterlyData } from "@/components/portfolio/robinhood-quarterly-data";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -803,11 +802,6 @@ export default function Page() {
         <MetricCard label="Total Dividend Amount" value={money(totals.dividendAmount)} />
         <MetricCard label="Profitable Tickers" value={`${winners.length} of ${groups.length}`} />
         <MetricCard label="Loss Recovery Tickers" value={lossRecoveryTickers.toLocaleString()} />
-      </div>
-
-
-      <div className="mt-6">
-        <RobinhoodQuarterlyData />
       </div>
 
       <Card className="mt-6 overflow-hidden p-5">
