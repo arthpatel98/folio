@@ -16,6 +16,114 @@ type VerifiedProfitEdit = Partial<ProfitDrilldownTransaction> & { deleted?: bool
 type VerifiedProfitEdits = Record<string, VerifiedProfitEdit>;
 const VERIFIED_PROFIT_EDITS_KEY = "folio-robinhood-verified-profit-edits-v1";
 
+type IncomeTransaction = { date: string; ticker: string; amount: number };
+const ROBINHOOD_INCOME_TRANSACTIONS: IncomeTransaction[] = [
+  // Dividends
+  { date: "2024-10-01", ticker: "SOXL Dividend", amount: 20.98 },
+  { date: "2024-12-16", ticker: "SCHD Dividend", amount: 34.00 },
+  { date: "2024-12-31", ticker: "SOXL Dividend", amount: 27.07 },
+  { date: "2025-03-27", ticker: "VRT Dividend", amount: 1.28 },
+  { date: "2025-03-31", ticker: "SCHD Dividend", amount: 31.98 },
+  { date: "2025-04-01", ticker: "SOXL Dividend", amount: 12.61 },
+  { date: "2025-06-30", ticker: "SCHD Dividend", amount: 33.45 },
+  { date: "2025-07-01", ticker: "SOXS Dividend", amount: 29.11 },
+  { date: "2025-09-30", ticker: "SOXS Dividend", amount: 29.20 },
+  { date: "2025-12-15", ticker: "GOOGL Dividend", amount: 0.79 },
+  { date: "2025-12-29", ticker: "BMNR Dividend", amount: 1.09 },
+  { date: "2025-12-31", ticker: "SOXS Dividend", amount: 21.20 },
+  { date: "2026-01-02", ticker: "UNHG Dividend", amount: 796.74 },
+  { date: "2026-03-31", ticker: "SOXS Dividend", amount: 9.92 },
+  { date: "2026-06-15", ticker: "META Dividend", amount: 5.25 },
+  { date: "2026-06-30", ticker: "SOXS Dividend", amount: 0.75 },
+
+  // Robinhood Gold membership charges / plan credits
+  { date: "2024-08-18", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2024-09-16", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2024-10-16", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2024-11-15", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2024-12-15", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-01-14", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-02-13", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-03-15", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-04-14", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-05-14", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-06-13", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-07-13", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-08-12", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-09-11", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-10-11", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-11-10", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2025-12-10", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2026-01-09", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2026-02-08", ticker: "Robinhood Gold", amount: -5.00 },
+  { date: "2026-02-09", ticker: "Robinhood Gold", amount: -50.00 },
+  { date: "2026-02-09", ticker: "Gold Plan Credit", amount: 4.83 },
+  { date: "2026-03-04", ticker: "Gold Plan Credit", amount: 46.85 },
+
+  // Gold Deposit Boost Payouts
+  { date: "2024-07-31", ticker: "Gold Deposit Boost Payout", amount: 0.80 },
+  { date: "2024-08-31", ticker: "Gold Deposit Boost Payout", amount: 6.46 },
+  { date: "2024-09-30", ticker: "Gold Deposit Boost Payout", amount: 8.15 },
+  { date: "2024-10-31", ticker: "Gold Deposit Boost Payout", amount: 8.36 },
+  { date: "2024-11-30", ticker: "Gold Deposit Boost Payout", amount: 8.36 },
+  { date: "2024-12-31", ticker: "Gold Deposit Boost Payout", amount: 8.36 },
+  { date: "2025-01-31", ticker: "Gold Deposit Boost Payout", amount: 8.36 },
+  { date: "2025-02-28", ticker: "Gold Deposit Boost Payout", amount: 8.36 },
+  { date: "2025-03-31", ticker: "Gold Deposit Boost Payout", amount: 8.36 },
+  { date: "2025-04-30", ticker: "Gold Deposit Boost Payout", amount: 8.34 },
+  { date: "2025-05-31", ticker: "Gold Deposit Boost Payout", amount: 8.33 },
+  { date: "2025-06-30", ticker: "Gold Deposit Boost Payout", amount: 8.33 },
+  { date: "2025-07-31", ticker: "Gold Deposit Boost Payout", amount: 8.33 },
+  { date: "2025-08-31", ticker: "Gold Deposit Boost Payout", amount: 8.33 },
+  { date: "2025-09-30", ticker: "Gold Deposit Boost Payout", amount: 8.33 },
+  { date: "2025-10-31", ticker: "Gold Deposit Boost Payout", amount: 8.33 },
+  { date: "2025-11-30", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2025-12-31", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2026-01-31", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2026-02-28", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2026-03-31", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2026-04-30", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2026-05-31", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2026-06-30", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2026-07-31", ticker: "Gold Deposit Boost Payout", amount: 7.34 },
+
+  // Interest Payments
+  { date: "2024-07-31", ticker: "Interest Payment", amount: 3.39 },
+  { date: "2024-08-30", ticker: "Interest Payment", amount: 5.06 },
+  { date: "2024-09-30", ticker: "Interest Payment", amount: 2.61 },
+  { date: "2024-10-31", ticker: "Interest Payment", amount: 18.41 },
+  { date: "2024-11-29", ticker: "Interest Payment", amount: 34.19 },
+  { date: "2024-12-31", ticker: "Interest Payment", amount: 5.35 },
+  { date: "2025-01-31", ticker: "Interest Payment", amount: 11.02 },
+  { date: "2025-02-28", ticker: "Interest Payment", amount: 10.02 },
+  { date: "2025-03-31", ticker: "Interest Payment", amount: 7.41 },
+  { date: "2025-04-30", ticker: "Interest Payment", amount: 13.26 },
+  { date: "2025-05-30", ticker: "Interest Payment", amount: 47.70 },
+  { date: "2025-06-30", ticker: "Interest Payment", amount: 24.29 },
+  { date: "2025-07-30", ticker: "Interest Payment", amount: 15.10 },
+  { date: "2025-07-31", ticker: "Interest Payment", amount: 6.10 },
+  { date: "2025-08-29", ticker: "Interest Payment", amount: 17.02 },
+  { date: "2025-09-30", ticker: "Interest Payment", amount: 35.68 },
+  { date: "2025-10-21", ticker: "Interest Payment", amount: 45.48 },
+  { date: "2025-10-31", ticker: "Interest Payment", amount: 30.72 },
+  { date: "2025-11-20", ticker: "Interest Payment", amount: 12.28 },
+  { date: "2025-11-28", ticker: "Interest Payment", amount: 5.57 },
+  { date: "2025-12-22", ticker: "Interest Payment", amount: 2.20 },
+  { date: "2025-12-31", ticker: "Interest Payment", amount: 0.14 },
+  { date: "2026-01-30", ticker: "Interest Payment", amount: 7.66 },
+  { date: "2026-02-27", ticker: "Interest Payment", amount: 21.51 },
+  { date: "2026-03-31", ticker: "Interest Payment", amount: 28.08 },
+  { date: "2026-04-30", ticker: "Interest Payment", amount: 54.89 },
+  { date: "2026-05-21", ticker: "Interest Payment", amount: 35.86 },
+  { date: "2026-05-29", ticker: "Interest Payment", amount: 56.12 },
+  { date: "2026-06-22", ticker: "Interest Payment", amount: 24.52 },
+  { date: "2026-06-29", ticker: "Interest Payment", amount: 5.43 },
+  { date: "2026-06-30", ticker: "Interest Payment", amount: 40.01 },
+  { date: "2026-07-31", ticker: "Interest Payment", amount: 19.20 },
+];
+function incomePeriod(date:string){const d=new Date(`${date}T12:00:00`);return new Intl.DateTimeFormat("en-US",{month:"short",year:"numeric"}).format(d);}
+
+
 const ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS: Record<string, ProfitDrilldownTransaction[]> = {
   "Jan 2025": [{"id":"gk-2025-01-16-amat-5","date":"2025-01-16","ticker":"AMAT","label":"APPLIED MATERIALS INC (AMAT)","quantity":0.72469,"price":null,"proceeds":134.91,"realizedProfit":-15.09,"category":"Common Stocks"},{"id":"gk-2025-01-16-amat-6","date":"2025-01-16","ticker":"AMAT","label":"APPLIED MATERIALS INC (AMAT)","quantity":1.378359,"price":null,"proceeds":256.61,"realizedProfit":-43.39,"category":"Common Stocks"},{"id":"gk-2025-01-16-amat-7","date":"2025-01-16","ticker":"AMAT","label":"APPLIED MATERIALS INC (AMAT)","quantity":13.98113,"price":null,"proceeds":2602.81,"realizedProfit":52.81,"category":"Common Stocks"},{"id":"gk-2025-01-31-app-8","date":"2025-01-31","ticker":"APP","label":"APPLOVIN CORPORATION CL A (APP)","quantity":5.64365,"price":null,"proceeds":2126.69,"realizedProfit":126.69,"category":"Common Stocks"},{"id":"gk-2025-01-15-hood-94","date":"2025-01-15","ticker":"HOOD","label":"ROBINHOOD MARKETS INC (HOOD)","quantity":50.3588,"price":null,"proceeds":2318.57,"realizedProfit":318.57,"category":"Common Stocks"},{"id":"gk-2025-01-15-hood-95","date":"2025-01-15","ticker":"HOOD","label":"ROBINHOOD MARKETS INC (HOOD)","quantity":51.0733,"price":null,"proceeds":2351.47,"realizedProfit":351.47,"category":"Common Stocks"},{"id":"gk-2025-01-15-hood-96","date":"2025-01-15","ticker":"HOOD","label":"ROBINHOOD MARKETS INC (HOOD)","quantity":17.89109,"price":null,"proceeds":823.73,"realizedProfit":123.73,"category":"Common Stocks"},{"id":"gk-2025-01-15-vrt-150","date":"2025-01-15","ticker":"VRT","label":"VERTIV HOLDINGS LLC (VRT)","quantity":26.535253,"price":null,"proceeds":3504.28,"realizedProfit":4.28,"category":"Common Stocks"},{"id":"gk-2025-01-15-vst-152","date":"2025-01-15","ticker":"VST","label":"VISTRA CORP (VST)","quantity":22.620501,"price":null,"proceeds":4018.98,"realizedProfit":518.98,"category":"Common Stocks"},{"id":"gk-2025-01-15-vst-153","date":"2025-01-15","ticker":"VST","label":"VISTRA CORP (VST)","quantity":3.38604,"price":null,"proceeds":601.6,"realizedProfit":101.6,"category":"Common Stocks"}],
   "Feb 2025": [{"id":"gk-2025-02-06-amr-3","date":"2025-02-06","ticker":"AMR","label":"ALPHA METALLURGICAL RESOURC (AMR)","quantity":3.824509,"price":null,"proceeds":714.02,"realizedProfit":14.02,"category":"Common Stocks"},{"id":"gk-2025-02-21-rtc-11","date":"2025-02-21","ticker":"RTC","label":"BAIJIAYUN GROUP LIMITED CL (RTC)","quantity":7000.0,"price":null,"proceeds":5262.7,"realizedProfit":1239.11,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-38","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":28.159853,"price":null,"proceeds":893.46,"realizedProfit":-549.73,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-39","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":36.107514,"price":null,"proceeds":1145.62,"realizedProfit":-611.19,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-40","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":90.57971,"price":null,"proceeds":2873.91,"realizedProfit":-626.09,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-41","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":0.152923,"price":null,"proceeds":4.85,"realizedProfit":-1.04,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-42","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":215.137822,"price":null,"proceeds":6825.9,"realizedProfit":531.79,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-43","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":29.862178,"price":null,"proceeds":947.47,"realizedProfit":48.94,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-44","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":28.159853,"price":null,"proceeds":0.0,"realizedProfit":549.73,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-45","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":36.107514,"price":null,"proceeds":0.0,"realizedProfit":611.19,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-46","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":90.57971,"price":null,"proceeds":0.0,"realizedProfit":626.09,"category":"Common Stocks"},{"id":"gk-2025-02-21-soxl-47","date":"2025-02-21","ticker":"SOXL","label":"DIREXION DAILY SEMICONDUCTO (SOXL)","quantity":0.152923,"price":null,"proceeds":0.0,"realizedProfit":1.04,"category":"Common Stocks"},{"id":"gk-2025-02-10-dkng-52","date":"2025-02-10","ticker":"DKNG","label":"DRAFTKINGS INC (DKNG)","quantity":76.90631,"price":null,"proceeds":3300.12,"realizedProfit":300.12,"category":"Common Stocks"},{"id":"gk-2025-02-13-hims-54","date":"2025-02-13","ticker":"HIMS","label":"HIMS & HERS HEALTH INC (HIMS)","quantity":112.90887,"price":null,"proceeds":6265.47,"realizedProfit":1265.47,"category":"Common Stocks"},{"id":"gk-2025-02-13-iren-60","date":"2025-02-13","ticker":"IREN","label":"IREN LIMITED (IREN)","quantity":413.24765,"price":null,"proceeds":5434.68,"realizedProfit":1254.68,"category":"Common Stocks"},{"id":"gk-2025-02-05-mmyt-67","date":"2025-02-05","ticker":"MMYT","label":"MAKEMYTRIP LTD (MMYT)","quantity":47.4878,"price":null,"proceeds":5661.81,"realizedProfit":661.81,"category":"Common Stocks"},{"id":"gk-2025-02-06-pltr-86","date":"2025-02-06","ticker":"PLTR","label":"PALANTIR TECHNOLOGIES INC C (PLTR)","quantity":17.34495,"price":null,"proceeds":1878.24,"realizedProfit":428.24,"category":"Common Stocks"},{"id":"gk-2025-02-06-rhp-112","date":"2025-02-06","ticker":"RHP","label":"RYMAN HOSPITALITY PROPERTIE (RHP)","quantity":9.768266,"price":null,"proceeds":1014.25,"realizedProfit":14.25,"category":"Common Stocks"}],
@@ -1141,19 +1249,22 @@ export function RobinhoodQuarterlyData() {
     });
     return totals;
   },[transactionsByPeriod]);
+  const incomeTotals=useMemo(()=>{const totals:Record<string,number>={};ROBINHOOD_INCOME_TRANSACTIONS.forEach(item=>{const p=incomePeriod(item.date);totals[p]=(totals[p]??0)+item.amount;});return totals;},[]);
   const monthlyData=useMemo(()=>{
     const rows: Array<{period:string;realizedProfit:number;income:number}> = quarterlyIncome
       .filter(row=>!/^Q[1-4] 2025$/.test(row.period))
-      .map(row=>({period:String(row.period),realizedProfit:verifiedTotals[row.period]??row.robinhoodProfit,income:row.robinhoodIncome}));
-    Object.entries(verifiedTotals).forEach(([period,realizedProfit])=>{const existing=rows.find(r=>r.period===period);if(existing)existing.realizedProfit=realizedProfit;else rows.push({period,realizedProfit,income:0});});
+      .map(row=>({period:String(row.period),realizedProfit:verifiedTotals[row.period]??row.robinhoodProfit,income:incomeTotals[String(row.period)]??row.robinhoodIncome}));
+    Object.entries(verifiedTotals).forEach(([period,realizedProfit])=>{const existing=rows.find(r=>r.period===period);if(existing)existing.realizedProfit=realizedProfit;else rows.push({period,realizedProfit,income:incomeTotals[period]??0});});
+    Object.entries(incomeTotals).forEach(([period,income])=>{const existing=rows.find(r=>r.period===period);if(existing)existing.income=income;else rows.push({period,realizedProfit:0,income});});
     return rows.filter(r=>r.period.match(/(20\d{2})/)?.[1]===selectedYear && !/^Q/.test(r.period)).sort((a,b)=>periodTime(a.period)-periodTime(b.period));
-  },[selectedYear,verifiedTotals]);
+  },[selectedYear,verifiedTotals,incomeTotals]);
   const annualData=useMemo(()=>{const m=new Map<string,{period:string;realizedProfit:number;income:number}>();
     const source: Array<{period:string;realizedProfit:number;income:number}> = quarterlyIncome
       .filter(row=>!/^Q[1-4] 2025$/.test(row.period))
-      .map(row=>({period:String(row.period),realizedProfit:verifiedTotals[row.period]??row.robinhoodProfit,income:row.robinhoodIncome}));
-    Object.entries(verifiedTotals).forEach(([period,realizedProfit])=>{const e=source.find(r=>r.period===period);if(e)e.realizedProfit=realizedProfit;else source.push({period,realizedProfit,income:0});});
-    source.forEach(r=>{const y=r.period.match(/(20\d{2})/)?.[1];if(!y)return;const cur=m.get(y)??{period:y,realizedProfit:0,income:0};cur.realizedProfit+=r.realizedProfit;cur.income+=r.income;m.set(y,cur);});return Array.from(m.values()).sort((a,b)=>a.period.localeCompare(b.period));},[verifiedTotals]);
+      .map(row=>({period:String(row.period),realizedProfit:verifiedTotals[row.period]??row.robinhoodProfit,income:incomeTotals[String(row.period)]??row.robinhoodIncome}));
+    Object.entries(verifiedTotals).forEach(([period,realizedProfit])=>{const e=source.find(r=>r.period===period);if(e)e.realizedProfit=realizedProfit;else source.push({period,realizedProfit,income:incomeTotals[period]??0});});
+    Object.entries(incomeTotals).forEach(([period,income])=>{const e=source.find(r=>r.period===period);if(e)e.income=income;else source.push({period,realizedProfit:0,income});});
+    source.forEach(r=>{const y=r.period.match(/(20\d{2})/)?.[1];if(!y)return;const cur=m.get(y)??{period:y,realizedProfit:0,income:0};cur.realizedProfit+=r.realizedProfit;cur.income+=r.income;m.set(y,cur);});return Array.from(m.values()).sort((a,b)=>a.period.localeCompare(b.period));},[verifiedTotals,incomeTotals]);
   const data=view==="year"?annualData:monthlyData;
   const selectedTransactions=selectedPeriod?transactionsByPeriod[selectedPeriod]??[]:[];
   const total=selectedTransactions.reduce((s,t)=>s+t.realizedProfit,0);
@@ -1164,17 +1275,18 @@ export function RobinhoodQuarterlyData() {
   return <>
     <Card className="overflow-hidden">
       <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-zinc-200/70 dark:border-white/[.06]">
-        <div><h2 className="font-medium">Robinhood Quarterly Data</h2><p className="mt-1 text-xs text-zinc-500">Profit Vs Dividend, Interest & Bonus</p></div>
+        <div><h2 className="font-medium">Robinhood Quarterly Data</h2><p className="mt-1 text-xs text-zinc-500">Realized P/L Vs Dividends & Interest</p></div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="inline-flex h-9 overflow-hidden rounded-xl border border-zinc-200 dark:border-white/10">{(["month","year"] as const).map(v=><button key={v} type="button" onClick={()=>setView(v)} className={cn("px-3 text-xs font-semibold capitalize transition",view===v?"bg-emerald-500 text-zinc-950":"text-zinc-500 hover:text-zinc-200")}>{v}</button>)}</div>
           {view!=="year"&&<select value={selectedYear} onChange={e=>setSelectedYear(e.target.value)} className="h-9 rounded-xl border border-zinc-200 bg-transparent px-3 text-sm font-medium outline-none dark:border-white/10 dark:bg-zinc-950">{["2026","2025","2024"].map(y=><option key={y}>{y}</option>)}</select>}
         </div>
       </CardHeader>
-      <CardContent className="pt-5"><div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:4}}>
-        <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="period" tick={{fill:"#a1a1aa",fontSize:10}} axisLine={false} tickLine={false} interval={0}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={chartAxisValue}/>
-        <Tooltip formatter={(value:any)=>money(Number(value))} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5"}}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/>
-        <Bar dataKey="realizedProfit" name="Profit" radius={[7,7,2,2]} maxBarSize={34} onClick={(entry:any)=>open(entry?.period)} style={{cursor:"pointer"}}>{data.map(row=><Cell key={`p-${row.period}`} fill={row.realizedProfit<0?"#e11d48":"#10b981"}/>)}<LabelList dataKey="realizedProfit" position="top" formatter={(v:any)=>wholeDollar(Number(v))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar>
-        <Bar dataKey="income" name="Dividend, Interest & Bonus" radius={[7,7,2,2]} maxBarSize={34}>{data.map(row=><Cell key={`i-${row.period}`} fill={row.income<0?"#e11d48":"#3b82f6"}/>)}<LabelList dataKey="income" position="top" formatter={(v:any)=>wholeDollar(Number(v))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar>
+      <CardContent className="pt-5"><div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:4}} onClick={(state:any)=>{const period=state?.activePayload?.[0]?.payload?.period;if(typeof period==="string")open(period);}} style={{cursor:"pointer"}}>
+        <defs><linearGradient id="rhq-profit" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399"/><stop offset="100%" stopColor="#10b981" stopOpacity={0.65}/></linearGradient><linearGradient id="rhq-income" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa"/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.65}/></linearGradient><linearGradient id="rhq-negative" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#fb7185"/><stop offset="100%" stopColor="#e11d48" stopOpacity={0.72}/></linearGradient></defs>
+        <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="period" tick={{fill:"#a1a1aa",fontSize:10,fontWeight:600}} axisLine={false} tickLine={false} interval={0}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={chartAxisValue}/>
+        <Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} formatter={(value:any)=>money(Number(value))} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5",boxShadow:"0 12px 30px rgba(0,0,0,.25)"}}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/>
+        <Bar dataKey="realizedProfit" name="Profit" radius={[7,7,2,2]} maxBarSize={34} onClick={(entry:any)=>open(entry?.period)} style={{cursor:"pointer"}}>{data.map(row=><Cell key={`p-${row.period}`} fill={row.realizedProfit<0?"url(#rhq-negative)":"url(#rhq-profit)"}/>)}<LabelList dataKey="realizedProfit" position="top" formatter={(v:any)=>wholeDollar(Number(v))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar>
+        <Bar dataKey="income" name="Dividends & Interest" radius={[7,7,2,2]} maxBarSize={34} onClick={(entry:any)=>open(entry?.period)} style={{cursor:"pointer"}}>{data.map(row=><Cell key={`i-${row.period}`} fill={row.income<0?"url(#rhq-negative)":"url(#rhq-income)"}/>)}<LabelList dataKey="income" position="top" formatter={(v:any)=>wholeDollar(Number(v))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar>
       </BarChart></ResponsiveContainer></div></CardContent>
     </Card>
     {selectedPeriod&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onMouseDown={e=>{if(e.currentTarget===e.target)setSelectedPeriod(null)}}><div className="max-h-[88vh] w-full max-w-5xl overflow-auto rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">

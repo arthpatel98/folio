@@ -10,6 +10,7 @@ import { holdingMetrics, optionCollateral, portfolioSummary } from "@/lib/calcul
 import { cn, money } from "@/lib/utils";
 import { buildOptionSymbol } from "@/lib/options";
 import { isUsMarketDay, isUsMarketOpen } from "@/lib/market-hours";
+import { investmentAccounts } from "@/lib/savings-investments-data";
 import { usePortfolioStore, visibleState } from "@/store/portfolio-store";
 import type { Holding, OptionType } from "@/types/portfolio";
 import * as XLSX from "xlsx";
@@ -35,6 +36,15 @@ function PortfolioValueMetric({ value, dayReturn, dayReturnPct }: { value: numbe
 }
 
 const PORTFOLIO_CLOSE_SNAPSHOTS_KEY = "folio-portfolio-close-snapshots-v1";
+const PERFORMANCE_ATH_KEY = "folio-portfolio-performance-all-time-high-v1";
+const DEFAULT_PERFORMANCE_ATH: Record<string,{value:number;date:string}> = {
+  robinhood:{value:108128,date:"2025-11-05"},
+  "fidelity-roth":{value:20134,date:"2025-08-06"},
+  "fidelity-401k":{value:21194,date:"2026-06-02"},
+};
+const HOLDINGS_ACCOUNT_NAMES: Record<string,string> = {robinhood:"Robinhood","fidelity-roth":"Fidelity Roth IRA","fidelity-401k":"Fidelity 401(k)"};
+function compactDate(value:string){const d=new Date(`${value}T12:00:00`);return Number.isNaN(d.getTime())?value:d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});}
+
 
 function easternMarketClock(date = new Date()) {
   const dateText = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
@@ -66,6 +76,7 @@ export default function Page() {
   const [pricesUpdatedAt, setPricesUpdatedAt] = useState<Date | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [closeSnapshots, setCloseSnapshots] = useState<Record<string, number>>({});
+  const [performanceAth,setPerformanceAth]=useState<Record<string,{value:number;date:string}>>(DEFAULT_PERFORMANCE_ATH);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -112,6 +123,8 @@ export default function Page() {
     } catch {}
   }, []);
 
+  useEffect(()=>{try{const saved=JSON.parse(window.localStorage.getItem(PERFORMANCE_ATH_KEY)??"{}");if(saved&&typeof saved==="object")setPerformanceAth(current=>({...current,...saved}));}catch{}},[]);
+
   useEffect(() => {
     const captureClose = () => {
       const now = new Date();
@@ -146,6 +159,23 @@ export default function Page() {
     : impliedStartOfDayValue
       ? (portfolioDayReturn / impliedStartOfDayValue) * 100
       : 0;
+
+  const performanceAccount = useMemo(()=>{
+    const name=HOLDINGS_ACCOUNT_NAMES[activePortfolioId]??"Robinhood";
+    const base=investmentAccounts.find(account=>account.name===name)??investmentAccounts[0];
+    const current=summary.value;
+    const invested=base.invested;
+    const gain=current-invested;
+    const totalReturn=invested>0?gain/invested:0;
+    const monthNumber=new Date().getMonth()+1;
+    const monthFraction=(monthNumber-1)/12;
+    const cagrBaseYears=name==="Fidelity Roth IRA"?1.0833:2;
+    const cagrYears=cagrBaseYears+monthFraction;
+    const cagr=invested>0&&current>0?Math.pow(current/invested,1/cagrYears)-1:0;
+    const ytd=name==="Robinhood"?current/83745-1:name==="Fidelity Roth IRA"?current/16452-1:0.1465;
+    return {...base,current,invested,gain,totalReturn,cagr,ytd};
+  },[activePortfolioId,summary.value]);
+  const activeAth=performanceAth[activePortfolioId]??DEFAULT_PERFORMANCE_ATH[activePortfolioId]??DEFAULT_PERFORMANCE_ATH.robinhood;
 
   const positionValue = summary.invested;
   const stockValue = holdings.filter((holding) => (holding.assetType ?? "stock") === "stock").reduce((sum, holding) => sum + holdingMetrics(holding).marketValue, 0);
@@ -378,6 +408,19 @@ export default function Page() {
         {!isFidelity401k && <MetricBlock label="Total Options Value" value={money(optionValue)} subvalue={`${optionHoldings.length} Open Positions\n( ${profitableOptions} Profitable Positions )`} icon={Layers3} tone="purple"/>}
         <MetricBlock label="Cash" value={money(availableCash)} subvalue={`${summary.value ? ((availableCash / summary.value) * 100).toFixed(2) : "0.00"}% of Portfolio`} icon={Banknote} tone="purple"/>
       </div>
+
+      <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-950/40 sm:p-6">
+        <div className="flex items-start justify-between gap-4"><div><div className="text-sm text-zinc-500">Brokerage Account</div><h2 className="mt-1 text-2xl font-semibold tracking-tight">{performanceAccount.name}</h2></div><div className={cn("rounded-full px-4 py-2 text-sm font-semibold",performanceAccount.totalReturn>=0?"bg-emerald-400/10 text-emerald-400":"bg-rose-400/10 text-rose-400")}>{performanceAccount.totalReturn>=0?"+":""}{(performanceAccount.totalReturn*100).toFixed(2)}%</div></div>
+        <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-6 border-t border-zinc-200 pt-5 dark:border-white/10 sm:grid-cols-4">
+          <div><div className="text-sm text-zinc-500">Investment</div><div className="mt-1 text-xl font-semibold">{money(performanceAccount.invested)}</div></div>
+          <div><div className="text-sm text-zinc-500">Total Gain</div><div className={cn("mt-1 text-xl font-semibold",performanceAccount.gain>=0?"text-emerald-400":"text-rose-400")}>{money(performanceAccount.gain)}</div></div>
+          <div><div className="text-sm text-zinc-500">Total Return</div><div className={cn("mt-1 text-lg font-semibold",performanceAccount.totalReturn>=0?"text-emerald-400":"text-rose-400")}>{performanceAccount.totalReturn>=0?"+":""}{(performanceAccount.totalReturn*100).toFixed(2)}%</div></div>
+          <div><div className="text-sm text-zinc-500">CAGR</div><div className={cn("mt-1 text-lg font-semibold",performanceAccount.cagr>=0?"text-emerald-400":"text-rose-400")}>{performanceAccount.cagr>=0?"+":""}{(performanceAccount.cagr*100).toFixed(2)}%</div></div>
+          <div><div className="text-sm text-zinc-500">2026 YTD</div><div className={cn("mt-1 text-lg font-semibold",performanceAccount.ytd>=0?"text-emerald-400":"text-rose-400")}>{performanceAccount.ytd>=0?"+":""}{(performanceAccount.ytd*100).toFixed(2)}%</div></div>
+          <div className="sm:col-span-1"><div className="text-sm text-zinc-500">Portfolio Start</div><div className="mt-1 text-sm font-medium text-zinc-300">{performanceAccount.start}</div></div>
+          <div className="col-span-2"><div className="text-sm text-zinc-500">All-Time High</div><div className="mt-1 text-sm font-medium text-zinc-300">{money(activeAth.value)} On {compactDate(activeAth.date)}</div></div>
+        </div>
+      </section>
 
       <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-950/30">
         <div className="relative max-w-md">

@@ -1737,7 +1737,7 @@ export default function SavingsInvestmentsPage() {
   },[profitDrilldown,robinhoodQuarterly,rothQuarterly,verifiedCloseDateTransactions]);
 
   const selectedVisual = activeId === "robinhood"
-    ? <QuarterlyChart title="Robinhood Quarterly Data" subtitle="Realized P/L Vs Dividends & Interest" data={robinhoodChartView==="year"?robinhoodAnnualChartData:robinhoodChartData} selectedYear={robinhoodChartYear} onYearChange={setRobinhoodChartYear} yearOptions={["2026","2025","2024"]} selectedView={robinhoodChartView} onViewChange={setRobinhoodChartView} onProfitBarClick={(period)=>{if(robinhoodChartView==="year"){setRobinhoodChartYear(period);setRobinhoodChartView("month");return;}setProfitDrilldown({portfolioId:"robinhood",period});}}/>
+    ? null
     : activeId === "fidelity-roth"
       ? <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={rothQuarterly} onProfitBarClick={(period)=>setProfitDrilldown({portfolioId:"fidelity-roth",period})}/>
       : activeId === "fidelity-401k"
