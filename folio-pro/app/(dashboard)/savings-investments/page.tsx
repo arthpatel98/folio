@@ -87,66 +87,66 @@ const ROBINHOOD_DIVIDENDS: DividendTransaction[] = [
   { date: "2026-02-09", ticker: "Gold Plan Credit", amount: 4.83 },
   { date: "2026-03-04", ticker: "Gold Plan Credit", amount: 46.85 },
 
-  // Gold deposit boost payouts
-  { date: "2024-07-31", ticker: "Gold deposit boost payout", amount: 0.80 },
-  { date: "2024-08-31", ticker: "Gold deposit boost payout", amount: 6.46 },
-  { date: "2024-09-30", ticker: "Gold deposit boost payout", amount: 8.15 },
-  { date: "2024-10-31", ticker: "Gold deposit boost payout", amount: 8.36 },
-  { date: "2024-11-30", ticker: "Gold deposit boost payout", amount: 8.36 },
-  { date: "2024-12-31", ticker: "Gold deposit boost payout", amount: 8.36 },
-  { date: "2025-01-31", ticker: "Gold deposit boost payout", amount: 8.36 },
-  { date: "2025-02-28", ticker: "Gold deposit boost payout", amount: 8.36 },
-  { date: "2025-03-31", ticker: "Gold deposit boost payout", amount: 8.36 },
-  { date: "2025-04-30", ticker: "Gold deposit boost payout", amount: 8.34 },
-  { date: "2025-05-31", ticker: "Gold deposit boost payout", amount: 8.33 },
-  { date: "2025-06-30", ticker: "Gold deposit boost payout", amount: 8.33 },
-  { date: "2025-07-31", ticker: "Gold deposit boost payout", amount: 8.33 },
-  { date: "2025-08-31", ticker: "Gold deposit boost payout", amount: 8.33 },
-  { date: "2025-09-30", ticker: "Gold deposit boost payout", amount: 8.33 },
-  { date: "2025-10-31", ticker: "Gold deposit boost payout", amount: 8.33 },
-  { date: "2025-11-30", ticker: "Gold deposit boost payout", amount: 8.31 },
-  { date: "2025-12-31", ticker: "Gold deposit boost payout", amount: 8.31 },
-  { date: "2026-01-31", ticker: "Gold deposit boost payout", amount: 8.31 },
-  { date: "2026-02-28", ticker: "Gold deposit boost payout", amount: 8.31 },
-  { date: "2026-03-31", ticker: "Gold deposit boost payout", amount: 8.31 },
-  { date: "2026-04-30", ticker: "Gold deposit boost payout", amount: 8.31 },
-  { date: "2026-05-31", ticker: "Gold deposit boost payout", amount: 8.31 },
-  { date: "2026-06-30", ticker: "Gold deposit boost payout", amount: 8.31 },
-  { date: "2026-07-31", ticker: "Gold deposit boost payout", amount: 7.34 },
+  // Gold Deposit Boost Payouts
+  { date: "2024-07-31", ticker: "Gold Deposit Boost Payout", amount: 0.80 },
+  { date: "2024-08-31", ticker: "Gold Deposit Boost Payout", amount: 6.46 },
+  { date: "2024-09-30", ticker: "Gold Deposit Boost Payout", amount: 8.15 },
+  { date: "2024-10-31", ticker: "Gold Deposit Boost Payout", amount: 8.36 },
+  { date: "2024-11-30", ticker: "Gold Deposit Boost Payout", amount: 8.36 },
+  { date: "2024-12-31", ticker: "Gold Deposit Boost Payout", amount: 8.36 },
+  { date: "2025-01-31", ticker: "Gold Deposit Boost Payout", amount: 8.36 },
+  { date: "2025-02-28", ticker: "Gold Deposit Boost Payout", amount: 8.36 },
+  { date: "2025-03-31", ticker: "Gold Deposit Boost Payout", amount: 8.36 },
+  { date: "2025-04-30", ticker: "Gold Deposit Boost Payout", amount: 8.34 },
+  { date: "2025-05-31", ticker: "Gold Deposit Boost Payout", amount: 8.33 },
+  { date: "2025-06-30", ticker: "Gold Deposit Boost Payout", amount: 8.33 },
+  { date: "2025-07-31", ticker: "Gold Deposit Boost Payout", amount: 8.33 },
+  { date: "2025-08-31", ticker: "Gold Deposit Boost Payout", amount: 8.33 },
+  { date: "2025-09-30", ticker: "Gold Deposit Boost Payout", amount: 8.33 },
+  { date: "2025-10-31", ticker: "Gold Deposit Boost Payout", amount: 8.33 },
+  { date: "2025-11-30", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2025-12-31", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2026-01-31", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2026-02-28", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2026-03-31", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2026-04-30", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2026-05-31", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2026-06-30", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
+  { date: "2026-07-31", ticker: "Gold Deposit Boost Payout", amount: 7.34 },
 
-  // Interest payments
-  { date: "2024-07-31", ticker: "Interest payment", amount: 3.39 },
-  { date: "2024-08-30", ticker: "Interest payment", amount: 5.06 },
-  { date: "2024-09-30", ticker: "Interest payment", amount: 2.61 },
-  { date: "2024-10-31", ticker: "Interest payment", amount: 18.41 },
-  { date: "2024-11-29", ticker: "Interest payment", amount: 34.19 },
-  { date: "2024-12-31", ticker: "Interest payment", amount: 5.35 },
-  { date: "2025-01-31", ticker: "Interest payment", amount: 11.02 },
-  { date: "2025-02-28", ticker: "Interest payment", amount: 10.02 },
-  { date: "2025-03-31", ticker: "Interest payment", amount: 7.41 },
-  { date: "2025-04-30", ticker: "Interest payment", amount: 13.26 },
-  { date: "2025-05-30", ticker: "Interest payment", amount: 47.70 },
-  { date: "2025-06-30", ticker: "Interest payment", amount: 24.29 },
-  { date: "2025-07-30", ticker: "Interest payment", amount: 15.10 },
-  { date: "2025-07-31", ticker: "Interest payment", amount: 6.10 },
-  { date: "2025-08-29", ticker: "Interest payment", amount: 17.02 },
-  { date: "2025-09-30", ticker: "Interest payment", amount: 35.68 },
-  { date: "2025-10-21", ticker: "Interest payment", amount: 45.48 },
-  { date: "2025-10-31", ticker: "Interest payment", amount: 30.72 },
-  { date: "2025-11-20", ticker: "Interest payment", amount: 12.28 },
-  { date: "2025-11-28", ticker: "Interest payment", amount: 5.57 },
-  { date: "2025-12-22", ticker: "Interest payment", amount: 2.20 },
-  { date: "2025-12-31", ticker: "Interest payment", amount: 0.14 },
-  { date: "2026-01-30", ticker: "Interest payment", amount: 7.66 },
-  { date: "2026-02-27", ticker: "Interest payment", amount: 21.51 },
-  { date: "2026-03-31", ticker: "Interest payment", amount: 28.08 },
-  { date: "2026-04-30", ticker: "Interest payment", amount: 54.89 },
-  { date: "2026-05-21", ticker: "Interest payment", amount: 35.86 },
-  { date: "2026-05-29", ticker: "Interest payment", amount: 56.12 },
-  { date: "2026-06-22", ticker: "Interest payment", amount: 24.52 },
-  { date: "2026-06-29", ticker: "Interest payment", amount: 5.43 },
-  { date: "2026-06-30", ticker: "Interest payment", amount: 40.01 },
-  { date: "2026-07-31", ticker: "Interest payment", amount: 19.20 },
+  // Interest Payments
+  { date: "2024-07-31", ticker: "Interest Payment", amount: 3.39 },
+  { date: "2024-08-30", ticker: "Interest Payment", amount: 5.06 },
+  { date: "2024-09-30", ticker: "Interest Payment", amount: 2.61 },
+  { date: "2024-10-31", ticker: "Interest Payment", amount: 18.41 },
+  { date: "2024-11-29", ticker: "Interest Payment", amount: 34.19 },
+  { date: "2024-12-31", ticker: "Interest Payment", amount: 5.35 },
+  { date: "2025-01-31", ticker: "Interest Payment", amount: 11.02 },
+  { date: "2025-02-28", ticker: "Interest Payment", amount: 10.02 },
+  { date: "2025-03-31", ticker: "Interest Payment", amount: 7.41 },
+  { date: "2025-04-30", ticker: "Interest Payment", amount: 13.26 },
+  { date: "2025-05-30", ticker: "Interest Payment", amount: 47.70 },
+  { date: "2025-06-30", ticker: "Interest Payment", amount: 24.29 },
+  { date: "2025-07-30", ticker: "Interest Payment", amount: 15.10 },
+  { date: "2025-07-31", ticker: "Interest Payment", amount: 6.10 },
+  { date: "2025-08-29", ticker: "Interest Payment", amount: 17.02 },
+  { date: "2025-09-30", ticker: "Interest Payment", amount: 35.68 },
+  { date: "2025-10-21", ticker: "Interest Payment", amount: 45.48 },
+  { date: "2025-10-31", ticker: "Interest Payment", amount: 30.72 },
+  { date: "2025-11-20", ticker: "Interest Payment", amount: 12.28 },
+  { date: "2025-11-28", ticker: "Interest Payment", amount: 5.57 },
+  { date: "2025-12-22", ticker: "Interest Payment", amount: 2.20 },
+  { date: "2025-12-31", ticker: "Interest Payment", amount: 0.14 },
+  { date: "2026-01-30", ticker: "Interest Payment", amount: 7.66 },
+  { date: "2026-02-27", ticker: "Interest Payment", amount: 21.51 },
+  { date: "2026-03-31", ticker: "Interest Payment", amount: 28.08 },
+  { date: "2026-04-30", ticker: "Interest Payment", amount: 54.89 },
+  { date: "2026-05-21", ticker: "Interest Payment", amount: 35.86 },
+  { date: "2026-05-29", ticker: "Interest Payment", amount: 56.12 },
+  { date: "2026-06-22", ticker: "Interest Payment", amount: 24.52 },
+  { date: "2026-06-29", ticker: "Interest Payment", amount: 5.43 },
+  { date: "2026-06-30", ticker: "Interest Payment", amount: 40.01 },
+  { date: "2026-07-31", ticker: "Interest Payment", amount: 19.20 },
 ];
 const dividendPeriod = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { month: "short", year: "numeric" });
 
@@ -1749,13 +1749,6 @@ export default function SavingsInvestmentsPage() {
       <h1 className="text-3xl font-semibold tracking-tight">Portfolio Performance</h1>
     </div>
 
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <Metric label="Total Investments" value={money(totals.current)} detail={`${money(totals.invested)} Invested`} icon={WalletCards}/>
-      <Metric label="Total Gain" value={money(totals.gain)} detail={`${pct(totals.totalReturn)} Total Return`} icon={TrendingUp} positive={totals.gain >= 0}/>
-      <Metric label="Realized Income" value={money(selectedRealizedIncome)} icon={Landmark} positive={selectedRealizedIncome >= 0}/>
-      <Metric label="2026 Realized YTD" value={money(selected2026Income)} detail="Through July 2026" icon={BarChart3} positive={selected2026Income >= 0}/>
-    </div>
-
     <div className="grid gap-4 xl:grid-cols-3">
       {accounts.map((account) => <Card key={account.name} className="p-5">
         <div className="flex items-start justify-between gap-3">
@@ -1829,8 +1822,6 @@ export default function SavingsInvestmentsPage() {
             </div>
           </CardContent>
         </Card>
-        {activeId==="robinhood"&&<ExtrasTable rows={extras.robinhood} onSave={rows=>saveExtras("robinhood",rows)}/>}
-        {activeId==="fidelity-roth"&&<ExtrasTable rows={extras["fidelity-roth"]} onSave={rows=>saveExtras("fidelity-roth",rows)}/>}
     </div>
   </div>;
 }
@@ -1939,6 +1930,14 @@ function ProfitDrilldownModal({period,groups,total,dividends,onEditTransaction,o
   const [detailView,setDetailView]=useState<"profit"|"dividends">("profit");
   useEffect(()=>setDetailView("profit"),[period]);
   const dividendTotal=dividends.reduce((sum,dividend)=>sum+dividend.amount,0);
+  const incomeCategory=(dividend:DividendTransaction):"Dividends"|"Robinhood Gold"|"Interest"=>{
+    if(dividend.ticker==="Interest Payment")return "Interest";
+    if(dividend.ticker.endsWith(" Dividend"))return "Dividends";
+    return "Robinhood Gold";
+  };
+  const totalDividends=dividends.filter(item=>incomeCategory(item)==="Dividends").reduce((sum,item)=>sum+item.amount,0);
+  const totalRobinhoodGold=dividends.filter(item=>incomeCategory(item)==="Robinhood Gold").reduce((sum,item)=>sum+item.amount,0);
+  const totalInterest=dividends.filter(item=>incomeCategory(item)==="Interest").reduce((sum,item)=>sum+item.amount,0);
   const [transactionSort,setTransactionSort]=useState<"date"|"realizedProfit">("realizedProfit");
   const [transactionSortDirection,setTransactionSortDirection]=useState<"asc"|"desc">("desc");
   const transactions=groups
@@ -2019,16 +2018,30 @@ function ProfitDrilldownModal({period,groups,total,dividends,onEditTransaction,o
       </div>
       <div className="p-5 sm:p-6">
         {detailView==="dividends" ? <div>
+          <div className="mb-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/[.08] bg-white/[.025] p-5">
+              <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Dividends</p>
+              <p className={cn("mt-3 text-2xl font-semibold",totalDividends>=0?"text-blue-400":"text-rose-400")}>{money(totalDividends)}</p>
+            </div>
+            <div className="rounded-2xl border border-white/[.08] bg-white/[.025] p-5">
+              <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Robinhood Gold</p>
+              <p className={cn("mt-3 text-2xl font-semibold",totalRobinhoodGold>=0?"text-blue-400":"text-rose-400")}>{money(totalRobinhoodGold)}</p>
+            </div>
+            <div className="rounded-2xl border border-white/[.08] bg-white/[.025] p-5">
+              <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Interest</p>
+              <p className={cn("mt-3 text-2xl font-semibold",totalInterest>=0?"text-blue-400":"text-rose-400")}>{money(totalInterest)}</p>
+            </div>
+          </div>
           <div className="mb-5 rounded-2xl border border-white/[.08] bg-white/[.025] p-5">
             <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Dividends & Interest</p>
-            <p className="mt-3 text-3xl font-semibold text-blue-400">{money(dividendTotal)}</p>
+            <p className={cn("mt-3 text-3xl font-semibold",dividendTotal>=0?"text-blue-400":"text-rose-400")}>{money(dividendTotal)}</p>
             <p className="mt-2 text-xs text-zinc-600">{dividends.length} {dividends.length===1?"Entry":"Entries"}</p>
           </div>
           <div className="overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
             <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Dividends & Interest By Transaction</h3></div>
-            {dividends.length===0?<div className="px-6 py-14 text-center text-sm text-zinc-500">No dividend or interest entries are available for {period}.</div>:<div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm">
-              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Source</th><th className="px-4 py-3 text-right">Amount</th></tr></thead>
-              <tbody>{[...dividends].sort((a,b)=>a.date.localeCompare(b.date)).map((dividend,index)=><tr key={`${dividend.date}-${dividend.ticker}-${index}`} className="border-t border-white/[.06]"><td className="px-4 py-3 text-zinc-400">{new Date(`${dividend.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</td><td className="px-4 py-3 font-semibold">{dividend.ticker}</td><td className="px-4 py-3 text-right font-semibold text-blue-400">{money(dividend.amount)}</td></tr>)}</tbody>
+            {dividends.length===0?<div className="px-6 py-14 text-center text-sm text-zinc-500">No dividend or interest entries are available for {period}.</div>:<div className="overflow-x-auto"><table className="w-full min-w-[680px] text-sm">
+              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Source</th><th className="px-4 py-3">Category</th><th className="px-4 py-3 text-right">Amount</th></tr></thead>
+              <tbody>{[...dividends].sort((a,b)=>a.date.localeCompare(b.date)).map((dividend,index)=><tr key={`${dividend.date}-${dividend.ticker}-${index}`} className="border-t border-white/[.06]"><td className="px-4 py-3 text-zinc-400">{new Date(`${dividend.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</td><td className="px-4 py-3 font-semibold">{dividend.ticker}</td><td className="px-4 py-3 text-zinc-400">{incomeCategory(dividend)}</td><td className={cn("px-4 py-3 text-right font-semibold",dividend.amount>=0?"text-blue-400":"text-rose-400")}>{money(dividend.amount)}</td></tr>)}</tbody>
             </table></div>}
           </div>
         </div> : groups.length===0?<><div className="mb-5"><p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Profit</p><p className={cn("mt-1 text-3xl font-semibold",total>=0?"text-emerald-400":"text-rose-400")}>{money(total)}</p></div><div className="rounded-2xl border border-white/10 bg-white/[.025] px-6 py-16 text-center text-sm text-zinc-500">No transaction-level profit details are available for {period}.</div></>:<>
