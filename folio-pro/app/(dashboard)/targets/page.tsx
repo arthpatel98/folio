@@ -227,7 +227,7 @@ export default function TargetPlannerPage(){
   };
 
   return <div className="space-y-6">
-    <div><h1 className="text-3xl font-semibold">Target Scenario Builder</h1><p className="mt-1 text-sm text-zinc-500">Enter Your Own Price Targets And See How Owned Stocks And Options Could Change Your Portfolio By Each Milestone Date.</p></div>
+    <div><h1 className="text-3xl font-semibold">Target Scenario Builder</h1></div>
 
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <Metric icon={CircleDollarSign} label="Current Portfolio" value={money2(currentValue)}/>
