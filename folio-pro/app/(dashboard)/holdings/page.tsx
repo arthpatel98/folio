@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Banknote, BriefcaseBusiness, Download, Layers3, LockKeyhole, RefreshCw, Search, WalletCards } from "lucide-react";
+import { Banknote, BriefcaseBusiness, CalendarDays, Download, Layers3, RefreshCw, Search, Star, TrendingUp, WalletCards } from "lucide-react";
 import { HoldingsTable } from "@/components/portfolio/holdings-table";
 import { AddHoldingDialog } from "@/components/portfolio/add-holding-dialog";
 import { EditCashDialog } from "@/components/portfolio/edit-cash-dialog";
@@ -18,6 +18,10 @@ import * as XLSX from "xlsx";
 function MetricBlock({ label, value, subvalue, positive, icon: Icon, tone = "green", valueExtra }: { label: string; value: string; subvalue?: React.ReactNode; positive?: boolean; icon: typeof BriefcaseBusiness; tone?: "green" | "red" | "blue" | "purple"; valueExtra?: React.ReactNode }) {
   const toneClass = tone === "red" ? "border-red-500/30 bg-red-500/[.06] text-red-400" : tone === "blue" ? "border-blue-500/30 bg-blue-500/[.06] text-blue-400" : tone === "purple" ? "border-violet-500/30 bg-violet-500/[.06] text-violet-400" : "border-emerald-500/30 bg-emerald-500/[.06] text-emerald-400";
   return <div className={cn("rounded-2xl border p-4 shadow-sm", toneClass)}><div className="flex items-center justify-between gap-3"><p className="text-sm font-medium text-zinc-400">{label}</p><div className="rounded-lg bg-current/10 p-2"><Icon size={18}/></div></div><div className="mt-3 flex items-baseline justify-between gap-2"><p className={cn("text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white", positive === true && "text-emerald-500", positive === false && "text-red-500")}>{value}</p>{valueExtra}</div>{subvalue && <p className={cn("mt-1.5 whitespace-pre-line text-sm", positive === true && "text-emerald-400", positive === false && "text-red-400", positive === undefined && "text-zinc-500")}>{subvalue}</p>}</div>;
+}
+
+function PerformanceMiniCard({label,value,positive}:{label:string;value:string;positive:boolean}) {
+  return <div className="rounded-3xl border border-white/10 bg-zinc-950/40 p-5 shadow-sm"><div className="text-sm text-zinc-400">{label}</div><div className={cn("mt-5 text-2xl font-semibold tracking-tight",positive?"text-emerald-400":"text-rose-400")}>{value}</div></div>;
 }
 
 function PortfolioValueMetric({ value, dayReturn, dayReturnPct }: { value: number; dayReturn: number; dayReturnPct: number }) {
@@ -77,6 +81,7 @@ export default function Page() {
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [closeSnapshots, setCloseSnapshots] = useState<Record<string, number>>({});
   const [performanceAth,setPerformanceAth]=useState<Record<string,{value:number;date:string}>>(DEFAULT_PERFORMANCE_ATH);
+  const [editingAth,setEditingAth]=useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -176,6 +181,11 @@ export default function Page() {
     return {...base,current,invested,gain,totalReturn,cagr,ytd};
   },[activePortfolioId,summary.value]);
   const activeAth=performanceAth[activePortfolioId]??DEFAULT_PERFORMANCE_ATH[activePortfolioId]??DEFAULT_PERFORMANCE_ATH.robinhood;
+  const updateAth=(field:"value"|"date",raw:string)=>{
+    const next={...performanceAth,[activePortfolioId]:{...activeAth,[field]:field==="value"?(Number(raw)||0):raw}};
+    setPerformanceAth(next);
+    try{window.localStorage.setItem(PERFORMANCE_ATH_KEY,JSON.stringify(next));}catch{}
+  };
 
   const positionValue = summary.invested;
   const stockValue = holdings.filter((holding) => (holding.assetType ?? "stock") === "stock").reduce((sum, holding) => sum + holdingMetrics(holding).marketValue, 0);
@@ -409,17 +419,19 @@ export default function Page() {
         <MetricBlock label="Cash" value={money(availableCash)} subvalue={`${summary.value ? ((availableCash / summary.value) * 100).toFixed(2) : "0.00"}% of Portfolio`} icon={Banknote} tone="purple"/>
       </div>
 
-      <section className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-zinc-950/40 sm:p-6">
-        <div className="flex items-start justify-between gap-4"><div><div className="text-sm text-zinc-500">Brokerage Account</div><h2 className="mt-1 text-2xl font-semibold tracking-tight">{performanceAccount.name}</h2></div><div className={cn("rounded-full px-4 py-2 text-sm font-semibold",performanceAccount.totalReturn>=0?"bg-emerald-400/10 text-emerald-400":"bg-rose-400/10 text-rose-400")}>{performanceAccount.totalReturn>=0?"+":""}{(performanceAccount.totalReturn*100).toFixed(2)}%</div></div>
-        <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-6 border-t border-zinc-200 pt-5 dark:border-white/10 sm:grid-cols-4">
-          <div><div className="text-sm text-zinc-500">Investment</div><div className="mt-1 text-xl font-semibold">{money(performanceAccount.invested)}</div></div>
-          <div><div className="text-sm text-zinc-500">Total Gain</div><div className={cn("mt-1 text-xl font-semibold",performanceAccount.gain>=0?"text-emerald-400":"text-rose-400")}>{money(performanceAccount.gain)}</div></div>
-          <div><div className="text-sm text-zinc-500">Total Return</div><div className={cn("mt-1 text-lg font-semibold",performanceAccount.totalReturn>=0?"text-emerald-400":"text-rose-400")}>{performanceAccount.totalReturn>=0?"+":""}{(performanceAccount.totalReturn*100).toFixed(2)}%</div></div>
-          <div><div className="text-sm text-zinc-500">CAGR</div><div className={cn("mt-1 text-lg font-semibold",performanceAccount.cagr>=0?"text-emerald-400":"text-rose-400")}>{performanceAccount.cagr>=0?"+":""}{(performanceAccount.cagr*100).toFixed(2)}%</div></div>
-          <div><div className="text-sm text-zinc-500">2026 YTD</div><div className={cn("mt-1 text-lg font-semibold",performanceAccount.ytd>=0?"text-emerald-400":"text-rose-400")}>{performanceAccount.ytd>=0?"+":""}{(performanceAccount.ytd*100).toFixed(2)}%</div></div>
-          <div className="sm:col-span-1"><div className="text-sm text-zinc-500">Portfolio Start</div><div className="mt-1 text-sm font-medium text-zinc-300">{performanceAccount.start}</div></div>
-          <div className="col-span-2"><div className="text-sm text-zinc-500">All-Time High</div><div className="mt-1 text-sm font-medium text-zinc-300">{money(activeAth.value)} On {compactDate(activeAth.date)}</div></div>
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="row-span-2 rounded-3xl border border-white/10 bg-zinc-950/40 p-6 shadow-sm">
+          <div className="grid size-12 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-400"><TrendingUp size={24}/></div>
+          <div className="mt-7 text-sm text-zinc-400">Investment</div>
+          <div className="mt-2 text-3xl font-semibold tracking-tight">{money(performanceAccount.invested)}</div>
+          <div className={cn("mt-4 inline-flex rounded-full px-3 py-1.5 text-sm font-semibold",performanceAccount.totalReturn>=0?"bg-emerald-400/10 text-emerald-400":"bg-rose-400/10 text-rose-400")}>{performanceAccount.totalReturn>=0?"+":""}{(performanceAccount.totalReturn*100).toFixed(2)}%</div>
         </div>
+        <PerformanceMiniCard label="Total Gain" value={money(performanceAccount.gain)} positive={performanceAccount.gain>=0}/>
+        <PerformanceMiniCard label="Total Return" value={`${performanceAccount.totalReturn>=0?"+":""}${(performanceAccount.totalReturn*100).toFixed(2)}%`} positive={performanceAccount.totalReturn>=0}/>
+        <PerformanceMiniCard label="CAGR" value={`${performanceAccount.cagr>=0?"+":""}${(performanceAccount.cagr*100).toFixed(2)}%`} positive={performanceAccount.cagr>=0}/>
+        <PerformanceMiniCard label="2026 YTD" value={`${performanceAccount.ytd>=0?"+":""}${(performanceAccount.ytd*100).toFixed(2)}%`} positive={performanceAccount.ytd>=0}/>
+        <div className="rounded-3xl border border-white/10 bg-zinc-950/40 p-5 shadow-sm"><div className="flex items-center justify-between"><div className="text-sm text-zinc-400">Portfolio Start</div><CalendarDays size={18} className="text-zinc-600"/></div><div className="mt-5 text-lg font-semibold text-zinc-200">{performanceAccount.start}</div></div>
+        <div className="rounded-3xl border border-white/10 bg-zinc-950/40 p-5 shadow-sm"><div className="flex items-center justify-between"><div className="text-sm text-zinc-400">All-Time High</div><Star size={18} className="text-zinc-600"/></div>{editingAth?<div className="mt-4 flex flex-wrap gap-2"><input autoFocus type="number" step="1" value={activeAth.value||""} onChange={e=>updateAth("value",e.target.value)} className="h-9 w-32 rounded-xl border border-white/10 bg-transparent px-3 text-sm outline-none"/><input type="date" value={activeAth.date} onChange={e=>updateAth("date",e.target.value)} onKeyDown={e=>{if(e.key==="Enter")setEditingAth(false)}} className="h-9 w-40 rounded-xl border border-white/10 bg-transparent px-3 text-sm outline-none"/><button type="button" onClick={()=>setEditingAth(false)} className="h-9 rounded-xl border border-white/10 px-3 text-xs text-zinc-400">Done</button></div>:<button type="button" onClick={()=>setEditingAth(true)} title="Click To Edit All-Time High" className="mt-4 block text-left"><span className="block text-lg font-semibold text-zinc-200">{money(activeAth.value)}</span><span className="mt-1 block text-sm text-zinc-500">on {compactDate(activeAth.date)}</span></button>}</div>
       </section>
 
       <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-950/30">
