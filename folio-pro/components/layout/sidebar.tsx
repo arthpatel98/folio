@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BriefcaseBusiness, Check, ChevronDown, Coins, Landmark, Layers3, PanelLeftClose, PiggyBank, ReceiptText, Target } from "lucide-react";
+import { BriefcaseBusiness, Check, ChevronDown, Coins, Landmark, Layers3, PanelLeftClose, ReceiptText, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { portfolios, useActivePortfolio } from "@/components/portfolio/portfolio-context";
 
-const items=[['/holdings','Holdings',BriefcaseBusiness],['/dca','Return Simulator',Coins],['/targets','Target Planner',Target],['/realized','Realized Returns',Landmark],['/transactions','Transactions',ReceiptText],['/savings-investments','Portfolio Performance',PiggyBank]] as const;
+const items=[['/holdings','Holdings',BriefcaseBusiness],['/dca','Return Simulator',Coins],['/targets','Target Planner',Target],['/realized','Realized Returns',Landmark],['/transactions','Transactions',ReceiptText]] as const;
 
 export function Sidebar({onCollapse}:{onCollapse?:()=>void}){
   const path=usePathname();

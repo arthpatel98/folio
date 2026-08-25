@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BriefcaseBusiness, Check, ChevronDown, Coins, LayoutDashboard, Landmark, Layers3, PiggyBank, ReceiptText, Target } from "lucide-react";
+import { BriefcaseBusiness, Check, ChevronDown, Coins, LayoutDashboard, Landmark, Layers3, ReceiptText, Target } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { portfolios, useActivePortfolio } from "@/components/portfolio/portfolio-context";
 
@@ -14,7 +14,7 @@ const items = [
   ["/targets", "Targets", Target],
   ["/realized", "Realized", Landmark],
   ["/transactions", "Txns", ReceiptText],
-  ["/savings-investments", "Performance", PiggyBank],
+  ["/savings-investments", "Performance"],
 ] as const;
 
 export function MobileNav() {
@@ -41,7 +41,7 @@ export function MobileNav() {
       </div>
       <nav
       aria-label="Mobile navigation"
-      className="fixed inset-x-2 bottom-2 z-50 grid grid-cols-7 rounded-2xl border border-zinc-200 bg-white/95 px-1 py-1.5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/95 lg:hidden"
+      className="fixed inset-x-2 bottom-2 z-50 grid grid-cols-6 rounded-2xl border border-zinc-200 bg-white/95 px-1 py-1.5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/95 lg:hidden"
       style={{ paddingBottom: "max(0.375rem, env(safe-area-inset-bottom))" }}
     >
       {items.map(([href, label, Icon]) => {

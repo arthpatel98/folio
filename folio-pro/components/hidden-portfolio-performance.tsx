@@ -1,23 +1,50 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, ChevronLeft, ChevronRight, Landmark, TrendingUp, WalletCards, X } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { quarterlyIncome } from "@/lib/savings-investments-data";
+import { portfolioSummary } from "@/lib/calculations/portfolio";
 import { cn, money } from "@/lib/utils";
+import {
+  investmentAccounts,
+  quarterlyIncome,
+  ytdPerformance,
+} from "@/lib/savings-investments-data";
+import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
+import { usePortfolioStore, type DataPortfolioId } from "@/store/portfolio-store";
 
+const pct = (value: number) => `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
+const wholeDollar = (value: number) => new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+}).format(Math.round(value));
+
+type ExtraRow = { id: string; label: string; amount: number; lastPostedDate: string };
 type ProfitDrilldownTransaction = {
-  id: string; date: string; ticker: string; label: string; quantity: number | null; price: number | null;
-  proceeds: number | null; realizedProfit: number; category: "Sell Call" | "Sell Put" | "Buy Call" | "Buy Put" | "Common Stocks";
+  id: string;
+  date: string;
+  ticker: string;
+  label: string;
+  quantity: number | null;
+  price: number | null;
+  proceeds: number | null;
+  realizedProfit: number;
+  category: "Sell Call" | "Sell Put" | "Buy Call" | "Buy Put" | "Common Stocks";
   preserveLabelCasing?: boolean;
 };
-type VerifiedProfitEdit = Partial<ProfitDrilldownTransaction> & { deleted?: boolean };
-type VerifiedProfitEdits = Record<string, VerifiedProfitEdit>;
-const VERIFIED_PROFIT_EDITS_KEY = "folio-robinhood-verified-profit-edits-v1";
+type ProfitTickerGroup = {
+  ticker: string;
+  realizedProfit: number;
+  percent: number;
+  transactions: ProfitDrilldownTransaction[];
+};
 
-type IncomeTransaction = { date: string; ticker: string; amount: number };
-const ROBINHOOD_INCOME_TRANSACTIONS: IncomeTransaction[] = [
+
+type DividendTransaction = { date: string; ticker: string; amount: number };
+const ROBINHOOD_DIVIDENDS: DividendTransaction[] = [
   // Dividends
   { date: "2024-10-01", ticker: "SOXL Dividend", amount: 20.98 },
   { date: "2024-12-16", ticker: "SCHD Dividend", amount: 34.00 },
@@ -121,8 +148,7 @@ const ROBINHOOD_INCOME_TRANSACTIONS: IncomeTransaction[] = [
   { date: "2026-06-30", ticker: "Interest Payment", amount: 40.01 },
   { date: "2026-07-31", ticker: "Interest Payment", amount: 19.20 },
 ];
-function incomePeriod(date:string){const d=new Date(`${date}T12:00:00`);return new Intl.DateTimeFormat("en-US",{month:"short",year:"numeric"}).format(d);}
-
+const dividendPeriod = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString("en-US", { month: "short", year: "numeric" });
 
 const ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS: Record<string, ProfitDrilldownTransaction[]> = {
   "Jan 2025": [{"id":"gk-2025-01-16-amat-5","date":"2025-01-16","ticker":"AMAT","label":"APPLIED MATERIALS INC (AMAT)","quantity":0.72469,"price":null,"proceeds":134.91,"realizedProfit":-15.09,"category":"Common Stocks"},{"id":"gk-2025-01-16-amat-6","date":"2025-01-16","ticker":"AMAT","label":"APPLIED MATERIALS INC (AMAT)","quantity":1.378359,"price":null,"proceeds":256.61,"realizedProfit":-43.39,"category":"Common Stocks"},{"id":"gk-2025-01-16-amat-7","date":"2025-01-16","ticker":"AMAT","label":"APPLIED MATERIALS INC (AMAT)","quantity":13.98113,"price":null,"proceeds":2602.81,"realizedProfit":52.81,"category":"Common Stocks"},{"id":"gk-2025-01-31-app-8","date":"2025-01-31","ticker":"APP","label":"APPLOVIN CORPORATION CL A (APP)","quantity":5.64365,"price":null,"proceeds":2126.69,"realizedProfit":126.69,"category":"Common Stocks"},{"id":"gk-2025-01-15-hood-94","date":"2025-01-15","ticker":"HOOD","label":"ROBINHOOD MARKETS INC (HOOD)","quantity":50.3588,"price":null,"proceeds":2318.57,"realizedProfit":318.57,"category":"Common Stocks"},{"id":"gk-2025-01-15-hood-95","date":"2025-01-15","ticker":"HOOD","label":"ROBINHOOD MARKETS INC (HOOD)","quantity":51.0733,"price":null,"proceeds":2351.47,"realizedProfit":351.47,"category":"Common Stocks"},{"id":"gk-2025-01-15-hood-96","date":"2025-01-15","ticker":"HOOD","label":"ROBINHOOD MARKETS INC (HOOD)","quantity":17.89109,"price":null,"proceeds":823.73,"realizedProfit":123.73,"category":"Common Stocks"},{"id":"gk-2025-01-15-vrt-150","date":"2025-01-15","ticker":"VRT","label":"VERTIV HOLDINGS LLC (VRT)","quantity":26.535253,"price":null,"proceeds":3504.28,"realizedProfit":4.28,"category":"Common Stocks"},{"id":"gk-2025-01-15-vst-152","date":"2025-01-15","ticker":"VST","label":"VISTRA CORP (VST)","quantity":22.620501,"price":null,"proceeds":4018.98,"realizedProfit":518.98,"category":"Common Stocks"},{"id":"gk-2025-01-15-vst-153","date":"2025-01-15","ticker":"VST","label":"VISTRA CORP (VST)","quantity":3.38604,"price":null,"proceeds":601.6,"realizedProfit":101.6,"category":"Common Stocks"}],
@@ -1220,93 +1246,884 @@ const ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS: Record<string, ProfitDrilldown
   ]
 };
 
+type VerifiedProfitEdit = Partial<ProfitDrilldownTransaction> & { deleted?: boolean };
+type VerifiedProfitEdits = Record<string, VerifiedProfitEdit>;
+const VERIFIED_PROFIT_EDITS_KEY = "folio-robinhood-verified-profit-edits-v1";
+const DYNAMIC_PROFIT_EDITS_KEY = "folio-robinhood-dynamic-profit-edits-v1";
+type ExtrasByPortfolio = Record<"robinhood"|"fidelity-roth", ExtraRow[]>;
+const EXTRAS_STORAGE_KEY = "folio-portfolio-performance-extras-v1";
+type AllTimeHighEntry = { value: number; date: string };
+type AllTimeHighByPortfolio = Record<DataPortfolioId, AllTimeHighEntry>;
+const ALL_TIME_HIGH_STORAGE_KEY = "folio-portfolio-performance-all-time-high-v1";
+const DEFAULT_ALL_TIME_HIGHS: AllTimeHighByPortfolio = {
+  robinhood: { value: 108128, date: "2025-11-05" },
+  "fidelity-roth": { value: 20134, date: "2025-08-06" },
+  "fidelity-401k": { value: 21194, date: "2026-06-02" },
+};
 
-const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-const wholeDollar=(value:number)=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",minimumFractionDigits:0,maximumFractionDigits:0}).format(Math.round(value));
-const chartAxisValue=(value:number)=>new Intl.NumberFormat("en-US",{maximumFractionDigits:0}).format(Math.round(value));
-const periodTime=(period:string)=>{const m=period.match(/^([A-Z][a-z]{2}) (20\d{2})$/);return m?new Date(Number(m[2]),months.indexOf(m[1]),1).getTime():0;};
+const DEFAULT_EXTRAS: ExtrasByPortfolio = {
+  robinhood: [
+    { id:"rg-interest", label:"RG Interest", amount:651.71, lastPostedDate:"2026-07-31" },
+    { id:"rg-deposit-boost", label:"RG Deposit Boost", amount:197.71, lastPostedDate:"2026-07-31" },
+    { id:"rg-membership", label:"RG Membership", amount:-93.32, lastPostedDate:"2026-03-04" },
+  ],
+  "fidelity-roth": [
+    { id:"spaxx-dividend", label:"SPAXX Dividend", amount:159.89, lastPostedDate:"2026-07-31" },
+    { id:"mags-short-term-cap-gain", label:"MAGS Short - Term Cap Gain", amount:0.86, lastPostedDate:"2024-12-31" },
+  ],
+};
 
-export function RobinhoodQuarterlyData() {
-  const [selectedYear,setSelectedYear]=useState("2026");
-  const [view,setView]=useState<"month"|"year">("month");
-  const [selectedPeriod,setSelectedPeriod]=useState<string|null>(null);
-  const [detailView,setDetailView]=useState<"profit"|"income">("profit");
-  const [edits,setEdits]=useState<VerifiedProfitEdits>({});
-  useEffect(()=>{try{const raw=window.localStorage.getItem(VERIFIED_PROFIT_EDITS_KEY);if(raw)setEdits(JSON.parse(raw));}catch{}},[]);
-  const saveEdit=(id:string,patch:VerifiedProfitEdit)=>setEdits(current=>{const next={...current,[id]:{...(current[id]??{}),...patch}};try{window.localStorage.setItem(VERIFIED_PROFIT_EDITS_KEY,JSON.stringify(next));}catch{}return next;});
-  const transactionsByPeriod=useMemo(()=>{
-    const out:Record<string,ProfitDrilldownTransaction[]>={};
-    Object.values(ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS).flat().forEach(tx=>{
-      const patch=edits[tx.id]??{}; if(patch.deleted)return; const edited={...tx,...patch};
-      const d=new Date(`${edited.date}T12:00:00`); if(Number.isNaN(d.getTime()))return;
-      const period=new Intl.DateTimeFormat("en-US",{month:"short",year:"numeric"}).format(d);
-      (out[period]??=[]).push(edited);
-    }); return out;
-  },[edits]);
-  const verifiedTotals=useMemo<Record<string,number>>(()=>{
-    const totals:Record<string,number>={};
-    Object.entries(transactionsByPeriod).forEach(([period,txs])=>{
-      totals[period]=txs.reduce((sum,tx)=>sum+tx.realizedProfit,0);
-    });
-    return totals;
-  },[transactionsByPeriod]);
-  const incomeTotals=useMemo(()=>{const totals:Record<string,number>={};ROBINHOOD_INCOME_TRANSACTIONS.forEach(item=>{const p=incomePeriod(item.date);totals[p]=(totals[p]??0)+item.amount;});return totals;},[]);
-  const monthlyData=useMemo(()=>{
-    const rows: Array<{period:string;realizedProfit:number;income:number}> = quarterlyIncome
-      .filter(row=>!/^Q[1-4] 2025$/.test(row.period))
-      .map(row=>({period:String(row.period),realizedProfit:verifiedTotals[row.period]??row.robinhoodProfit,income:incomeTotals[String(row.period)]??row.robinhoodIncome}));
-    Object.entries(verifiedTotals).forEach(([period,realizedProfit])=>{const existing=rows.find(r=>r.period===period);if(existing)existing.realizedProfit=realizedProfit;else rows.push({period,realizedProfit,income:incomeTotals[period]??0});});
-    Object.entries(incomeTotals).forEach(([period,income])=>{const existing=rows.find(r=>r.period===period);if(existing)existing.income=income;else rows.push({period,realizedProfit:0,income});});
-    return rows.filter(r=>r.period.match(/(20\d{2})/)?.[1]===selectedYear && !/^Q/.test(r.period)).sort((a,b)=>periodTime(a.period)-periodTime(b.period));
-  },[selectedYear,verifiedTotals,incomeTotals]);
-  const annualData=useMemo(()=>{const m=new Map<string,{period:string;realizedProfit:number;income:number}>();
-    const source: Array<{period:string;realizedProfit:number;income:number}> = quarterlyIncome
-      .filter(row=>!/^Q[1-4] 2025$/.test(row.period))
-      .map(row=>({period:String(row.period),realizedProfit:verifiedTotals[row.period]??row.robinhoodProfit,income:incomeTotals[String(row.period)]??row.robinhoodIncome}));
-    Object.entries(verifiedTotals).forEach(([period,realizedProfit])=>{const e=source.find(r=>r.period===period);if(e)e.realizedProfit=realizedProfit;else source.push({period,realizedProfit,income:incomeTotals[period]??0});});
-    Object.entries(incomeTotals).forEach(([period,income])=>{const e=source.find(r=>r.period===period);if(e)e.income=income;else source.push({period,realizedProfit:0,income});});
-    source.forEach(r=>{const y=r.period.match(/(20\d{2})/)?.[1];if(!y)return;const cur=m.get(y)??{period:y,realizedProfit:0,income:0};cur.realizedProfit+=r.realizedProfit;cur.income+=r.income;m.set(y,cur);});return Array.from(m.values()).sort((a,b)=>a.period.localeCompare(b.period));},[verifiedTotals,incomeTotals]);
-  const data=view==="year"?annualData:monthlyData;
-  const selectedTransactions=selectedPeriod?transactionsByPeriod[selectedPeriod]??[]:[];
-  const selectedIncomeTransactions=selectedPeriod?ROBINHOOD_INCOME_TRANSACTIONS.filter(item=>incomePeriod(item.date)===selectedPeriod):[];
-  const total=selectedTransactions.reduce((s,t)=>s+t.realizedProfit,0);
-  const incomeTotal=selectedIncomeTransactions.reduce((s,t)=>s+t.amount,0);
-  const incomeCategory=(item:IncomeTransaction)=>item.ticker.includes("Dividend")?"Dividends":item.ticker==="Interest Payment"?"Interest":"Robinhood Gold";
-  const dividendTotal=selectedIncomeTransactions.filter(item=>incomeCategory(item)==="Dividends").reduce((s,t)=>s+t.amount,0);
-  const goldTotal=selectedIncomeTransactions.filter(item=>incomeCategory(item)==="Robinhood Gold").reduce((s,t)=>s+t.amount,0);
-  const interestTotal=selectedIncomeTransactions.filter(item=>incomeCategory(item)==="Interest").reduce((s,t)=>s+t.amount,0);
-  const available=Object.keys(transactionsByPeriod).sort((a,b)=>periodTime(a)-periodTime(b));
-  const idx=selectedPeriod?available.indexOf(selectedPeriod):-1;
-  const prev=idx>0?available[idx-1]:null, next=idx>=0&&idx<available.length-1?available[idx+1]:null;
-  const open=(period:string)=>{if(view==="year"){setSelectedYear(period);setView("month");return;}if(transactionsByPeriod[period]||incomeTotals[period]!==undefined){setSelectedPeriod(period);setDetailView("profit");}};
-  return <>
-    <Card className="overflow-hidden">
-      <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-zinc-200/70 dark:border-white/[.06]">
-        <div><h2 className="font-medium">Robinhood Quarterly Data</h2><p className="mt-1 text-xs text-zinc-500">Realized P/L Vs Dividends & Interest</p></div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <div className="inline-flex h-9 overflow-hidden rounded-xl border border-zinc-200 dark:border-white/10">{(["month","year"] as const).map(v=><button key={v} type="button" onClick={()=>setView(v)} className={cn("px-3 text-xs font-semibold capitalize transition",view===v?"bg-emerald-500 text-zinc-950":"text-zinc-500 hover:text-zinc-200")}>{v}</button>)}</div>
-          {view!=="year"&&<select value={selectedYear} onChange={e=>setSelectedYear(e.target.value)} className="h-9 rounded-xl border border-zinc-200 bg-transparent px-3 text-sm font-medium outline-none dark:border-white/10 dark:bg-zinc-950">{["2026","2025","2024"].map(y=><option key={y}>{y}</option>)}</select>}
-        </div>
-      </CardHeader>
-      <CardContent className="pt-5"><div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:4}} onClick={(state:any)=>{const period=state?.activePayload?.[0]?.payload?.period;if(typeof period==="string")open(period);}} style={{cursor:"pointer"}}>
-        <defs><linearGradient id="rhq-profit" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399"/><stop offset="100%" stopColor="#10b981" stopOpacity={0.65}/></linearGradient><linearGradient id="rhq-income" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa"/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.65}/></linearGradient><linearGradient id="rhq-negative" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#fb7185"/><stop offset="100%" stopColor="#e11d48" stopOpacity={0.72}/></linearGradient></defs>
-        <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="period" tick={{fill:"#a1a1aa",fontSize:10,fontWeight:600}} axisLine={false} tickLine={false} interval={0}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={chartAxisValue}/>
-        <Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} formatter={(value:any)=>money(Number(value))} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5",boxShadow:"0 12px 30px rgba(0,0,0,.25)"}} labelStyle={{color:"#f4f4f5",fontWeight:700}} itemStyle={{color:"#f4f4f5"}}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/>
-        <Bar dataKey="realizedProfit" name="Profit" radius={[7,7,2,2]} maxBarSize={34} onClick={(entry:any)=>open(entry?.period)} style={{cursor:"pointer"}}>{data.map(row=><Cell key={`p-${row.period}`} fill={row.realizedProfit<0?"url(#rhq-negative)":"url(#rhq-profit)"}/>)}<LabelList dataKey="realizedProfit" position="top" formatter={(v:any)=>wholeDollar(Number(v))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar>
-        <Bar dataKey="income" name="Dividends & Interest" radius={[7,7,2,2]} maxBarSize={34} onClick={(entry:any)=>open(entry?.period)} style={{cursor:"pointer"}}>{data.map(row=><Cell key={`i-${row.period}`} fill={row.income<0?"url(#rhq-negative)":"url(#rhq-income)"}/>)}<LabelList dataKey="income" position="top" formatter={(v:any)=>wholeDollar(Number(v))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar>
-      </BarChart></ResponsiveContainer></div></CardContent>
-    </Card>
-    {selectedPeriod&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onMouseDown={e=>{if(e.currentTarget===e.target)setSelectedPeriod(null)}}><div className="max-h-[88vh] w-full max-w-5xl overflow-auto rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-zinc-950 px-5 py-4"><div className="flex items-center gap-2">{prev&&<button onClick={()=>setSelectedPeriod(prev)} className="grid size-9 place-items-center rounded-lg border border-white/10"><ChevronLeft size={17}/></button>}<h3 className="text-lg font-semibold">{selectedPeriod} Details</h3>{next&&<button onClick={()=>setSelectedPeriod(next)} className="grid size-9 place-items-center rounded-lg border border-white/10"><ChevronRight size={17}/></button>}</div><div className="absolute left-1/2 flex -translate-x-1/2 overflow-hidden rounded-xl border border-white/10"><button type="button" onClick={()=>setDetailView("profit")} className={cn("px-4 py-2 text-xs font-semibold transition",detailView==="profit"?"bg-emerald-500 text-zinc-950":"text-zinc-400 hover:text-white")}>Realized P/L</button><button type="button" onClick={()=>setDetailView("income")} className={cn("px-4 py-2 text-xs font-semibold transition",detailView==="income"?"bg-blue-500 text-white":"text-zinc-400 hover:text-white")}>Dividends & Interest</button></div><button onClick={()=>setSelectedPeriod(null)} className="grid size-9 place-items-center rounded-lg border border-white/10"><X size={17}/></button></div>
-      <div className="p-5">{detailView==="profit"?<><div className="mb-5 rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Profit</div><div className={cn("mt-1 text-2xl font-semibold",total>=0?"positive":"negative")}>{money(total)}</div></div>
-      <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="border-y border-white/10 text-xs text-zinc-500"><tr><th className="px-3 py-3 text-left">Date</th><th className="px-3 py-3 text-left">Ticker</th><th className="px-3 py-3 text-left">Position</th><th className="px-3 py-3 text-left">Type</th><th className="px-3 py-3 text-right">Realized Profit</th><th className="px-3 py-3"></th></tr></thead><tbody>{selectedTransactions.slice().sort((a,b)=>b.realizedProfit-a.realizedProfit).map(tx=><EditableRow key={tx.id} tx={tx} onSave={patch=>saveEdit(tx.id,patch)}/>)}</tbody></table></div></>:<><div className="mb-5 grid gap-3 sm:grid-cols-4"><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Dividends & Interest</div><div className={cn("mt-1 text-xl font-semibold",incomeTotal>=0?"positive":"negative")}>{money(incomeTotal)}</div></div><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Dividends</div><div className={cn("mt-1 text-xl font-semibold",dividendTotal>=0?"positive":"negative")}>{money(dividendTotal)}</div></div><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Robinhood Gold</div><div className={cn("mt-1 text-xl font-semibold",goldTotal>=0?"positive":"negative")}>{money(goldTotal)}</div></div><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Interest</div><div className={cn("mt-1 text-xl font-semibold",interestTotal>=0?"positive":"negative")}>{money(interestTotal)}</div></div></div><div className="overflow-x-auto"><table className="w-full min-w-[680px] text-sm"><thead className="border-y border-white/10 text-xs text-zinc-500"><tr><th className="px-3 py-3 text-left">Date</th><th className="px-3 py-3 text-left">Source</th><th className="px-3 py-3 text-left">Category</th><th className="px-3 py-3 text-right">Amount</th></tr></thead><tbody>{selectedIncomeTransactions.slice().sort((a,b)=>b.date.localeCompare(a.date)).map((item,index)=><tr key={`${item.date}-${item.ticker}-${index}`} className="border-b border-white/[.06]"><td className="px-3 py-3">{new Date(`${item.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</td><td className="px-3 py-3 font-medium">{item.ticker}</td><td className="px-3 py-3">{incomeCategory(item)}</td><td className={cn("px-3 py-3 text-right font-semibold",item.amount>=0?"positive":"negative")}>{money(item.amount)}</td></tr>)}</tbody></table></div></>}</div>
-    </div></div>}
-  </>;
+function formatDisplayDate(value: string) {
+  if (!value) return "—";
+  const parsed = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function EditableRow({tx,onSave}:{tx:ProfitDrilldownTransaction;onSave:(patch:VerifiedProfitEdit)=>void}){
-  const [editing,setEditing]=useState(false); const [draft,setDraft]=useState(tx);
-  useEffect(()=>setDraft(tx),[tx]);
-  if(!editing)return <tr className="border-b border-white/[.06]"><td className="px-3 py-3">{new Date(`${tx.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</td><td className="px-3 py-3 font-semibold">{tx.ticker}</td><td className="px-3 py-3">{tx.label}</td><td className="px-3 py-3">{tx.category}</td><td className={cn("px-3 py-3 text-right font-semibold",tx.realizedProfit>=0?"positive":"negative")}>{money(tx.realizedProfit)}</td><td className="px-3 py-3 text-right"><button onClick={()=>setEditing(true)} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs">Edit</button></td></tr>;
-  return <tr className="border-b border-white/[.06]"><td className="px-2 py-2"><input type="date" value={draft.date} onChange={e=>setDraft({...draft,date:e.target.value})} className="h-9 rounded-lg border border-white/10 bg-transparent px-2"/></td><td className="px-2 py-2"><input value={draft.ticker} onChange={e=>setDraft({...draft,ticker:e.target.value})} className="h-9 w-24 rounded-lg border border-white/10 bg-transparent px-2"/></td><td className="px-2 py-2"><input value={draft.label} onChange={e=>setDraft({...draft,label:e.target.value})} className="h-9 w-64 rounded-lg border border-white/10 bg-transparent px-2"/></td><td className="px-2 py-2"><select value={draft.category} onChange={e=>setDraft({...draft,category:e.target.value as ProfitDrilldownTransaction["category"]})} className="h-9 rounded-lg border border-white/10 bg-zinc-950 px-2">{["Common Stocks","Sell Call","Sell Put","Buy Call","Buy Put"].map(x=><option key={x}>{x}</option>)}</select></td><td className="px-2 py-2"><input type="number" step="any" value={draft.realizedProfit} onChange={e=>setDraft({...draft,realizedProfit:Number(e.target.value)})} className="h-9 w-28 rounded-lg border border-white/10 bg-transparent px-2 text-right"/></td><td className="px-2 py-2 text-right"><div className="flex justify-end gap-2"><button onClick={()=>{onSave(draft);setEditing(false)}} className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-zinc-950">Save</button><button onClick={()=>setEditing(false)} className="rounded-lg border border-white/10 px-3 py-1.5 text-xs">Cancel</button></div></td></tr>;
+function ExtrasTable({rows,onSave}:{rows:ExtraRow[];onSave:(rows:ExtraRow[])=>void}) {
+  const [draft,setDraft]=useState(rows);
+  const [editing,setEditing]=useState<{id:string;field:"amount"|"lastPostedDate"}|null>(null);
+  useEffect(()=>setDraft(rows),[rows]);
+  const total=draft.reduce((sum,row)=>sum+(Number(row.amount)||0),0);
+  const update=(id:string,field:"amount"|"lastPostedDate",value:string)=>{
+    setDraft(current=>{
+      const next=current.map(row=>row.id===id?{...row,[field]:field==="amount"?(value===""?0:Number(value)||0):value}:row);
+      onSave(next);
+      return next;
+    });
+  };
+  return <Card className="overflow-hidden">
+    <CardHeader><h2 className="font-medium">Extras</h2></CardHeader>
+    <CardContent><div className="overflow-hidden rounded-t-xl border border-b-0 border-dashed border-zinc-300/80 dark:border-white/15 dark:border-b-0"><table className="w-full table-fixed border-collapse text-xs sm:text-sm">
+      <thead><tr className="text-left text-[11px] text-zinc-500 sm:text-xs"><th className="w-[42%] border-b border-r border-dashed border-zinc-300/70 p-3 font-medium dark:border-white/10">Extras</th><th className="w-[25%] border-b border-r border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">Amount</th><th className="w-[33%] border-b border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">Last Posted Date</th></tr></thead>
+      <tbody>{draft.map((row,index)=><tr key={row.id}>
+        <td className={cn("border-r border-dashed border-zinc-300/60 p-3 font-medium dark:border-white/10",index<draft.length-1&&"border-b")}>{row.label}</td>
+        <td className={cn("border-r border-dashed border-zinc-300/60 p-2 text-right dark:border-white/10",index<draft.length-1&&"border-b")}>
+          {editing?.id===row.id&&editing.field==="amount"
+            ? <input autoFocus type="number" step="0.01" value={row.amount===0?"":row.amount} placeholder="0.00" onChange={e=>update(row.id,"amount",e.target.value)} onBlur={()=>setEditing(null)} onKeyDown={e=>{if(e.key==="Enter")setEditing(null);}} className={cn("h-9 w-full rounded-lg border border-white/10 bg-transparent px-2 text-right font-medium tabular-nums outline-none",row.amount<0?"negative":"positive")}/>
+            : <button type="button" onClick={()=>setEditing({id:row.id,field:"amount"})} className={cn("w-full rounded-md px-2 py-2 text-right font-medium tabular-nums transition hover:bg-white/[.04]",row.amount<0?"negative":"positive")} title="Click To Edit Amount">{money(row.amount)}</button>}
+        </td>
+        <td className={cn("p-2 text-right",index<draft.length-1&&"border-b border-dashed border-zinc-300/60 dark:border-white/10")}>
+          {editing?.id===row.id&&editing.field==="lastPostedDate"
+            ? <input autoFocus type="date" value={row.lastPostedDate} onChange={e=>update(row.id,"lastPostedDate",e.target.value)} onBlur={()=>setEditing(null)} onKeyDown={e=>{if(e.key==="Enter")setEditing(null);}} className="h-9 w-full rounded-lg border border-white/10 bg-transparent px-2 text-right text-xs font-medium outline-none"/>
+            : <button type="button" onClick={()=>setEditing({id:row.id,field:"lastPostedDate"})} className="w-full rounded-md px-2 py-2 text-right text-xs font-medium transition hover:bg-white/[.04]" title="Click To Edit Last Posted Date">{formatDisplayDate(row.lastPostedDate)}</button>}
+        </td>
+      </tr>)}
+      <tr className="border-t border-zinc-300/60 font-semibold dark:border-white/10"><td className="border-r border-zinc-300/60 p-3 dark:border-white/10">Total</td><td className={cn("border-r border-zinc-300/60 p-3 text-right tabular-nums dark:border-white/10",total<0?"negative":"positive")}>{money(total)}</td><td className="p-3"/></tr></tbody>
+    </table></div></CardContent>
+  </Card>;
+}
+
+// The workbook/manual July 2026 Robinhood baseline is $3,669.10. Only Holdings
+// sales created after this build are layered onto that baseline so existing
+// historical transactions do not double-count the value the user supplied.
+const REALIZED_CHART_FUTURE_SALE_CUTOFF_MS = 1785077788669;
+const isFutureHoldingsSale = (transactionId: string) => {
+  const match = transactionId.match(/^trade-(\d+)-/);
+  return Boolean(match && Number(match[1]) > REALIZED_CHART_FUTURE_SALE_CUTOFF_MS);
+};
+
+function Metric({ label, value, detail, icon: Icon, positive }: { label: string; value: string; detail?: string; icon: typeof Landmark; positive?: boolean }) {
+  return <Card className="p-4 sm:p-5"><div className="flex items-start justify-between gap-3"><div><div className="text-sm text-zinc-500">{label}</div><div className={cn("mt-2 text-2xl font-semibold tracking-tight", positive === true && "positive", positive === false && "negative")}>{value}</div>{detail && <div className="mt-2 text-xs text-zinc-600">{detail}</div>}</div><div className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-400/10 text-emerald-400"><Icon size={18}/></div></div></Card>;
+}
+
+const accountPortfolioIds: Record<string, DataPortfolioId> = {
+  Robinhood: "robinhood",
+  "Fidelity Roth IRA": "fidelity-roth",
+  "Fidelity 401(k)": "fidelity-401k",
+};
+
+export default function SavingsInvestmentsPage() {
+  const { activeId } = useActivePortfolio();
+  const [extras,setExtras]=useState<ExtrasByPortfolio>(DEFAULT_EXTRAS);
+  const [allTimeHighs,setAllTimeHighs]=useState<AllTimeHighByPortfolio>(DEFAULT_ALL_TIME_HIGHS);
+  const [editingAllTimeHigh,setEditingAllTimeHigh]=useState<{portfolioId:DataPortfolioId;field:"value"|"date"}|null>(null);
+  const [profitDrilldown,setProfitDrilldown]=useState<{portfolioId:DataPortfolioId;period:string}|null>(null);
+  const [robinhoodChartYear,setRobinhoodChartYear]=useState("2026");
+  const [robinhoodChartView,setRobinhoodChartView]=useState<"month"|"year">("month");
+  const [verifiedProfitEdits,setVerifiedProfitEdits]=useState<VerifiedProfitEdits>({});
+  const [dynamicProfitEdits,setDynamicProfitEdits]=useState<VerifiedProfitEdits>({});
+  useEffect(()=>{
+    try{
+      const raw=window.localStorage.getItem(VERIFIED_PROFIT_EDITS_KEY);
+      if(raw)setVerifiedProfitEdits(JSON.parse(raw));
+    }catch{}
+  },[]);
+  useEffect(()=>{
+    try{
+      const raw=window.localStorage.getItem(DYNAMIC_PROFIT_EDITS_KEY);
+      if(raw)setDynamicProfitEdits(JSON.parse(raw));
+    }catch{}
+  },[]);
+  const saveVerifiedProfitEdit=(id:string,patch:VerifiedProfitEdit)=>{
+    setVerifiedProfitEdits(current=>{
+      const next={...current,[id]:{...(current[id]??{}),...patch}};
+      try{window.localStorage.setItem(VERIFIED_PROFIT_EDITS_KEY,JSON.stringify(next));}catch{}
+      return next;
+    });
+  };
+  const saveDynamicProfitEdit=(id:string,patch:VerifiedProfitEdit)=>{
+    setDynamicProfitEdits(current=>{
+      const next={...current,[id]:{...(current[id]??{}),...patch}};
+      try{window.localStorage.setItem(DYNAMIC_PROFIT_EDITS_KEY,JSON.stringify(next));}catch{}
+      return next;
+    });
+  };
+  const verifiedCloseDateTransactions=useMemo<Record<string,ProfitDrilldownTransaction[]>>(()=>{
+    const rebucketed: Record<string,ProfitDrilldownTransaction[]> = {};
+    Object.values(ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS).flat().forEach(transaction=>{
+      const patch=verifiedProfitEdits[transaction.id]??{};
+      if(patch.deleted)return;
+      const edited={...transaction,...patch,preserveLabelCasing:typeof patch.label==="string"};
+      const parsed=new Date(`${edited.date}T12:00:00`);
+      if(Number.isNaN(parsed.getTime()))return;
+      const period=new Intl.DateTimeFormat("en-US",{month:"short",year:"numeric"}).format(parsed);
+      rebucketed[period]=[...(rebucketed[period]??[]),edited];
+    });
+    return rebucketed;
+  },[verifiedProfitEdits]);
+  const verifiedCloseDateMonthlyTotals=useMemo<Record<string,number>>(()=>{
+    const totals:Record<string,number>={};
+    Object.keys(verifiedCloseDateTransactions).forEach(period=>{
+      const transactions:ProfitDrilldownTransaction[]=verifiedCloseDateTransactions[period]??[];
+      totals[period]=transactions.reduce((sum:number,transaction:ProfitDrilldownTransaction)=>sum+transaction.realizedProfit,0);
+    });
+    return totals;
+  },[verifiedCloseDateTransactions]);
+
+  useEffect(()=>{
+    try {
+      const saved=window.localStorage.getItem(ALL_TIME_HIGH_STORAGE_KEY);
+      if(saved) setAllTimeHighs(current=>({...current,...JSON.parse(saved)}));
+    } catch {}
+  },[]);
+  const updateAllTimeHigh=(portfolioId:DataPortfolioId,field:"value"|"date",raw:string)=>{
+    setAllTimeHighs(current=>{
+      const next={...current,[portfolioId]:{...current[portfolioId],[field]:field==="value"?(Number(raw)||0):raw}};
+      try{window.localStorage.setItem(ALL_TIME_HIGH_STORAGE_KEY,JSON.stringify(next));}catch{}
+      return next;
+    });
+  };
+  useEffect(()=>{
+    try{
+      const saved=window.localStorage.getItem(EXTRAS_STORAGE_KEY);
+      if(saved){
+        const parsed=JSON.parse(saved) as Partial<ExtrasByPortfolio>;
+        setExtras({
+          robinhood:Array.isArray(parsed.robinhood)?parsed.robinhood:DEFAULT_EXTRAS.robinhood,
+          "fidelity-roth":Array.isArray(parsed["fidelity-roth"])?parsed["fidelity-roth"]:DEFAULT_EXTRAS["fidelity-roth"],
+        });
+      }
+    }catch{}
+  },[]);
+  const saveExtras=(portfolioId:"robinhood"|"fidelity-roth",rows:ExtraRow[])=>{
+    setExtras(current=>{
+      const next={...current,[portfolioId]:rows};
+      try{window.localStorage.setItem(EXTRAS_STORAGE_KEY,JSON.stringify(next));}catch{}
+      return next;
+    });
+  };
+  const holdingsByPortfolio = usePortfolioStore((state) => state.holdingsByPortfolio);
+  const cashByPortfolio = usePortfolioStore((state) => state.cashByPortfolio);
+  const transactionsByPortfolio = usePortfolioStore((state) => state.transactionsByPortfolio);
+
+  const accounts = useMemo(() => {
+    const monthNumber = new Date().getMonth() + 1;
+    const monthFraction = (monthNumber - 1) / 12;
+
+    return investmentAccounts.map((account) => {
+      const portfolioId = accountPortfolioIds[account.name];
+      const summary = portfolioSummary(
+        holdingsByPortfolio[portfolioId] ?? [],
+        account.name === "Fidelity 401(k)" ? 0 : (cashByPortfolio[portfolioId] ?? 0),
+      );
+      const current = summary.value;
+      const invested = account.invested;
+      const gain = current - invested;
+      const totalReturn = invested > 0 ? gain / invested : 0;
+      const cagrBaseYears = account.name === "Fidelity Roth IRA" ? 1.0833 : 2;
+      const cagrYears = cagrBaseYears + monthFraction;
+      const cagr = invested > 0 && current > 0
+        ? Math.pow(current / invested, 1 / cagrYears) - 1
+        : 0;
+      const ytd = account.name === "Robinhood"
+        ? current / 83745 - 1
+        : account.name === "Fidelity Roth IRA"
+          ? current / 16452 - 1
+          : 0.1465;
+
+      return { ...account, current, gain, totalReturn, cagr, ytd };
+    });
+  }, [cashByPortfolio, holdingsByPortfolio]);
+
+  const totals = useMemo(() => {
+    const invested = accounts.reduce((sum, account) => sum + account.invested, 0);
+    const current = accounts.reduce((sum, account) => sum + account.current, 0);
+    const gain = current - invested;
+    return { invested, current, gain, totalReturn: invested > 0 ? gain / invested : 0 };
+  }, [accounts]);
+
+  const realizedSalesByMonth = useMemo(() => {
+    const aggregate = (portfolioId: DataPortfolioId) => {
+      const monthly = new Map<string, number>();
+      (transactionsByPortfolio[portfolioId] ?? []).forEach((transaction) => {
+        if (transaction.type !== "sell" || !Number.isFinite(transaction.realizedGain)) return;
+        if (!transaction.notes?.includes("Sold from Holdings")) return;
+        if (!isFutureHoldingsSale(transaction.id)) return;
+        const patch=portfolioId==="robinhood"?(dynamicProfitEdits[transaction.id]??{}):{};
+        if(patch.deleted)return;
+        const effectiveDate=typeof patch.date==="string"?patch.date:transaction.date;
+        const realizedProfit=typeof patch.realizedProfit==="number"?patch.realizedProfit:(transaction.realizedGain??0);
+        const date = new Date(`${effectiveDate}T12:00:00`);
+        if (Number.isNaN(date.getTime())) return;
+        const period = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(date);
+        monthly.set(period, (monthly.get(period) ?? 0) + realizedProfit);
+      });
+      return monthly;
+    };
+    return {
+      robinhood: aggregate("robinhood"),
+      roth: aggregate("fidelity-roth"),
+    };
+  }, [transactionsByPortfolio,dynamicProfitEdits]);
+
+  const profitDrilldownGroups = useMemo<ProfitTickerGroup[]>(() => {
+    if (!profitDrilldown) return [];
+    const transactions = transactionsByPortfolio[profitDrilldown.portfolioId] ?? [];
+    const matching = transactions.map(transaction=>({transaction,patch:profitDrilldown.portfolioId==="robinhood"?(dynamicProfitEdits[transaction.id]??{}):{}})).filter(({transaction,patch}) => {
+      if (transaction.type !== "sell" || !Number.isFinite(transaction.realizedGain)) return false;
+      if (!transaction.notes?.includes("Sold from Holdings")) return false;
+      if (!isFutureHoldingsSale(transaction.id)) return false;
+      if(patch.deleted)return false;
+      const effectiveDate=typeof patch.date==="string"?patch.date:transaction.date;
+      const date = new Date(`${effectiveDate}T12:00:00`);
+      if (Number.isNaN(date.getTime())) return false;
+      const period = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(date);
+      return period === profitDrilldown.period;
+    });
+
+    const groups = new Map<string, ProfitDrilldownTransaction[]>();
+    matching.forEach(({transaction,patch}) => {
+      const ticker = (typeof patch.ticker==="string"?patch.ticker:(transaction.symbol ?? "Other")).trim().toUpperCase() || "Other";
+      const optionType = transaction.assetType === "option"
+        ? transaction.optionType?.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")
+        : "";
+      const strike = transaction.assetType === "option" && typeof transaction.optionStrike === "number"
+        ? ` $${transaction.optionStrike}`
+        : "";
+      const expiry = transaction.assetType === "option" && transaction.optionExpiry
+        ? ` · ${new Date(`${transaction.optionExpiry}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+        : "";
+      const label = transaction.assetType === "option"
+        ? `${ticker}${strike} ${optionType || "Option"}${expiry}`
+        : ticker;
+      const category: ProfitDrilldownTransaction["category"] = transaction.assetType !== "option"
+        ? "Common Stocks"
+        : transaction.optionType === "sell-call"
+          ? "Sell Call"
+          : transaction.optionType === "sell-put"
+            ? "Sell Put"
+            : transaction.optionType === "buy-put"
+              ? "Buy Put"
+              : "Buy Call";
+      const row: ProfitDrilldownTransaction = {
+        id: transaction.id,
+        date: typeof patch.date==="string"?patch.date:transaction.date,
+        ticker,
+        label: typeof patch.label==="string"?patch.label:label,
+        quantity: typeof transaction.quantity === "number" ? Math.abs(transaction.quantity) : null,
+        price: typeof transaction.price === "number" ? transaction.price : null,
+        proceeds: typeof transaction.realizedProceeds === "number"
+          ? transaction.realizedProceeds
+          : transaction.amount ? Math.abs(transaction.amount) : null,
+        realizedProfit: typeof patch.realizedProfit==="number"?patch.realizedProfit:(Number(transaction.realizedGain) || 0),
+        category: patch.category??category,
+        preserveLabelCasing: typeof patch.label==="string",
+      };
+      groups.set(ticker, [...(groups.get(ticker) ?? []), row]);
+    });
+
+    const total = matching.reduce((sum, {transaction,patch}) => sum + (typeof patch.realizedProfit==="number"?patch.realizedProfit:(Number(transaction.realizedGain) || 0)), 0);
+    return Array.from(groups.entries())
+      .map(([ticker, transactions]) => {
+        const realizedProfit = transactions.reduce((sum, transaction) => sum + transaction.realizedProfit, 0);
+        return { ticker, realizedProfit, percent: total ? realizedProfit / total * 100 : 0, transactions };
+      })
+      .sort((a,b) => b.realizedProfit - a.realizedProfit);
+  }, [profitDrilldown, transactionsByPortfolio,dynamicProfitEdits]);
+
+  const displayedProfitDrilldownGroups = useMemo<ProfitTickerGroup[]>(()=>{
+    if(!profitDrilldown || profitDrilldown.portfolioId!=="robinhood") return profitDrilldownGroups;
+    const verified=verifiedCloseDateTransactions[profitDrilldown.period];
+    if(!verified) return profitDrilldownGroups;
+    const total=verified.reduce((sum,transaction)=>sum+transaction.realizedProfit,0);
+    const groupedByTicker=new Map<string,ProfitDrilldownTransaction[]>();
+    verified.forEach(transaction=>{
+      groupedByTicker.set(transaction.ticker,[...(groupedByTicker.get(transaction.ticker)??[]),transaction]);
+    });
+    return Array.from(groupedByTicker.entries())
+      .map(([ticker,transactions])=>{
+        const realizedProfit=transactions.reduce((sum,transaction)=>sum+transaction.realizedProfit,0);
+        return {ticker,realizedProfit,percent:total?realizedProfit/total*100:0,transactions};
+      })
+      .sort((a,b)=>b.realizedProfit-a.realizedProfit);
+  },[profitDrilldown,profitDrilldownGroups,verifiedCloseDateTransactions]);
+
+  const profitDrilldownTotal = displayedProfitDrilldownGroups.reduce((sum, group) => sum + group.realizedProfit, 0);
+
+  const mergeMonthlySales = (
+    base: { period: string; realizedProfit: number; income: number }[],
+    monthlySales: Map<string, number>,
+  ) => {
+    const rows = base.map((row) => ({ ...row }));
+    monthlySales.forEach((profit, period) => {
+      const existing = rows.find((row) => row.period === period);
+      if (existing) existing.realizedProfit += profit;
+      else rows.push({ period, realizedProfit: profit, income: 0 });
+    });
+    return rows.sort((a, b) => {
+      const parsePeriod = (period: string) => {
+        const quarter = period.match(/^Q([1-4]) (\d{4})$/);
+        if (quarter) return new Date(Number(quarter[2]), (Number(quarter[1]) - 1) * 3, 1).getTime();
+        const month = new Date(`${period} 1`);
+        return Number.isNaN(month.getTime()) ? 0 : month.getTime();
+      };
+      return parsePeriod(a.period) - parsePeriod(b.period);
+    });
+  };
+
+  const robinhoodQuarterly = useMemo(() => {
+    const q1=(verifiedCloseDateMonthlyTotals["Jan 2026"]??0)+(verifiedCloseDateMonthlyTotals["Feb 2026"]??0)+(verifiedCloseDateMonthlyTotals["Mar 2026"]??0);
+    const q2=(verifiedCloseDateMonthlyTotals["Apr 2026"]??0)+(verifiedCloseDateMonthlyTotals["May 2026"]??0)+(verifiedCloseDateMonthlyTotals["Jun 2026"]??0);
+    const base: { period: string; realizedProfit: number; income: number }[] = quarterlyIncome
+      .filter((row) => !/^Q[1-4] 2025$/.test(row.period))
+      .map((row) => {
+        const realizedProfit = row.period === "Q1 2026"
+          ? q1
+          : row.period === "Q2 2026"
+            ? q2
+            : row.robinhoodProfit;
+        return { period: row.period, realizedProfit, income: row.robinhoodIncome };
+      });
+    Object.keys(verifiedCloseDateMonthlyTotals).forEach(period=>{
+      const realizedProfit:number=verifiedCloseDateMonthlyTotals[period]??0;
+      const existing=base.find(row=>row.period===period);
+      if(existing) existing.realizedProfit=realizedProfit;
+      else base.push({period,realizedProfit,income:0});
+    });
+    const dividendTotals=new Map<string,number>();
+    ROBINHOOD_DIVIDENDS.forEach(dividend=>{const period=dividendPeriod(dividend.date);dividendTotals.set(period,(dividendTotals.get(period)??0)+dividend.amount);});
+    dividendTotals.forEach((income,period)=>{
+      const existing=base.find(row=>row.period===period);
+      if(existing) existing.income=income;
+      else base.push({period,realizedProfit:0,income});
+    });
+    const nonVerifiedMonthlySales = new Map(
+      Array.from(realizedSalesByMonth.robinhood.entries()).filter(
+        ([period]) => verifiedCloseDateMonthlyTotals[period] === undefined,
+      ),
+    );
+    return mergeMonthlySales(base, nonVerifiedMonthlySales);
+  }, [realizedSalesByMonth,verifiedCloseDateMonthlyTotals]);
+
+  const rothQuarterly = useMemo(() => mergeMonthlySales(quarterlyIncome.map((row) => ({
+    period: row.period,
+    realizedProfit: row.rothProfit,
+    income: row.rothIncome,
+  })), realizedSalesByMonth.roth), [realizedSalesByMonth]);
+
+  const incomeTotals = useMemo(() => {
+    const sum = (rows: { realizedProfit: number; income: number }[]) => ({
+      realizedProfit: rows.reduce((total, row) => total + row.realizedProfit, 0),
+      income: rows.reduce((total, row) => total + row.income, 0),
+    });
+    const robinhood = sum(robinhoodQuarterly);
+    const roth = sum(rothQuarterly);
+    return {
+      robinhood,
+      roth,
+      total: robinhood.realizedProfit + robinhood.income + roth.realizedProfit + roth.income,
+    };
+  }, [robinhoodQuarterly, rothQuarterly]);
+
+  const selectedRealizedIncome = activeId === "robinhood"
+    ? incomeTotals.robinhood.realizedProfit + incomeTotals.robinhood.income
+    : activeId === "fidelity-roth"
+      ? incomeTotals.roth.realizedProfit + incomeTotals.roth.income
+      : activeId === "fidelity-401k"
+        ? 0
+        : incomeTotals.total;
+
+  const yearlyRealizedIncome = useMemo(() => {
+    const summarize = (rows: { period: string; realizedProfit: number; income: number }[]) => {
+      const totals = new Map<string, { realizedProfit: number; income: number }>();
+      rows.forEach((row) => {
+        const yearMatch = row.period.match(/(20\d{2})/);
+        if (!yearMatch) return;
+        const year = yearMatch[1];
+        const current = totals.get(year) ?? { realizedProfit: 0, income: 0 };
+        current.realizedProfit += row.realizedProfit;
+        current.income += row.income;
+        totals.set(year, current);
+      });
+      return ["2024", "2025", "2026"].map((year) => {
+        const values = totals.get(year) ?? { realizedProfit: 0, income: 0 };
+        return {
+          year: year === "2026" ? "2026 YTD" : year,
+          realizedProfit: values.realizedProfit,
+          income: values.income,
+          total: values.realizedProfit + values.income,
+        };
+      });
+    };
+
+    if (activeId === "robinhood") return summarize(robinhoodQuarterly);
+    if (activeId === "fidelity-roth") return summarize(rothQuarterly);
+    if (activeId === "fidelity-401k") return summarize([]);
+    return summarize([...robinhoodQuarterly, ...rothQuarterly]);
+  }, [activeId, robinhoodQuarterly, rothQuarterly]);
+
+  const selected2026Income = yearlyRealizedIncome.find((row) => row.year === "2026 YTD")?.total ?? 0;
+
+  const brokerageIncomeTotals = useMemo(() => [
+    { account: "Robinhood", realizedProfit: incomeTotals.robinhood.realizedProfit, income: incomeTotals.robinhood.income },
+    { account: "Fidelity Roth IRA", realizedProfit: incomeTotals.roth.realizedProfit, income: incomeTotals.roth.income },
+  ], [incomeTotals]);
+
+  const dynamicYtd = useMemo(() => ({
+    Robinhood: accounts.find((account) => account.name === "Robinhood")?.ytd ?? 0,
+    "Fidelity Roth IRA": accounts.find((account) => account.name === "Fidelity Roth IRA")?.ytd ?? 0,
+    "Fidelity 401(k)": 0.1465,
+  }), [accounts]);
+
+  const robinhoodChartData=useMemo(()=>robinhoodQuarterly.filter(row=>{
+    const yearMatch=row.period.match(/(20\d{2})/);
+    if(yearMatch?.[1]!==robinhoodChartYear)return false;
+    if(robinhoodChartYear==="2026"&&/^Q[12] 2026$/.test(row.period))return false;
+    return true;
+  }),[robinhoodQuarterly,robinhoodChartYear]);
+  const robinhoodAnnualChartData=useMemo(()=>{
+    const annual=new Map<string,{period:string;realizedProfit:number;income:number}>();
+    robinhoodQuarterly.forEach(row=>{
+      const year=row.period.match(/(20\d{2})/)?.[1];
+      if(!year)return;
+      if(year==="2026"&&/^Q[12] 2026$/.test(row.period))return;
+      const current=annual.get(year)??{period:year,realizedProfit:0,income:0};
+      current.realizedProfit+=row.realizedProfit;
+      current.income+=row.income;
+      annual.set(year,current);
+    });
+    return Array.from(annual.values()).sort((a,b)=>a.period.localeCompare(b.period));
+  },[robinhoodQuarterly]);
+
+  const drilldownAdjacentPeriods=useMemo(()=>{
+    if(!profitDrilldown)return {previous:null as string|null,next:null as string|null};
+    const match=profitDrilldown.period.match(/^([A-Z][a-z]{2}) (20\d{2})$/);
+    if(!match)return {previous:null as string|null,next:null as string|null};
+    const monthIndex=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].indexOf(match[1]);
+    if(monthIndex<0)return {previous:null as string|null,next:null as string|null};
+    const currentDate=new Date(Number(match[2]),monthIndex,1);
+    const formatPeriod=(date:Date)=>new Intl.DateTimeFormat("en-US",{month:"short",year:"numeric"}).format(date);
+    const previousCandidate=formatPeriod(new Date(currentDate.getFullYear(),currentDate.getMonth()-1,1));
+    const nextCandidate=formatPeriod(new Date(currentDate.getFullYear(),currentDate.getMonth()+1,1));
+    const available=new Set<string>();
+    if(profitDrilldown.portfolioId==="robinhood") {
+      robinhoodQuarterly.forEach(row=>{if(/^[A-Z][a-z]{2} 20\d{2}$/.test(row.period))available.add(row.period);});
+      Object.keys(verifiedCloseDateTransactions).forEach(period=>available.add(period));
+    } else if(profitDrilldown.portfolioId==="fidelity-roth") {
+      rothQuarterly.forEach(row=>{if(/^[A-Z][a-z]{2} 20\d{2}$/.test(row.period))available.add(row.period);});
+    }
+    return {previous:available.has(previousCandidate)?previousCandidate:null,next:available.has(nextCandidate)?nextCandidate:null};
+  },[profitDrilldown,robinhoodQuarterly,rothQuarterly,verifiedCloseDateTransactions]);
+
+  const selectedVisual = activeId === "robinhood"
+    ? null
+    : activeId === "fidelity-roth"
+      ? <QuarterlyChart title="Fidelity Roth IRA Quarterly Data" subtitle="Profit Vs Dividend, Interest & Bonus By Quarter" data={rothQuarterly} onProfitBarClick={(period)=>setProfitDrilldown({portfolioId:"fidelity-roth",period})}/>
+      : activeId === "fidelity-401k"
+        ? <YtdAccountChart account="Fidelity 401(k)" data={ytdPerformance.find((row) => row.account === "401(k) IRA") ?? { account: "401(k) IRA", "2024": 0, "2025": 0, "2026": 0.1465 }} currentYtd={dynamicYtd["Fidelity 401(k)"]}/>
+        : <IncomeTotalsChart data={brokerageIncomeTotals}/>;
+
+  return <div className="space-y-6">
+    <div>
+      <h1 className="text-3xl font-semibold tracking-tight">Portfolio Performance</h1>
+    </div>
+
+    <div className="grid gap-4 xl:grid-cols-3">
+      {accounts.map((account) => <Card key={account.name} className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div><div className="text-sm text-zinc-500">Brokerage Account</div><h2 className="mt-1 text-lg font-semibold">{account.name}</h2></div>
+          <div className={cn("rounded-xl px-2.5 py-1.5 text-xs font-medium", account.totalReturn >= 0 ? "bg-emerald-400/10 text-emerald-400" : "bg-red-400/10 text-red-400")}>{pct(account.totalReturn)}</div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-4 border-t border-zinc-200 pt-4 dark:border-white/10">
+          <div><div className="text-xs text-zinc-500">Investment</div><div className="mt-1 text-xl font-semibold">{money(account.invested)}</div></div>
+          <div><div className="text-xs text-zinc-500">Current Value</div><div className="mt-1 text-xl font-semibold">{money(account.current)}</div></div>
+          <div><div className="text-xs text-zinc-500">Total Gain</div><div className={cn("mt-1 text-xl font-semibold",account.gain>=0?"positive":"negative")}>{money(account.gain)}</div></div>
+          <div><div className="text-xs text-zinc-500">Total Return</div><div className={cn("mt-1 text-sm font-medium",account.totalReturn>=0?"positive":"negative")}>{pct(account.totalReturn)}</div></div>
+          <div><div className="text-xs text-zinc-500">CAGR</div><div className={cn("mt-1 text-sm font-medium",account.cagr>=0?"positive":"negative")}>{pct(account.cagr)}</div></div>
+          <div><div className="text-xs text-zinc-500">2026 YTD</div><div className={cn("mt-1 text-sm font-medium",account.ytd>=0?"positive":"negative")}>{pct(account.ytd)}</div></div>
+        </div>
+        <div className="mt-4 space-y-2 text-xs">
+          <div className="grid min-h-7 grid-cols-[auto_1fr] items-center gap-4">
+            <span className="text-zinc-500">Portfolio Start</span>
+            <span className="text-right text-zinc-400">{account.start}</span>
+          </div>
+          {(()=>{
+            const portfolioId=accountPortfolioIds[account.name];
+            const ath=allTimeHighs[portfolioId];
+            return <div className="grid min-h-7 grid-cols-[auto_1fr] items-center gap-4">
+              <span className="text-zinc-500">All-Time High</span>
+              {editingAllTimeHigh?.portfolioId===portfolioId
+                ? <div className="flex min-w-0 flex-wrap justify-end gap-2"><input autoFocus type="number" step="1" value={ath.value||""} onChange={e=>updateAllTimeHigh(portfolioId,"value",e.target.value)} className="h-8 w-28 rounded-lg border border-white/10 bg-transparent px-2 text-right text-xs text-zinc-300 outline-none"/><input type="date" value={ath.date} onChange={e=>updateAllTimeHigh(portfolioId,"date",e.target.value)} onKeyDown={e=>{if(e.key==="Enter")setEditingAllTimeHigh(null);}} className="h-8 w-36 rounded-lg border border-white/10 bg-transparent px-2 text-right text-xs text-zinc-300 outline-none"/><button type="button" onClick={()=>setEditingAllTimeHigh(null)} className="h-8 rounded-lg border border-white/10 px-2 text-xs text-zinc-400 hover:bg-white/[.04]">Done</button></div>
+                : <button type="button" onClick={()=>setEditingAllTimeHigh({portfolioId,field:"value"})} className="justify-self-end whitespace-nowrap p-0 text-right text-xs text-zinc-400 transition hover:text-zinc-200" title="Click To Edit All-Time High">{wholeDollar(ath.value)} On {formatDisplayDate(ath.date)}</button>}
+            </div>;
+          })()}
+        </div>
+      </Card>)}
+    </div>
+
+    {selectedVisual}
+
+    {profitDrilldown && <ProfitDrilldownModal
+      period={profitDrilldown.period}
+      groups={displayedProfitDrilldownGroups}
+      total={profitDrilldownTotal}
+      dividends={profitDrilldown.portfolioId==="robinhood"?ROBINHOOD_DIVIDENDS.filter(dividend=>dividendPeriod(dividend.date)===profitDrilldown.period):[]}
+      onEditTransaction={profitDrilldown.portfolioId==="robinhood"?(verifiedCloseDateTransactions[profitDrilldown.period]?saveVerifiedProfitEdit:saveDynamicProfitEdit):undefined}
+      onPrevious={drilldownAdjacentPeriods.previous?()=>setProfitDrilldown(current=>current?{...current,period:drilldownAdjacentPeriods.previous!}:current):undefined}
+      onNext={drilldownAdjacentPeriods.next?()=>setProfitDrilldown(current=>current?{...current,period:drilldownAdjacentPeriods.next!}:current):undefined}
+      onClose={()=>setProfitDrilldown(null)}
+    />}
+
+    <div className="space-y-6">
+        <Card className="overflow-hidden">
+          <CardHeader><h2 className="font-medium">YTD Performance</h2></CardHeader>
+          <CardContent>
+            <div className="overflow-hidden rounded-xl border border-dashed border-zinc-300/80 dark:border-white/15">
+              <table className="w-full table-fixed border-collapse text-xs sm:text-sm">
+                <thead><tr className="text-left text-[11px] text-zinc-500 sm:text-xs">
+                  <th className="w-[43%] border-b border-r border-dashed border-zinc-300/70 p-3 font-medium dark:border-white/10">Account</th>
+                  <th className="w-[19%] border-b border-r border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">2024</th>
+                  <th className="w-[19%] border-b border-r border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">2025</th>
+                  <th className="w-[19%] border-b border-dashed border-zinc-300/70 p-3 text-right font-medium dark:border-white/10">2026</th>
+                </tr></thead>
+                <tbody>{ytdPerformance.map((row, index)=>{
+                  const displayAccount = row.account === "Roth IRA" ? "Fidelity Roth IRA" : row.account === "401(k) IRA" ? "Fidelity 401(k)" : row.account;
+                  const currentYtd = dynamicYtd[displayAccount as keyof typeof dynamicYtd];
+                  const rowBorder = index < ytdPerformance.length - 1 ? "border-b border-dashed border-zinc-300/60 dark:border-white/10" : "";
+                  return <tr key={row.account}>
+                    <td className={cn("break-words border-r border-dashed border-zinc-300/60 p-3 font-medium leading-tight dark:border-white/10", rowBorder)}>{displayAccount}</td>
+                    <td className={cn("border-r border-dashed border-zinc-300/60 p-3 text-right font-medium tabular-nums dark:border-white/10", rowBorder,row["2024"]>=0?"positive":"negative")}>{pct(row["2024"])}</td>
+                    <td className={cn("border-r border-dashed border-zinc-300/60 p-3 text-right font-medium tabular-nums dark:border-white/10", rowBorder,row["2025"]>=0?"positive":"negative")}>{pct(row["2025"])}</td>
+                    <td className={cn("p-3 text-right font-medium tabular-nums", rowBorder,currentYtd>=0?"positive":"negative")}>{pct(currentYtd)}</td>
+                  </tr>;
+                })}</tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+    </div>
+  </div>;
+}
+
+function chartValueLabel(value: number) {
+  return wholeDollar(value);
+}
+
+function chartAxisValue(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function QuarterlyChart({ title, subtitle, data, onProfitBarClick, selectedYear, onYearChange, yearOptions, selectedView, onViewChange }: { title: string; subtitle: string; data: { period: string; realizedProfit: number; income: number }[]; onProfitBarClick?: (period:string)=>void; selectedYear?:string; onYearChange?:(year:string)=>void; yearOptions?:string[]; selectedView?:"month"|"year"; onViewChange?:(view:"month"|"year")=>void }) {
+  const gradientId=title.replace(/\W/g, "");
+  const isMonthly=(period:string)=>/^[A-Z][a-z]{2} 20\d{2}$/.test(period);
+  const canOpenPeriod=(period:string)=>isMonthly(period)||(selectedView==="year"&&/^20\d{2}$/.test(period));
+  const openProfitDetail=(entry:any)=>{
+    const period=entry?.payload?.period??entry?.period;
+    if(typeof period==="string"&&canOpenPeriod(period)) onProfitBarClick?.(period);
+  };
+  const PeriodTick=(props:any)=>{
+    const {x,y,payload}=props;
+    const period=String(payload?.value??"");
+    const clickable=Boolean(onProfitBarClick&&canOpenPeriod(period));
+    return <g transform={`translate(${x},${y})`} onClick={()=>clickable&&onProfitBarClick?.(period)} style={{cursor:clickable?"pointer":"default"}}>
+      <text x={0} y={0} dy={16} textAnchor="middle" fill={clickable?"#a1a1aa":"#71717a"} fontSize={10} fontWeight={clickable?600:400}>{period}</text>
+    </g>;
+  };
+  return <Card className="overflow-hidden">
+    <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-zinc-200/70 dark:border-white/[.06]">
+      <div><h2 className="font-medium">{title}</h2><p className="mt-1 text-xs text-zinc-500">{subtitle}</p></div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {selectedView&&onViewChange&&<div className="inline-flex h-9 overflow-hidden rounded-xl border border-zinc-200 dark:border-white/10">{(["month","year"] as const).map(view=><button key={view} type="button" onClick={()=>onViewChange(view)} className={cn("px-3 text-xs font-semibold capitalize transition",selectedView===view?"bg-emerald-500 text-zinc-950":"text-zinc-500 hover:text-zinc-200")}>{view}</button>)}</div>}
+        {selectedYear&&onYearChange&&selectedView!=="year"&&<select value={selectedYear} onChange={event=>onYearChange(event.target.value)} className="h-9 rounded-xl border border-zinc-200 bg-transparent px-3 text-sm font-medium outline-none dark:border-white/10 dark:bg-zinc-950">{(yearOptions??[]).map(year=><option key={year} value={year}>{year}</option>)}</select>}
+      </div>
+    </CardHeader>
+    <CardContent className="pt-5">
+      <div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:4}} onClick={(state:any)=>{const period=state?.activePayload?.[0]?.payload?.period;if(typeof period==="string"&&canOpenPeriod(period)) onProfitBarClick?.(period);}} style={{cursor:onProfitBarClick?"pointer":"default"}}>
+        <defs><linearGradient id={`${gradientId}-profit`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399" stopOpacity={1}/><stop offset="100%" stopColor="#10b981" stopOpacity={0.65}/></linearGradient><linearGradient id={`${gradientId}-income`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.65}/></linearGradient><linearGradient id={`${gradientId}-negative`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#fb7185" stopOpacity={1}/><stop offset="100%" stopColor="#e11d48" stopOpacity={0.72}/></linearGradient></defs>
+        <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/>
+        <XAxis dataKey="period" tick={<PeriodTick/>} axisLine={false} tickLine={false} interval={0} height={34}/>
+        <YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>chartAxisValue(v)}/>
+        <Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5",boxShadow:"0 12px 30px rgba(0,0,0,.25)"}} formatter={(value: any)=>money(Number(value))}/>
+        <Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/>
+        <Bar dataKey="realizedProfit" name="Profit" fill={`url(#${gradientId}-profit)`} radius={[7,7,2,2]} maxBarSize={34} onClick={openProfitDetail} style={{cursor:onProfitBarClick?"pointer":"default"}}>
+          {data.map((row)=><Cell key={`profit-${row.period}`} fill={row.realizedProfit<0?`url(#${gradientId}-negative)`:`url(#${gradientId}-profit)`}/>)}
+          <LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/>
+        </Bar>
+        <Bar dataKey="income" name="Dividends & Interest" fill={`url(#${gradientId}-income)`} radius={[7,7,2,2]} maxBarSize={34} onClick={openProfitDetail} style={{cursor:onProfitBarClick?"pointer":"default"}}>
+          {data.map((row)=><Cell key={`income-${row.period}`} fill={row.income<0?`url(#${gradientId}-negative)`:`url(#${gradientId}-income)`}/>)}
+          <LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/>
+        </Bar>
+      </BarChart></ResponsiveContainer></div>
+      
+    </CardContent>
+  </Card>;
+}
+
+function EditableProfitCell({value,display,kind="text",onSave,options,className}:{value:string|number|null;display:string;kind?:"text"|"number"|"date"|"select";onSave?:(value:string|number|null)=>void;options?:string[];className?:string}) {
+  const [editing,setEditing]=useState(false);
+  const [draft,setDraft]=useState(value===null?"":String(value));
+  const cancelBlur=useRef(false);
+  useEffect(()=>{if(!editing)setDraft(value===null?"":String(value));},[value,editing]);
+  if(!onSave)return <td className={cn("px-4 py-3",className)}>{display}</td>;
+  const commit=()=>{
+    if(cancelBlur.current){cancelBlur.current=false;setEditing(false);return;}
+    const next=kind==="number"?(draft.trim()===""?null:Number(draft)):draft;
+    onSave(next);
+    setEditing(false);
+  };
+  const keyDown=(event:any)=>{
+    if(event.key==="Enter"){event.preventDefault();event.currentTarget.blur();}
+    if(event.key==="Escape"){event.preventDefault();cancelBlur.current=true;setDraft(value===null?"":String(value));event.currentTarget.blur();}
+  };
+  return <td className={cn("px-4 py-3",className)}>
+    {editing ? kind==="select"
+      ? <select autoFocus value={draft} onChange={event=>setDraft(event.target.value)} onBlur={commit} onKeyDown={keyDown} className="h-9 rounded-lg border border-emerald-400/30 bg-zinc-950 px-2 text-sm outline-none">{(options??[]).map(option=><option key={option} value={option}>{option}</option>)}</select>
+      : <input autoFocus type={kind} step={kind==="number"?"any":undefined} value={draft} onChange={event=>setDraft(event.target.value)} onBlur={commit} onKeyDown={keyDown} className="h-9 min-w-24 max-w-56 rounded-lg border border-emerald-400/30 bg-zinc-950 px-2 text-sm outline-none"/>
+      : <button type="button" onClick={()=>setEditing(true)} className="w-full cursor-text rounded-md text-left transition hover:bg-white/[.035] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400/40" title="Click To Edit">{display}</button>}
+  </td>;
+}
+
+function formatPositionLabel(value:string) {
+  const words=value.trim().split(/\s+/);
+  if(words.length===0)return value;
+  const ticker=words[0].toUpperCase();
+  const formatted=words.slice(1).map((word,index,rest)=>{
+    const lower=word.toLowerCase();
+    const isCallPut=lower==="call"||lower==="put";
+    const next=rest[index+1]?.toLowerCase();
+    const looksStrike=/^\d+(?:\.\d+)?$/.test(word)&&next&&(next==="call"||next==="put");
+    if(looksStrike)return `$${word}`;
+    if(/^\d+(?:\.\d+)?$/.test(word))return word;
+    if(isCallPut)return lower.charAt(0).toUpperCase()+lower.slice(1);
+    if(/^[a-z]{3}$/i.test(word))return lower.charAt(0).toUpperCase()+lower.slice(1);
+    return lower.charAt(0).toUpperCase()+lower.slice(1);
+  });
+  return [ticker,...formatted].join(" ");
+}
+
+function ProfitDrilldownModal({period,groups,total,dividends,onEditTransaction,onPrevious,onNext,onClose}:{period:string;groups:ProfitTickerGroup[];total:number;dividends:DividendTransaction[];onEditTransaction?:(id:string,patch:VerifiedProfitEdit)=>void;onPrevious?:()=>void;onNext?:()=>void;onClose:()=>void}) {
+  const [detailView,setDetailView]=useState<"profit"|"dividends">("profit");
+  useEffect(()=>setDetailView("profit"),[period]);
+  const dividendTotal=dividends.reduce((sum,dividend)=>sum+dividend.amount,0);
+  const incomeCategory=(dividend:DividendTransaction):"Dividends"|"Robinhood Gold"|"Interest"=>{
+    if(dividend.ticker==="Interest Payment")return "Interest";
+    if(dividend.ticker.endsWith(" Dividend"))return "Dividends";
+    return "Robinhood Gold";
+  };
+  const totalDividends=dividends.filter(item=>incomeCategory(item)==="Dividends").reduce((sum,item)=>sum+item.amount,0);
+  const totalRobinhoodGold=dividends.filter(item=>incomeCategory(item)==="Robinhood Gold").reduce((sum,item)=>sum+item.amount,0);
+  const totalInterest=dividends.filter(item=>incomeCategory(item)==="Interest").reduce((sum,item)=>sum+item.amount,0);
+  const [transactionSort,setTransactionSort]=useState<"date"|"realizedProfit">("realizedProfit");
+  const [transactionSortDirection,setTransactionSortDirection]=useState<"asc"|"desc">("desc");
+  const transactions=groups
+    .flatMap(group=>group.transactions.map(transaction=>({...transaction,groupTicker:group.ticker})))
+    .sort((a,b)=>{
+      const comparison=transactionSort==="date"
+        ? a.date.localeCompare(b.date)
+        : a.realizedProfit-b.realizedProfit;
+      if(comparison!==0)return transactionSortDirection==="asc"?comparison:-comparison;
+      return b.date.localeCompare(a.date)||b.id.localeCompare(a.id);
+    });
+  const [editingTransaction,setEditingTransaction]=useState<(ProfitDrilldownTransaction & {groupTicker:string})|null>(null);
+  const [draft,setDraft]=useState<ProfitDrilldownTransaction|null>(null);
+  const categoryOrder: ProfitDrilldownTransaction["category"][]=["Common Stocks","Sell Call","Sell Put","Buy Call","Buy Put"];
+  const categoryTotals=categoryOrder.map(category=>{
+    const categoryTransactions=transactions.filter(transaction=>transaction.category===category);
+    return {
+      category,
+      realizedProfit:categoryTransactions.reduce((sum,transaction)=>sum+transaction.realizedProfit,0),
+      count:categoryTransactions.length,
+    };
+  }).filter(item=>Math.abs(item.realizedProfit)>0.000001)
+    .sort((a,b)=>b.realizedProfit-a.realizedProfit);
+  const changeTransactionSort=(column:"date"|"realizedProfit")=>{
+    if(transactionSort===column)setTransactionSortDirection(current=>current==="asc"?"desc":"asc");
+    else {
+      setTransactionSort(column);
+      setTransactionSortDirection("desc");
+    }
+  };
+  const TransactionSortHeader=({label,column,right=false}:{label:string;column:"date"|"realizedProfit";right?:boolean})=>{
+    const active=transactionSort===column;
+    const SortIcon=!active?ArrowUpDown:transactionSortDirection==="asc"?ArrowUp:ArrowDown;
+    return <button type="button" onClick={()=>changeTransactionSort(column)} className={cn("inline-flex w-full items-center gap-2 transition hover:text-zinc-200",right&&"justify-end",active&&"text-emerald-400")} aria-label={`Sort By ${label} ${active?(transactionSortDirection==="asc"?"Ascending":"Descending"):""}`} title={active?`${label}: ${transactionSortDirection==="asc"?"Ascending":"Descending"}`:`Sort By ${label}`}>{label}<SortIcon size={14} className={active?"text-emerald-400":"opacity-25"}/></button>;
+  };
+  const dateText=(value:string)=>new Date(`${value}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+  const openEditor=(transaction:ProfitDrilldownTransaction & {groupTicker:string})=>{
+    if(!onEditTransaction)return;
+    setEditingTransaction(transaction);
+    setDraft({...transaction});
+  };
+  const saveEditor=()=>{
+    if(!editingTransaction||!draft||!onEditTransaction)return;
+    onEditTransaction(editingTransaction.id,{
+      date:draft.date,
+      category:draft.category,
+      ticker:draft.ticker.trim().toUpperCase(),
+      label:draft.label.trim(),
+      quantity:draft.quantity,
+      price:draft.price,
+      proceeds:draft.proceeds,
+      realizedProfit:draft.realizedProfit,
+    });
+    setEditingTransaction(null);
+    setDraft(null);
+  };
+  const deleteEditor=()=>{
+    if(!editingTransaction||!onEditTransaction)return;
+    onEditTransaction(editingTransaction.id,{deleted:true});
+    setEditingTransaction(null);
+    setDraft(null);
+  };
+  const setDraftField=<K extends keyof ProfitDrilldownTransaction>(field:K,value:ProfitDrilldownTransaction[K])=>setDraft(current=>current?{...current,[field]:value}:current);
+
+  return <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event)=>{if(event.currentTarget===event.target)onClose();}}>
+    <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-3xl border border-white/10 bg-zinc-950 shadow-[0_30px_90px_rgba(0,0,0,.55)]">
+      <div className="sticky top-0 z-10 grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-b border-white/[.07] bg-zinc-950/95 px-5 py-4 backdrop-blur-xl sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          {onPrevious&&<button type="button" onClick={onPrevious} className="grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 text-zinc-400 transition hover:bg-white/[.05] hover:text-white" aria-label="Previous Month" title="Previous Month"><ChevronLeft size={18}/></button>}
+          <h2 className="truncate text-xl font-semibold">{period} Details</h2>
+          {onNext&&<button type="button" onClick={onNext} className="grid size-9 shrink-0 place-items-center rounded-xl border border-white/10 text-zinc-400 transition hover:bg-white/[.05] hover:text-white" aria-label="Next Month" title="Next Month"><ChevronRight size={18}/></button>}
+        </div>
+        <div className="inline-flex h-9 overflow-hidden rounded-xl border border-white/10">
+          <button type="button" onClick={()=>setDetailView("profit")} className={cn("px-4 text-xs font-semibold transition",detailView==="profit"?"bg-emerald-500 text-zinc-950":"text-zinc-400 hover:text-white")}>Realized P/L</button>
+          <button type="button" onClick={()=>setDetailView("dividends")} className={cn("px-4 text-xs font-semibold transition",detailView==="dividends"?"bg-blue-500 text-white":"text-zinc-400 hover:text-white")}>Dividends & Interest</button>
+        </div>
+        <button type="button" onClick={onClose} className="grid size-9 shrink-0 place-items-center justify-self-end rounded-xl border border-white/10 text-zinc-500 transition hover:bg-white/[.05] hover:text-white" aria-label="Close Details"><X size={17}/></button>
+      </div>
+      <div className="p-5 sm:p-6">
+        {detailView==="dividends" ? <div>
+          <div className="mb-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/[.08] bg-white/[.025] p-5">
+              <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Dividends</p>
+              <p className={cn("mt-3 text-2xl font-semibold",totalDividends>=0?"text-blue-400":"text-rose-400")}>{money(totalDividends)}</p>
+            </div>
+            <div className="rounded-2xl border border-white/[.08] bg-white/[.025] p-5">
+              <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Robinhood Gold</p>
+              <p className={cn("mt-3 text-2xl font-semibold",totalRobinhoodGold>=0?"text-blue-400":"text-rose-400")}>{money(totalRobinhoodGold)}</p>
+            </div>
+            <div className="rounded-2xl border border-white/[.08] bg-white/[.025] p-5">
+              <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Interest</p>
+              <p className={cn("mt-3 text-2xl font-semibold",totalInterest>=0?"text-blue-400":"text-rose-400")}>{money(totalInterest)}</p>
+            </div>
+          </div>
+          <div className="mb-5 rounded-2xl border border-white/[.08] bg-white/[.025] p-5">
+            <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Dividends & Interest</p>
+            <p className={cn("mt-3 text-3xl font-semibold",dividendTotal>=0?"text-blue-400":"text-rose-400")}>{money(dividendTotal)}</p>
+            <p className="mt-2 text-xs text-zinc-600">{dividends.length} {dividends.length===1?"Entry":"Entries"}</p>
+          </div>
+          <div className="overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
+            <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Dividends & Interest By Transaction</h3></div>
+            {dividends.length===0?<div className="px-6 py-14 text-center text-sm text-zinc-500">No dividend or interest entries are available for {period}.</div>:<div className="overflow-x-auto"><table className="w-full min-w-[680px] text-sm">
+              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Source</th><th className="px-4 py-3">Category</th><th className="px-4 py-3 text-right">Amount</th></tr></thead>
+              <tbody>{[...dividends].sort((a,b)=>a.date.localeCompare(b.date)).map((dividend,index)=><tr key={`${dividend.date}-${dividend.ticker}-${index}`} className="border-t border-white/[.06]"><td className="px-4 py-3 text-zinc-400">{new Date(`${dividend.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</td><td className="px-4 py-3 font-semibold">{dividend.ticker}</td><td className="px-4 py-3 text-zinc-400">{incomeCategory(dividend)}</td><td className={cn("px-4 py-3 text-right font-semibold",dividend.amount>=0?"text-blue-400":"text-rose-400")}>{money(dividend.amount)}</td></tr>)}</tbody>
+            </table></div>}
+          </div>
+        </div> : groups.length===0?<><div className="mb-5"><p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Profit</p><p className={cn("mt-1 text-3xl font-semibold",total>=0?"text-emerald-400":"text-rose-400")}>{money(total)}</p></div><div className="rounded-2xl border border-white/10 bg-white/[.025] px-6 py-16 text-center text-sm text-zinc-500">No transaction-level profit details are available for {period}.</div></>:<>
+          <div>
+            <div className="mb-3"><h3 className="text-sm font-semibold">Profit By Position Type</h3></div>
+            <div className={cn("grid gap-3 sm:grid-cols-2",categoryTotals.length===1&&"xl:grid-cols-2",categoryTotals.length===2&&"xl:grid-cols-3",categoryTotals.length===3&&"xl:grid-cols-4",categoryTotals.length===4&&"xl:grid-cols-5",categoryTotals.length>=5&&"xl:grid-cols-3")}>
+              <div className="rounded-2xl border border-white/[.08] bg-white/[.025] p-4">
+                <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Profit</p>
+                <p className={cn("mt-3 text-2xl font-semibold",total>=0?"text-emerald-400":"text-rose-400")}>{money(total)}</p>
+                <p className="mt-2 text-xs text-zinc-600">{transactions.length} {transactions.length===1?"Transaction":"Transactions"}</p>
+              </div>
+              {categoryTotals.map(item=><div key={item.category} className="rounded-2xl border border-white/[.08] bg-white/[.025] p-4">
+                <p className="text-sm font-medium text-zinc-400">{item.category}</p>
+                <p className={cn("mt-3 text-2xl font-semibold",item.realizedProfit>0?"text-emerald-400":"text-rose-400")}>{money(item.realizedProfit)}</p>
+                <p className="mt-2 text-xs text-zinc-600">{item.count} {item.count===1?"Transaction":"Transactions"}</p>
+              </div>)}
+            </div>
+          </div>
+
+          <div className="mt-5 overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
+            <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Profit By Ticker</h3></div>
+            <div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm">
+              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Ticker</th><th className="px-4 py-3 text-right">Transactions</th><th className="px-4 py-3 text-right">Realized P/L</th></tr></thead>
+              <tbody>{groups.map(group=><tr key={group.ticker} className="border-t border-white/[.06]"><td className="px-4 py-3 font-semibold">{group.ticker}</td><td className="px-4 py-3 text-right text-zinc-400">{group.transactions.length}</td><td className={cn("px-4 py-3 text-right font-semibold",group.realizedProfit>0?"text-emerald-400":group.realizedProfit<0?"text-rose-400":"text-zinc-400")}>{money(group.realizedProfit)}</td></tr>)}</tbody>
+            </table></div>
+          </div>
+
+          <div className="mt-5 overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
+            <div className="border-b border-white/[.07] px-4 py-3">
+              <h3 className="text-sm font-semibold">Profit By Transaction</h3>
+            </div>
+            <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm">
+              <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Rank</th><th className="px-4 py-3"><TransactionSortHeader label="Date" column="date" /></th><th className="px-4 py-3">Category</th><th className="px-4 py-3">Ticker</th><th className="px-4 py-3">Position</th><th className="px-4 py-3 text-right"><TransactionSortHeader label="Realized Profit" column="realizedProfit" right /></th></tr></thead>
+              <tbody>{transactions.map((transaction,index)=><tr key={transaction.id} className="border-t border-white/[.06]">
+                <td className="px-4 py-3 font-semibold text-zinc-500">#{index+1}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-zinc-400">{dateText(transaction.date)}</td>
+                <td className="whitespace-nowrap px-4 py-3">{transaction.category}</td>
+                <td className="px-4 py-3 font-semibold">{onEditTransaction?<button type="button" onClick={()=>openEditor(transaction)} className="rounded-md text-left text-emerald-400 transition hover:text-emerald-300 hover:underline">{transaction.groupTicker}</button>:transaction.groupTicker}</td>
+                <td className="max-w-72 px-4 py-3 text-zinc-400">{transaction.preserveLabelCasing?transaction.label:formatPositionLabel(transaction.label)}</td>
+                
+                
+                
+                <td className={cn("px-4 py-3 text-right font-semibold",transaction.realizedProfit>0?"text-emerald-400":transaction.realizedProfit<0?"text-rose-400":"text-zinc-400")}>{money(transaction.realizedProfit)}</td>
+              </tr>)}</tbody>
+            </table></div>
+          </div>
+        </>}
+      </div>
+    </div>
+
+    {editingTransaction&&draft&&<div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" onMouseDown={event=>{if(event.currentTarget===event.target){setEditingTransaction(null);setDraft(null);}}}>
+      <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-zinc-950 p-5 shadow-2xl sm:p-6">
+        <div className="mb-5 flex items-start justify-between"><div><h3 className="text-lg font-semibold">Edit Transaction</h3><p className="mt-1 text-sm text-zinc-500">{editingTransaction.groupTicker} · {dateText(editingTransaction.date)}</p></div><button type="button" onClick={()=>{setEditingTransaction(null);setDraft(null);}} className="grid size-9 place-items-center rounded-xl border border-white/10 text-zinc-500 hover:text-white"><X size={16}/></button></div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <EditField label="Date"><input type="date" value={draft.date} onChange={e=>setDraftField("date",e.target.value)} className="edit-modal-input"/></EditField>
+          <EditField label="Category"><select value={draft.category} onChange={e=>setDraftField("category",e.target.value as ProfitDrilldownTransaction["category"])} className="edit-modal-input">{["Common Stocks","Sell Call","Sell Put","Buy Call","Buy Put"].map(category=><option key={category}>{category}</option>)}</select></EditField>
+          <EditField label="Ticker"><input value={draft.ticker} onChange={e=>setDraftField("ticker",e.target.value)} className="edit-modal-input"/></EditField>
+          <EditField label="Position"><input value={draft.label} onChange={e=>setDraftField("label",e.target.value)} className="edit-modal-input"/></EditField>
+          <EditField label="Realized P/L"><input type="number" step="any" value={draft.realizedProfit} onChange={e=>setDraftField("realizedProfit",Number(e.target.value)||0)} className="edit-modal-input"/></EditField>
+        </div>
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <button type="button" onClick={deleteEditor} className="rounded-xl border border-rose-500/25 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-400 transition hover:bg-rose-500/15">Delete</button>
+          <div className="flex gap-2"><button type="button" onClick={()=>{setEditingTransaction(null);setDraft(null);}} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-400 transition hover:bg-white/[.04]">Cancel</button><button type="button" onClick={saveEditor} className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-400">Save</button></div>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
+function EditField({label,children}:{label:string;children?:ReactNode}) {
+  return <label className="space-y-1.5"><span className="text-xs font-medium text-zinc-500">{label}</span><div className="[&_.edit-modal-input]:h-10 [&_.edit-modal-input]:w-full [&_.edit-modal-input]:rounded-xl [&_.edit-modal-input]:border [&_.edit-modal-input]:border-white/10 [&_.edit-modal-input]:bg-white/[.025] [&_.edit-modal-input]:px-3 [&_.edit-modal-input]:text-sm [&_.edit-modal-input]:outline-none [&_.edit-modal-input:focus]:border-emerald-400/40">{children}</div></label>;
+}
+
+function YtdAccountChart({ account, data, currentYtd }: { account: string; data: { account: string; "2024": number; "2025": number; "2026": number }; currentYtd: number }) {
+  const chartData = [
+    { year: "2024", performance: data["2024"] * 100 },
+    { year: "2025", performance: data["2025"] * 100 },
+    { year: "2026", performance: currentYtd * 100 },
+  ];
+  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">{account} YTD Performance</h2><p className="text-xs text-zinc-500">Annual Portfolio Performance</p></CardHeader><CardContent className="pt-5"><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={chartData} margin={{left:4,right:12,top:28,bottom:0}}><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="year" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>`${v.toFixed(0)}%`}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5"}} formatter={(value: any)=>`${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}%`}/><Bar dataKey="performance" name="YTD Performance" fill="#34d399" radius={[8,8,2,2]} maxBarSize={72}>{chartData.map(row=><Cell key={row.year} fill={row.performance<0?"#f87171":"#34d399"}/>) }<LabelList dataKey="performance" position="top" formatter={(value: any)=>`${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(1)}%`} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
+}
+
+function IncomeTotalsChart({ data }: { data: { account: string; realizedProfit: number; income: number }[] }) {
+  return <Card className="overflow-hidden"><CardHeader className="border-b border-zinc-200/70 dark:border-white/[.06]"><h2 className="font-medium">Realized Income Totals</h2><p className="text-xs text-zinc-500">Total Realized Profit Compared With Dividend, Interest & Bonus For Robinhood And Fidelity Roth IRA.</p></CardHeader><CardContent className="pt-5"><div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={10} barCategoryGap="30%" margin={{left:4,right:12,top:28,bottom:0}}><CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="account" tick={{fill:"#71717a",fontSize:11}} axisLine={false} tickLine={false}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={(v: number)=>chartAxisValue(v)}/><Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5"}} formatter={(value: any)=>money(Number(value))}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/><Bar dataKey="realizedProfit" name="Realized Profit" fill="#34d399" radius={[8,8,2,2]} maxBarSize={50}>{data.map(row=><Cell key={`profit-${row.account}`} fill={row.realizedProfit<0?"#f87171":"#34d399"}/>)}<LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar><Bar dataKey="income" name="Dividend, Interest & Bonus" fill="#60a5fa" radius={[8,8,2,2]} maxBarSize={50}>{data.map(row=><Cell key={`income-${row.account}`} fill={row.income<0?"#f87171":"#60a5fa"}/>)}<LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar></BarChart></ResponsiveContainer></div></CardContent></Card>;
 }
