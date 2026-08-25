@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
-import { CalendarDays, CircleDollarSign, Plus, ReceiptText, Search, TrendingUp, X } from "lucide-react";
+import { CalendarDays, CircleDollarSign, Plus, ReceiptText, Search, TrendingUp, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore, type DataPortfolioId } from "@/store/portfolio-store";
@@ -44,6 +44,7 @@ type TransactionEditOverride = Partial<Transaction> & {
 };
 type TransactionEditOverrides = Record<string, TransactionEditOverride>;
 const TRANSACTION_EDIT_OVERRIDES_KEY = "folio-transaction-edit-overrides-v1";
+const TRANSACTION_DELETED_KEY = "folio-transaction-deleted-v1";
 const editKey=(portfolioId:DataPortfolioId,id:string)=>`${portfolioId}:${id}`;
 
 const money=(value:number)=>Number(value||0).toLocaleString("en-US",{style:"currency",currency:"USD",minimumFractionDigits:2,maximumFractionDigits:2});
@@ -190,12 +191,17 @@ export default function TransactionsPage(){
   const [entryNotes,setEntryNotes]=useState("");
   const [page,setPage]=useState(1);
   const [transactionEdits,setTransactionEdits]=useState<TransactionEditOverrides>({});
+  const [deletedTransactionKeys,setDeletedTransactionKeys]=useState<string[]>([]);
+  const [editingRow,setEditingRow]=useState<TransactionRow|null>(null);
+  const [editDraft,setEditDraft]=useState<TransactionEditOverride>({});
   const PAGE_SIZE=30;
 
   useEffect(()=>{
     try{
       const raw=window.localStorage.getItem(TRANSACTION_EDIT_OVERRIDES_KEY);
       if(raw)setTransactionEdits(JSON.parse(raw));
+      const deletedRaw=window.localStorage.getItem(TRANSACTION_DELETED_KEY);
+      if(deletedRaw)setDeletedTransactionKeys(JSON.parse(deletedRaw));
     }catch{}
   },[]);
 
@@ -206,6 +212,29 @@ export default function TransactionsPage(){
       try{window.localStorage.setItem(TRANSACTION_EDIT_OVERRIDES_KEY,JSON.stringify(next));}catch{}
       return next;
     });
+  };
+
+
+  const openTransactionEditor=(row:TransactionRow)=>{
+    setEditingRow(row);
+    setEditDraft({...row.transaction});
+  };
+  const saveTransactionModal=()=>{
+    if(!editingRow)return;
+    saveTransactionEdit(editingRow.portfolioId,editingRow.transaction.id,editDraft);
+    setEditingRow(null);
+    setEditDraft({});
+  };
+  const deleteTransactionModal=()=>{
+    if(!editingRow)return;
+    const key=editKey(editingRow.portfolioId,editingRow.transaction.id);
+    setDeletedTransactionKeys(current=>{
+      const next=current.includes(key)?current:[...current,key];
+      try{window.localStorage.setItem(TRANSACTION_DELETED_KEY,JSON.stringify(next));}catch{}
+      return next;
+    });
+    setEditingRow(null);
+    setEditDraft({});
   };
 
   const pageTransactionsByPortfolio=useMemo(()=>{
@@ -240,9 +269,10 @@ export default function TransactionsPage(){
     const ids:DataPortfolioId[]=activeId==="all"?["robinhood","fidelity-roth","fidelity-401k"]:[activeId];
     return ids.flatMap(portfolioId=>(pageTransactionsByPortfolio[portfolioId]??[])
       .filter(isActualPortfolioTransaction)
+      .filter(transaction=>!deletedTransactionKeys.includes(editKey(portfolioId,transaction.id)))
       .map(transaction=>({transaction,portfolioId})))
       .sort((a,b)=>b.transaction.date.localeCompare(a.transaction.date)||b.transaction.id.localeCompare(a.transaction.id));
-  },[activeId,pageTransactionsByPortfolio]);
+  },[activeId,pageTransactionsByPortfolio,deletedTransactionKeys]);
 
   const historicalDaysByTransactionId=useMemo(()=>{
     const result=new Map<string,number>();
@@ -338,13 +368,11 @@ export default function TransactionsPage(){
   useEffect(()=>{ if(page>pageCount)setPage(pageCount); },[page,pageCount]);
   const pagedRows=useMemo(()=>filteredRows.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE),[filteredRows,page]);
 
-  const totals=useMemo(()=>{
-    let income=0;
-    filteredRows.forEach(({transaction:tx})=>{
-      if(tx.type==="dividend"||tx.type==="interest")income+=Math.abs(tx.amount||0);
-    });
-    return {income};
-  },[filteredRows]);
+  const thisMonthTransactionCount=useMemo(()=>{
+    const now=new Date();
+    const monthPrefix=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-`;
+    return allRows.filter(({transaction:tx})=>tx.date.startsWith(monthPrefix)).length;
+  },[allRows]);
 
   const thisMonthPl=useMemo(()=>{
     const now=new Date();
@@ -378,14 +406,14 @@ export default function TransactionsPage(){
 
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-2">
       <Summary icon={TrendingUp} label="This Month P/L" value={signedMoney(thisMonthPl)} good={thisMonthPl>=0}/>
-      <Summary icon={CircleDollarSign} label="Dividends & Interest" value={money(totals.income)} good/>
+      <Summary icon={ReceiptText} label="Total Transactions This Month" value={thisMonthTransactionCount.toLocaleString()}/>
     </div>
 
     <Card className="overflow-hidden">
       <div className="space-y-4 border-b border-white/10 p-4 sm:p-5">
         <div className="flex flex-wrap gap-2">{categories.map(([id,label])=><button key={id} onClick={()=>setCategory(id)} className={cn("rounded-xl border px-3 py-2 text-xs font-medium transition",category===id?"border-emerald-400/25 bg-emerald-400/10 text-emerald-300":"border-white/10 text-zinc-500 hover:bg-white/[.04] hover:text-zinc-300")}>{label}</button>)}</div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_190px_165px_165px]">
-          <label className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search ticker, comment, source..." className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 pl-10 pr-3 text-sm outline-none focus:border-emerald-400/30"/></label>
+          <label className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search Ticker, Comment" className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 pl-10 pr-3 text-sm outline-none focus:border-emerald-400/30"/></label>
           <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value as "all"|TransactionType)} className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"><option value="all">All transaction types</option>{(["buy","sell","dividend","transfer"] as TransactionType[]).map(value=><option key={value} value={value}>{TYPE_LABELS[value]}</option>)}</select>
           <label className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600"/><input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 pl-9 pr-2 text-xs outline-none"/></label>
           <label className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600"/><input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 pl-9 pr-2 text-xs outline-none"/></label>
@@ -405,7 +433,7 @@ export default function TransactionsPage(){
               <EditableCell kind="date" value={tx.date} display={dateLabel(tx.date)} className="whitespace-nowrap text-zinc-400" onSave={value=>saveTransactionEdit(portfolioId,tx.id,{date:String(value)})}/>
               {activeId==="all"&&<td className="whitespace-nowrap px-4 py-3 text-xs text-zinc-400">{PORTFOLIO_NAMES[portfolioId]}</td>}
               <EditableCell kind="select" value={tx.type} display={<span className={cn("inline-flex whitespace-nowrap rounded-lg border px-2 py-1 text-xs font-medium",typeBadgeClass(tx))}>{displayType(tx)}</span>} options={(["buy","sell","dividend","interest","transfer","deposit","withdrawal","cash-adjustment","split","option-expired","option-assigned","option-exercised"] as TransactionType[]).map(value=>({value,label:TYPE_LABELS[value]}))} onSave={value=>saveTransactionEdit(portfolioId,tx.id,{type:value as TransactionType})}/>
-              <EditableCell kind="text" value={tx.symbol??""} display={optionLabel(tx)} className="max-w-64 font-medium" onSave={value=>saveTransactionEdit(portfolioId,tx.id,{symbol:String(value).trim().toUpperCase()||undefined})}/>
+              <td className="max-w-64 px-4 py-3 font-medium"><button type="button" onClick={()=>openTransactionEditor({transaction:tx,portfolioId})} className="w-full rounded-md text-left transition hover:bg-white/[.04] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400/40" title="Click To Edit Transaction">{optionLabel(tx)}</button></td>
               <EditableCell kind="number" value={tx.quantity??""} display={typeof tx.quantity==="number"?Math.abs(tx.quantity).toLocaleString():"—"} onSave={value=>saveTransactionEdit(portfolioId,tx.id,{quantity:value===""?undefined:Number(value)})}/>
               <EditableCell kind="number" value={tx.price??""} display={typeof tx.price==="number"?money(tx.price):"—"} onSave={value=>saveTransactionEdit(portfolioId,tx.id,{price:value===""?undefined:Number(value)})}/>
               <EditableCell kind="number" value={cashImpact} display={cashImpact?signedMoney(cashImpact):"—"} className={cn("font-medium",cashImpact>0?"text-emerald-400":cashImpact<0?"text-red-400":"text-zinc-500")} onSave={value=>saveTransactionEdit(portfolioId,tx.id,{cashImpact:Number(value)||0})}/>
@@ -426,6 +454,23 @@ export default function TransactionsPage(){
         </div>}
       </div>
     </Card>
+
+    {editingRow&&<div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+      <Card className="w-full max-w-2xl overflow-hidden">
+        <div className="flex items-center justify-between border-b border-white/10 p-4"><div><h2 className="font-semibold">Edit Transaction</h2><p className="mt-1 text-xs text-zinc-500">{PORTFOLIO_NAMES[editingRow.portfolioId]}</p></div><button onClick={()=>setEditingRow(null)} className="grid size-9 place-items-center rounded-xl border border-white/10 text-zinc-500 hover:text-white"><X size={16}/></button></div>
+        <div className="grid gap-4 p-4 sm:grid-cols-2">
+          <label><span className="mb-1.5 block text-xs text-zinc-500">Date</span><input type="date" value={String(editDraft.date??editingRow.transaction.date)} onChange={e=>setEditDraft(d=>({...d,date:e.target.value}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"/></label>
+          <label><span className="mb-1.5 block text-xs text-zinc-500">Type</span><select value={String(editDraft.type??editingRow.transaction.type)} onChange={e=>setEditDraft(d=>({...d,type:e.target.value as TransactionType}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none">{(["buy","sell","dividend","transfer"] as TransactionType[]).map(value=><option key={value} value={value}>{TYPE_LABELS[value]}</option>)}</select></label>
+          <label className="sm:col-span-2"><span className="mb-1.5 block text-xs text-zinc-500">Position</span><input value={String(editDraft.symbol??editingRow.transaction.symbol??"")} onChange={e=>setEditDraft(d=>({...d,symbol:e.target.value}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"/></label>
+          <label><span className="mb-1.5 block text-xs text-zinc-500">Quantity</span><input type="number" step="any" value={editDraft.quantity??editingRow.transaction.quantity??""} onChange={e=>setEditDraft(d=>({...d,quantity:e.target.value===""?undefined:Number(e.target.value)}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"/></label>
+          <label><span className="mb-1.5 block text-xs text-zinc-500">Price</span><input type="number" step="any" value={editDraft.price??editingRow.transaction.price??""} onChange={e=>setEditDraft(d=>({...d,price:e.target.value===""?undefined:Number(e.target.value)}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"/></label>
+          <label><span className="mb-1.5 block text-xs text-zinc-500">Realized P/L</span><input type="number" step="any" value={editDraft.realizedGain??editingRow.transaction.realizedGain??""} onChange={e=>setEditDraft(d=>({...d,realizedGain:e.target.value===""?undefined:Number(e.target.value)}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"/></label>
+          <label><span className="mb-1.5 block text-xs text-zinc-500">Cash Impact</span><input type="number" step="any" value={editDraft.cashImpact??editingRow.transaction.cashImpact??transactionCashImpact(editingRow.transaction)} onChange={e=>setEditDraft(d=>({...d,cashImpact:Number(e.target.value)||0}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"/></label>
+          <label className="sm:col-span-2"><span className="mb-1.5 block text-xs text-zinc-500">Comment</span><textarea rows={3} value={String(editDraft.notes??editingRow.transaction.notes??"")} onChange={e=>setEditDraft(d=>({...d,notes:e.target.value}))} className="w-full resize-none rounded-xl border border-white/10 bg-zinc-950 p-3 text-sm outline-none"/></label>
+        </div>
+        <div className="flex items-center justify-between border-t border-white/10 p-4"><button type="button" onClick={deleteTransactionModal} className="inline-flex h-10 items-center gap-2 rounded-xl border border-red-400/25 bg-red-400/[.08] px-4 text-sm font-medium text-red-300 hover:bg-red-400/[.12]"><Trash2 size={15}/>Delete Transaction</button><div className="flex gap-2"><button type="button" onClick={()=>setEditingRow(null)} className="h-10 rounded-xl border border-white/10 px-4 text-sm text-zinc-400">Cancel</button><button type="button" onClick={saveTransactionModal} className="h-10 rounded-xl bg-emerald-400 px-4 text-sm font-semibold text-zinc-950">Save Transaction</button></div></div>
+      </Card>
+    </div>}
 
     {showAdd&&<div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
       <Card className="w-full max-w-lg overflow-hidden">
