@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Banknote, BriefcaseBusiness, CalendarDays, Download, Layers3, RefreshCw, Search, Star, TrendingUp, WalletCards } from "lucide-react";
+import { Banknote, BriefcaseBusiness, CalendarDays, Download, Layers3, LockKeyhole, RefreshCw, Search, Star, TrendingUp, WalletCards } from "lucide-react";
 import { HoldingsTable } from "@/components/portfolio/holdings-table";
 import { AddHoldingDialog } from "@/components/portfolio/add-holding-dialog";
 import { EditCashDialog } from "@/components/portfolio/edit-cash-dialog";
