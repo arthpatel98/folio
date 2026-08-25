@@ -6,6 +6,8 @@ import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, ResponsiveContai
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { quarterlyIncome } from "@/lib/savings-investments-data";
 import { cn, money } from "@/lib/utils";
+import { usePortfolioStore } from "@/store/portfolio-store";
+import type { Transaction } from "@/types/portfolio";
 
 type ProfitDrilldownTransaction = {
   id: string; date: string; ticker: string; label: string; quantity: number | null; price: number | null;
@@ -1227,6 +1229,7 @@ const chartAxisValue=(value:number)=>new Intl.NumberFormat("en-US",{maximumFract
 const periodTime=(period:string)=>{const m=period.match(/^([A-Z][a-z]{2}) (20\d{2})$/);return m?new Date(Number(m[2]),months.indexOf(m[1]),1).getTime():0;};
 
 export function RobinhoodQuarterlyData() {
+  const robinhoodTransactions=usePortfolioStore((state)=>state.transactionsByPortfolio.robinhood);
   const [selectedYear,setSelectedYear]=useState("2026");
   const [view,setView]=useState<"month"|"year">("month");
   const [selectedPeriod,setSelectedPeriod]=useState<string|null>(null);
@@ -1241,8 +1244,33 @@ export function RobinhoodQuarterlyData() {
       const d=new Date(`${edited.date}T12:00:00`); if(Number.isNaN(d.getTime()))return;
       const period=new Intl.DateTimeFormat("en-US",{month:"short",year:"numeric"}).format(d);
       (out[period]??=[]).push(edited);
-    }); return out;
-  },[edits]);
+    });
+
+    // Pull newer realized transactions (for example Aug 2026) from the live Robinhood
+    // transaction store. Verified PDF-backed months remain authoritative and are not
+    // double-counted by the live transaction feed.
+    robinhoodTransactions.forEach((tx:Transaction)=>{
+      if(tx.realizedGain===undefined || !tx.symbol || !tx.date)return;
+      const d=new Date(`${tx.date}T12:00:00`); if(Number.isNaN(d.getTime()))return;
+      const period=new Intl.DateTimeFormat("en-US",{month:"short",year:"numeric"}).format(d);
+      if(ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS[period])return;
+      const option=tx.assetType==="option";
+      const optionKind=(tx.optionType??"").toLowerCase();
+      const category:ProfitDrilldownTransaction["category"]=option
+        ? (optionKind.includes("put")?(optionKind.includes("sell")?"Sell Put":"Buy Put"):(optionKind.includes("sell")?"Sell Call":"Buy Call"))
+        : "Common Stocks";
+      const optionLabel=option
+        ? [tx.symbol.toUpperCase(),tx.optionExpiry?new Date(`${tx.optionExpiry}T12:00:00`).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}).replace(/ /g," "):"",tx.optionStrike!==undefined?`$${tx.optionStrike}`:"",optionKind.includes("put")?"Put":"Call"].filter(Boolean).join(" ")
+        : tx.symbol.toUpperCase();
+      const liveTx:ProfitDrilldownTransaction={
+        id:`live-${tx.id}`,date:tx.date,ticker:tx.symbol.toUpperCase(),label:tx.optionSymbol||optionLabel,
+        quantity:tx.quantity??null,price:tx.price??null,proceeds:tx.realizedProceeds??null,realizedProfit:tx.realizedGain,category,preserveLabelCasing:true,
+      };
+      const patch=edits[liveTx.id]??{}; if(patch.deleted)return;
+      (out[period]??=[]).push({...liveTx,...patch});
+    });
+    return out;
+  },[edits,robinhoodTransactions]);
   const verifiedTotals=useMemo<Record<string,number>>(()=>{
     const totals:Record<string,number>={};
     Object.entries(transactionsByPeriod).forEach(([period,txs])=>{
@@ -1259,13 +1287,29 @@ export function RobinhoodQuarterlyData() {
     Object.entries(incomeTotals).forEach(([period,income])=>{const existing=rows.find(r=>r.period===period);if(existing)existing.income=income;else rows.push({period,realizedProfit:0,income});});
     return rows.filter(r=>r.period.match(/(20\d{2})/)?.[1]===selectedYear && !/^Q/.test(r.period)).sort((a,b)=>periodTime(a.period)-periodTime(b.period));
   },[selectedYear,verifiedTotals,incomeTotals]);
-  const annualData=useMemo(()=>{const m=new Map<string,{period:string;realizedProfit:number;income:number}>();
-    const source: Array<{period:string;realizedProfit:number;income:number}> = quarterlyIncome
-      .filter(row=>!/^Q[1-4] 2025$/.test(row.period))
-      .map(row=>({period:String(row.period),realizedProfit:verifiedTotals[row.period]??row.robinhoodProfit,income:incomeTotals[String(row.period)]??row.robinhoodIncome}));
-    Object.entries(verifiedTotals).forEach(([period,realizedProfit])=>{const e=source.find(r=>r.period===period);if(e)e.realizedProfit=realizedProfit;else source.push({period,realizedProfit,income:incomeTotals[period]??0});});
-    Object.entries(incomeTotals).forEach(([period,income])=>{const e=source.find(r=>r.period===period);if(e)e.income=income;else source.push({period,realizedProfit:0,income});});
-    source.forEach(r=>{const y=r.period.match(/(20\d{2})/)?.[1];if(!y)return;const cur=m.get(y)??{period:y,realizedProfit:0,income:0};cur.realizedProfit+=r.realizedProfit;cur.income+=r.income;m.set(y,cur);});return Array.from(m.values()).sort((a,b)=>a.period.localeCompare(b.period));},[verifiedTotals,incomeTotals]);
+  const annualData=useMemo(()=>{
+    const years=new Set<string>();
+    quarterlyIncome.forEach(row=>{const y=String(row.period).match(/(20\d{2})/)?.[1];if(y)years.add(y);});
+    Object.keys(verifiedTotals).forEach(period=>{const y=period.match(/(20\d{2})/)?.[1];if(y)years.add(y);});
+    Object.keys(incomeTotals).forEach(period=>{const y=period.match(/(20\d{2})/)?.[1];if(y)years.add(y);});
+    return Array.from(years).sort().map(year=>{
+      const monthRows:Array<{period:string;realizedProfit:number;income:number}>=[];
+      for(const month of months){
+        const period=`${month} ${year}`;
+        const base=quarterlyIncome.find(row=>String(row.period)===period);
+        const hasMonthlyProfit=verifiedTotals[period]!==undefined || base!==undefined;
+        const hasIncome=incomeTotals[period]!==undefined || base!==undefined;
+        if(hasMonthlyProfit||hasIncome)monthRows.push({period,realizedProfit:verifiedTotals[period]??base?.robinhoodProfit??0,income:incomeTotals[period]??base?.robinhoodIncome??0});
+      }
+      // Legacy 2024 data exists only as quarters. Preserve it until monthly 2024
+      // realized-P/L detail is supplied; all years with monthly data sum months only.
+      const realizedProfit=monthRows.some(r=>r.realizedProfit!==0)
+        ? monthRows.reduce((sum,row)=>sum+row.realizedProfit,0)
+        : quarterlyIncome.filter(row=>String(row.period).match(new RegExp(`^Q[1-4] ${year}$`))).reduce((sum,row)=>sum+row.robinhoodProfit,0);
+      const income=monthRows.reduce((sum,row)=>sum+row.income,0);
+      return {period:year,realizedProfit,income};
+    });
+  },[verifiedTotals,incomeTotals]);
   const data=view==="year"?annualData:monthlyData;
   const selectedTransactions=selectedPeriod?transactionsByPeriod[selectedPeriod]??[]:[];
   const selectedIncomeTransactions=selectedPeriod?ROBINHOOD_INCOME_TRANSACTIONS.filter(item=>incomePeriod(item.date)===selectedPeriod):[];
@@ -1275,6 +1319,11 @@ export function RobinhoodQuarterlyData() {
   const dividendTotal=selectedIncomeTransactions.filter(item=>incomeCategory(item)==="Dividends").reduce((s,t)=>s+t.amount,0);
   const goldTotal=selectedIncomeTransactions.filter(item=>incomeCategory(item)==="Robinhood Gold").reduce((s,t)=>s+t.amount,0);
   const interestTotal=selectedIncomeTransactions.filter(item=>incomeCategory(item)==="Interest").reduce((s,t)=>s+t.amount,0);
+  const positionTypeTotals=useMemo(()=>{
+    const map=new Map<ProfitDrilldownTransaction["category"],{category:ProfitDrilldownTransaction["category"];total:number;count:number}>();
+    selectedTransactions.forEach(tx=>{const current=map.get(tx.category)??{category:tx.category,total:0,count:0};current.total+=tx.realizedProfit;current.count+=1;map.set(tx.category,current);});
+    return Array.from(map.values()).sort((a,b)=>b.total-a.total);
+  },[selectedTransactions]);
   const available=Object.keys(transactionsByPeriod).sort((a,b)=>periodTime(a)-periodTime(b));
   const idx=selectedPeriod?available.indexOf(selectedPeriod):-1;
   const prev=idx>0?available[idx-1]:null, next=idx>=0&&idx<available.length-1?available[idx+1]:null;
@@ -1298,7 +1347,7 @@ export function RobinhoodQuarterlyData() {
     </Card>
     {selectedPeriod&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onMouseDown={e=>{if(e.currentTarget===e.target)setSelectedPeriod(null)}}><div className="max-h-[88vh] w-full max-w-5xl overflow-auto rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-zinc-950 px-5 py-4"><div className="flex items-center gap-2">{prev&&<button onClick={()=>setSelectedPeriod(prev)} className="grid size-9 place-items-center rounded-lg border border-white/10"><ChevronLeft size={17}/></button>}<h3 className="text-lg font-semibold">{selectedPeriod} Details</h3>{next&&<button onClick={()=>setSelectedPeriod(next)} className="grid size-9 place-items-center rounded-lg border border-white/10"><ChevronRight size={17}/></button>}</div><div className="absolute left-1/2 flex -translate-x-1/2 overflow-hidden rounded-xl border border-white/10"><button type="button" onClick={()=>setDetailView("profit")} className={cn("px-4 py-2 text-xs font-semibold transition",detailView==="profit"?"bg-emerald-500 text-zinc-950":"text-zinc-400 hover:text-white")}>Realized P/L</button><button type="button" onClick={()=>setDetailView("income")} className={cn("px-4 py-2 text-xs font-semibold transition",detailView==="income"?"bg-blue-500 text-white":"text-zinc-400 hover:text-white")}>Dividends & Interest</button></div><button onClick={()=>setSelectedPeriod(null)} className="grid size-9 place-items-center rounded-lg border border-white/10"><X size={17}/></button></div>
-      <div className="p-5">{detailView==="profit"?<><div className="mb-5 rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Profit</div><div className={cn("mt-1 text-2xl font-semibold",total>=0?"positive":"negative")}>{money(total)}</div></div>
+      <div className="p-5">{detailView==="profit"?<><div className="mb-5"><h4 className="mb-3 text-sm font-semibold">Profit By Position Type</h4><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><div className="rounded-xl border border-white/10 p-4"><div className="text-xs uppercase tracking-[0.18em] text-zinc-500">Total Profit</div><div className={cn("mt-2 text-2xl font-semibold",total>=0?"positive":"negative")}>{money(total)}</div><div className="mt-2 text-xs text-zinc-600">{selectedTransactions.length} {selectedTransactions.length===1?"Transaction":"Transactions"}</div></div>{positionTypeTotals.map(item=><div key={item.category} className="rounded-xl border border-white/10 p-4"><div className="text-sm font-semibold text-zinc-400">{item.category}</div><div className={cn("mt-2 text-2xl font-semibold",item.total>=0?"positive":"negative")}>{money(item.total)}</div><div className="mt-2 text-xs text-zinc-600">{item.count} {item.count===1?"Transaction":"Transactions"}</div></div>)}</div></div>
       <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="border-y border-white/10 text-xs text-zinc-500"><tr><th className="px-3 py-3 text-left">Date</th><th className="px-3 py-3 text-left">Ticker</th><th className="px-3 py-3 text-left">Position</th><th className="px-3 py-3 text-left">Type</th><th className="px-3 py-3 text-right">Realized Profit</th><th className="px-3 py-3"></th></tr></thead><tbody>{selectedTransactions.slice().sort((a,b)=>b.realizedProfit-a.realizedProfit).map(tx=><EditableRow key={tx.id} tx={tx} onSave={patch=>saveEdit(tx.id,patch)}/>)}</tbody></table></div></>:<><div className="mb-5 grid gap-3 sm:grid-cols-4"><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Dividends & Interest</div><div className={cn("mt-1 text-xl font-semibold",incomeTotal>=0?"positive":"negative")}>{money(incomeTotal)}</div></div><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Dividends</div><div className={cn("mt-1 text-xl font-semibold",dividendTotal>=0?"positive":"negative")}>{money(dividendTotal)}</div></div><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Robinhood Gold</div><div className={cn("mt-1 text-xl font-semibold",goldTotal>=0?"positive":"negative")}>{money(goldTotal)}</div></div><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Interest</div><div className={cn("mt-1 text-xl font-semibold",interestTotal>=0?"positive":"negative")}>{money(interestTotal)}</div></div></div><div className="overflow-x-auto"><table className="w-full min-w-[680px] text-sm"><thead className="border-y border-white/10 text-xs text-zinc-500"><tr><th className="px-3 py-3 text-left">Date</th><th className="px-3 py-3 text-left">Source</th><th className="px-3 py-3 text-left">Category</th><th className="px-3 py-3 text-right">Amount</th></tr></thead><tbody>{selectedIncomeTransactions.slice().sort((a,b)=>b.date.localeCompare(a.date)).map((item,index)=><tr key={`${item.date}-${item.ticker}-${index}`} className="border-b border-white/[.06]"><td className="px-3 py-3">{new Date(`${item.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</td><td className="px-3 py-3 font-medium">{item.ticker}</td><td className="px-3 py-3">{incomeCategory(item)}</td><td className={cn("px-3 py-3 text-right font-semibold",item.amount>=0?"positive":"negative")}>{money(item.amount)}</td></tr>)}</tbody></table></div></>}</div>
     </div></div>}
   </>;
