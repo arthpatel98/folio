@@ -236,7 +236,6 @@ export default function TargetPlannerPage(){
       <Metric icon={TrendingUp} label="Projected Profit" value={`${totalProjectedProfit>=0?"+":""}${money2(totalProjectedProfit)}`} good={totalProjectedProfit>=0}/>
       <Metric icon={Flag} label="Projected Portfolio" value={money2(projectedValue)} performance={projectedPerformance} accent={projectedValue>=selectedTarget.target}/>
       <Metric icon={CalendarDays} label="Remaining Gap" value={money(remainingGap)} subtle={`${baseGap?Math.min(100,Math.max(0,totalProjectedProfit/baseGap*100)).toFixed(1):100}% Covered`}/>
-      <Metric icon={CircleDollarSign} label="New Capital Required" value={money2(totalInvestment)}/>
     </div>
 
     <Card className="overflow-hidden">
@@ -306,14 +305,6 @@ export default function TargetPlannerPage(){
             <button type="button" onClick={()=>addChildInvestment(step.id)} className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-violet-400/20 bg-violet-400/[.06] text-xs font-medium text-violet-300 transition hover:bg-violet-400/[.1]"><Plus size={14}/>Reinvest Proceeds</button>
           </div>)}
         </div>}
-
-        <div className="grid gap-4">
-          <div className="rounded-2xl border border-violet-400/20 bg-violet-400/[.05] p-4">
-            <div className="text-xs font-semibold tracking-wider text-violet-300">TARGET CHECK</div>
-            <div className="mt-3 grid grid-cols-2 gap-4"><div><div className="text-xs text-zinc-500">Profit From Cash Plan</div><div className="mt-1 text-lg font-semibold text-emerald-300">{pathwayProfit>=0?"+":""}{money2(pathwayProfit)}</div></div><div><div className="text-xs text-zinc-500">Remaining Gap</div><div className="mt-1 text-lg font-semibold">{money2(pathwayGap)}</div></div></div>
-            <div className="mt-4 text-xs text-zinc-500">{pathwayGap===0?"Target reached in this scenario.":`The plan still needs ${money2(pathwayGap)} of additional profit.`}</div>
-          </div>
-        </div>
 
       </div>
     </Card>

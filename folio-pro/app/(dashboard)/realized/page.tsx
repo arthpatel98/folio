@@ -3,7 +3,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Download, Pencil, Search, Trash2, Upload, X } from "lucide-react";
 import { MetricCard } from "@/components/dashboard/metric-card";
-import { RobinhoodQuarterlyData } from "@/components/portfolio/robinhood-quarterly-data";
+import { RobinhoodQuarterlyData, type RobinhoodAllTimeSummary } from "@/components/portfolio/robinhood-quarterly-data";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -281,6 +281,7 @@ function csvCell(value: string | number) {
 }
 
 export default function Page() {
+  const [robinhoodAllTimeSummary, setRobinhoodAllTimeSummary] = useState<RobinhoodAllTimeSummary>({ realizedProfit: 0, dividendAmount: 0, extras: 0 });
   const activePortfolioId = usePortfolioStore((state) => state.activePortfolioId);
   const transactionsByPortfolio = usePortfolioStore((state) => state.transactionsByPortfolio);
   const defaultPositionsByPortfolio = useMemo<PositionsByPortfolio>(() => ({
@@ -796,16 +797,17 @@ export default function Page() {
 
       {message && <p className="mt-4 text-sm text-emerald-500">{message}</p>}
 
-      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <MetricCard label="Total Realized P/L" value={money(totals.realized)} />
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Total Realized P/L" value={money(robinhoodAllTimeSummary.realizedProfit)} />
         <MetricCard label="Total Stocks P/L" value={money(totals.stocksPl)} />
         <MetricCard label="Total Options P/L" value={money(totals.optionsPl)} />
-        <MetricCard label="Total Dividend Amount" value={money(totals.dividendAmount)} />
+        <MetricCard label="Total Dividend Amount" value={money(robinhoodAllTimeSummary.dividendAmount)} />
         <MetricCard label="Profitable Tickers" value={`${winners.length} of ${groups.length}`} />
         <MetricCard label="Loss Recovery Tickers" value={lossRecoveryTickers.toLocaleString()} />
+        <MetricCard label="Robinhood Extras" value={money(robinhoodAllTimeSummary.extras)} />
       </div>
 
-      <div className="mt-6"><RobinhoodQuarterlyData /></div>
+      <div className="mt-6"><RobinhoodQuarterlyData onAllTimeSummary={setRobinhoodAllTimeSummary} /></div>
 
       <Card className="mt-6 overflow-hidden p-5">
         <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">

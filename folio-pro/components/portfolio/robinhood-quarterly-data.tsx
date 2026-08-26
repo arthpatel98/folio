@@ -1228,7 +1228,9 @@ const wholeDollar=(value:number)=>new Intl.NumberFormat("en-US",{style:"currency
 const chartAxisValue=(value:number)=>new Intl.NumberFormat("en-US",{maximumFractionDigits:0}).format(Math.round(value));
 const periodTime=(period:string)=>{const m=period.match(/^([A-Z][a-z]{2}) (20\d{2})$/);return m?new Date(Number(m[2]),months.indexOf(m[1]),1).getTime():0;};
 
-export function RobinhoodQuarterlyData() {
+export type RobinhoodAllTimeSummary = { realizedProfit: number; dividendAmount: number; extras: number };
+
+export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?: (summary: RobinhoodAllTimeSummary) => void }) {
   const robinhoodTransactions=usePortfolioStore((state)=>state.transactionsByPortfolio.robinhood);
   const [selectedYear,setSelectedYear]=useState("2026");
   const [view,setView]=useState<"month"|"year">("month");
@@ -1311,6 +1313,12 @@ export function RobinhoodQuarterlyData() {
     });
   },[verifiedTotals,incomeTotals]);
   const data=view==="year"?annualData:monthlyData;
+  const allTimeSummary=useMemo<RobinhoodAllTimeSummary>(()=>({
+    realizedProfit:annualData.reduce((sum,row)=>sum+row.realizedProfit,0),
+    dividendAmount:ROBINHOOD_INCOME_TRANSACTIONS.filter(item=>item.ticker.includes("Dividend")).reduce((sum,item)=>sum+item.amount,0),
+    extras:ROBINHOOD_INCOME_TRANSACTIONS.filter(item=>!item.ticker.includes("Dividend")).reduce((sum,item)=>sum+item.amount,0),
+  }),[annualData]);
+  useEffect(()=>{onAllTimeSummary?.(allTimeSummary)},[allTimeSummary,onAllTimeSummary]);
   const selectedTransactions=selectedPeriod?transactionsByPeriod[selectedPeriod]??[]:[];
   const [transactionSort,setTransactionSort]=useState<"date"|"realizedProfit">("realizedProfit");
   const [transactionSortDirection,setTransactionSortDirection]=useState<"asc"|"desc">("desc");
@@ -1355,8 +1363,8 @@ export function RobinhoodQuarterlyData() {
         <defs><linearGradient id="rhq-profit" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399"/><stop offset="100%" stopColor="#10b981" stopOpacity={0.65}/></linearGradient><linearGradient id="rhq-income" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa"/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.65}/></linearGradient><linearGradient id="rhq-negative" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#fb7185"/><stop offset="100%" stopColor="#e11d48" stopOpacity={0.72}/></linearGradient></defs>
         <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="period" tick={{fill:"#a1a1aa",fontSize:10,fontWeight:600}} axisLine={false} tickLine={false} interval={0}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={chartAxisValue}/>
         <Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} formatter={(value:any)=>money(Number(value))} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5",boxShadow:"0 12px 30px rgba(0,0,0,.25)"}} labelStyle={{color:"#f4f4f5",fontWeight:700}} itemStyle={{color:"#f4f4f5"}}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/>
-        <Bar dataKey="realizedProfit" name="Profit" radius={[7,7,2,2]} maxBarSize={34} onClick={(entry:any)=>open(entry?.period)} style={{cursor:"pointer"}}>{data.map(row=><Cell key={`p-${row.period}`} fill={row.realizedProfit<0?"url(#rhq-negative)":"url(#rhq-profit)"}/>)}<LabelList dataKey="realizedProfit" position="top" formatter={(v:any)=>wholeDollar(Number(v))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar>
-        <Bar dataKey="income" name="Dividends & Interest" radius={[7,7,2,2]} maxBarSize={34} onClick={(entry:any)=>open(entry?.period)} style={{cursor:"pointer"}}>{data.map(row=><Cell key={`i-${row.period}`} fill={row.income<0?"url(#rhq-negative)":"url(#rhq-income)"}/>)}<LabelList dataKey="income" position="top" formatter={(v:any)=>wholeDollar(Number(v))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar>
+        <Bar dataKey="realizedProfit" name="Profit" fill="#10b981" radius={[7,7,2,2]} maxBarSize={34} onClick={(entry:any)=>open(entry?.period)} style={{cursor:"pointer"}}>{data.map(row=><Cell key={`p-${row.period}`} fill={row.realizedProfit<0?"url(#rhq-negative)":"url(#rhq-profit)"}/>)}<LabelList dataKey="realizedProfit" position="top" formatter={(v:any)=>wholeDollar(Number(v))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar>
+        <Bar dataKey="income" name="Dividends & Interest" fill="#3b82f6" radius={[7,7,2,2]} maxBarSize={34} onClick={(entry:any)=>open(entry?.period)} style={{cursor:"pointer"}}>{data.map(row=><Cell key={`i-${row.period}`} fill={row.income<0?"url(#rhq-negative)":"url(#rhq-income)"}/>)}<LabelList dataKey="income" position="top" formatter={(v:any)=>wholeDollar(Number(v))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar>
       </BarChart></ResponsiveContainer></div></CardContent>
     </Card>
     {selectedPeriod&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onMouseDown={e=>{if(e.currentTarget===e.target)setSelectedPeriod(null)}}><div className="max-h-[88vh] w-full max-w-5xl overflow-auto rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
