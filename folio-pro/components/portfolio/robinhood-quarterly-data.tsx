@@ -19,8 +19,41 @@ type VerifiedProfitEdits = Record<string, VerifiedProfitEdit>;
 const VERIFIED_PROFIT_EDITS_KEY = "folio-robinhood-verified-profit-edits-v1";
 
 type IncomeTransaction = { date: string; ticker: string; amount: number };
+type IncomeEdit = Partial<IncomeTransaction> & { deleted?: boolean };
+type IncomeEdits = Record<string, IncomeEdit>;
+const INCOME_EDITS_KEY = "folio-robinhood-income-edits-v1";
+const incomeId=(item:IncomeTransaction,index:number)=>`${item.date}|${item.ticker}|${item.amount}|${index}`;
 const ROBINHOOD_INCOME_TRANSACTIONS: IncomeTransaction[] = [
   // Dividends
+  { date: "2024-02-29", ticker: "ADM Dividend", amount: 0.54 },
+  { date: "2024-03-27", ticker: "NVDA Dividend", amount: 0.01 },
+  { date: "2024-03-28", ticker: "VRT Dividend", amount: 0.01 },
+  { date: "2024-04-02", ticker: "VST Dividend", amount: 0.22 },
+  { date: "2024-04-05", ticker: "CNMD Dividend", amount: 0.18 },
+  { date: "2024-04-15", ticker: "RHP Dividend", amount: 0.48 },
+  { date: "2024-05-30", ticker: "JEF Dividend", amount: 0.49 },
+  { date: "2024-06-13", ticker: "MSFT Dividend", amount: 0.20 },
+  { date: "2024-06-13", ticker: "AMAT Dividend", amount: 0.63 },
+  { date: "2024-06-17", ticker: "IVV Dividend", amount: 3.53 },
+  { date: "2024-06-26", ticker: "VRT Dividend", amount: 0.43 },
+  { date: "2024-06-26", ticker: "META Dividend", amount: 0.90 },
+  { date: "2024-06-28", ticker: "VST Dividend", amount: 3.16 },
+  { date: "2024-07-01", ticker: "VUG Dividend", amount: 1.10 },
+  { date: "2024-07-05", ticker: "CNMD Dividend", amount: 0.18 },
+  { date: "2024-07-15", ticker: "RHP Dividend", amount: 0.48 },
+  { date: "2024-07-31", ticker: "JPM Dividend", amount: 2.21 },
+  { date: "2024-07-31", ticker: "QQQ Dividend", amount: 5.90 },
+  { date: "2024-08-02", ticker: "DELL Dividend", amount: 2.64 },
+  { date: "2024-09-12", ticker: "AMAT Dividend", amount: 0.63 },
+  { date: "2024-09-26", ticker: "VRT Dividend", amount: 0.43 },
+  { date: "2024-09-30", ticker: "VUG Dividend", amount: 1.09 },
+  { date: "2024-09-30", ticker: "VST Dividend", amount: 3.19 },
+  { date: "2024-10-03", ticker: "NVDA Dividend", amount: 0.19 },
+  { date: "2024-10-31", ticker: "QQQ Dividend", amount: 5.24 },
+  { date: "2024-11-01", ticker: "DELL Dividend", amount: 4.90 },
+  { date: "2024-12-12", ticker: "AMAT Dividend", amount: 0.63 },
+  { date: "2024-12-19", ticker: "VRT Dividend", amount: 0.75 },
+  { date: "2024-12-31", ticker: "VST Dividend", amount: 4.32 },
   { date: "2024-10-01", ticker: "SOXL Dividend", amount: 20.98 },
   { date: "2024-12-16", ticker: "SCHD Dividend", amount: 34.00 },
   { date: "2024-12-31", ticker: "SOXL Dividend", amount: 27.07 },
@@ -35,7 +68,7 @@ const ROBINHOOD_INCOME_TRANSACTIONS: IncomeTransaction[] = [
   { date: "2025-12-31", ticker: "SOXS Dividend", amount: 21.20 },
   { date: "2026-01-02", ticker: "UNHG Dividend", amount: 796.74 },
   { date: "2026-03-31", ticker: "SOXS Dividend", amount: 9.92 },
-  { date: "2026-06-15", ticker: "META Dividend", amount: 5.25 },
+  { date: "2026-06-17", ticker: "META Early Dividend", amount: 5.25 },
   { date: "2026-06-30", ticker: "SOXS Dividend", amount: 0.75 },
 
   // Robinhood Gold membership charges / plan credits
@@ -1237,8 +1270,16 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
   const [selectedPeriod,setSelectedPeriod]=useState<string|null>(null);
   const [detailView,setDetailView]=useState<"profit"|"income">("profit");
   const [edits,setEdits]=useState<VerifiedProfitEdits>({});
-  useEffect(()=>{try{const raw=window.localStorage.getItem(VERIFIED_PROFIT_EDITS_KEY);if(raw)setEdits(JSON.parse(raw));}catch{}},[]);
+  const [incomeEdits,setIncomeEdits]=useState<IncomeEdits>({});
+  const [editingIncome,setEditingIncome]=useState<{id:string;item:IncomeTransaction}|null>(null);
+  const [incomeDraft,setIncomeDraft]=useState<IncomeTransaction>({date:"",ticker:"",amount:0});
+  useEffect(()=>{try{const raw=window.localStorage.getItem(VERIFIED_PROFIT_EDITS_KEY);if(raw)setEdits(JSON.parse(raw));const incomeRaw=window.localStorage.getItem(INCOME_EDITS_KEY);if(incomeRaw)setIncomeEdits(JSON.parse(incomeRaw));}catch{}},[]);
   const saveEdit=(id:string,patch:VerifiedProfitEdit)=>setEdits(current=>{const next={...current,[id]:{...(current[id]??{}),...patch}};try{window.localStorage.setItem(VERIFIED_PROFIT_EDITS_KEY,JSON.stringify(next));}catch{}return next;});
+  const effectiveIncomeTransactions=useMemo(()=>ROBINHOOD_INCOME_TRANSACTIONS.map((item,index)=>{const id=incomeId(item,index);const patch=incomeEdits[id]??{};return patch.deleted?null:{id,item:{...item,...patch} as IncomeTransaction};}).filter((row):row is {id:string;item:IncomeTransaction}=>row!==null),[incomeEdits]);
+  const persistIncomeEdit=(id:string,patch:IncomeEdit)=>setIncomeEdits(current=>{const next={...current,[id]:{...(current[id]??{}),...patch}};try{window.localStorage.setItem(INCOME_EDITS_KEY,JSON.stringify(next));}catch{}return next;});
+  const openIncomeEditor=(id:string,item:IncomeTransaction)=>{setEditingIncome({id,item});setIncomeDraft({...item});};
+  const saveIncomeEditor=()=>{if(!editingIncome)return;persistIncomeEdit(editingIncome.id,incomeDraft);setEditingIncome(null);};
+  const deleteIncomeEditor=()=>{if(!editingIncome)return;persistIncomeEdit(editingIncome.id,{deleted:true});setEditingIncome(null);};
   const transactionsByPeriod=useMemo(()=>{
     const out:Record<string,ProfitDrilldownTransaction[]>={};
     Object.values(ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS).flat().forEach(tx=>{
@@ -1280,14 +1321,16 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
     });
     return totals;
   },[transactionsByPeriod]);
-  const incomeTotals=useMemo(()=>{const totals:Record<string,number>={};ROBINHOOD_INCOME_TRANSACTIONS.forEach(item=>{const p=incomePeriod(item.date);totals[p]=(totals[p]??0)+item.amount;});return totals;},[]);
+  const incomeTotals=useMemo(()=>{const totals:Record<string,number>={};effectiveIncomeTransactions.forEach(({item})=>{const p=incomePeriod(item.date);totals[p]=(totals[p]??0)+item.amount;});return totals;},[effectiveIncomeTransactions]);
   const monthlyData=useMemo(()=>{
     const rows: Array<{period:string;realizedProfit:number;income:number}> = quarterlyIncome
       .filter(row=>!/^Q[1-4] 2025$/.test(row.period))
       .map(row=>({period:String(row.period),realizedProfit:verifiedTotals[row.period]??row.robinhoodProfit,income:incomeTotals[String(row.period)]??row.robinhoodIncome}));
     Object.entries(verifiedTotals).forEach(([period,realizedProfit])=>{const existing=rows.find(r=>r.period===period);if(existing)existing.realizedProfit=realizedProfit;else rows.push({period,realizedProfit,income:incomeTotals[period]??0});});
     Object.entries(incomeTotals).forEach(([period,income])=>{const existing=rows.find(r=>r.period===period);if(existing)existing.income=income;else rows.push({period,realizedProfit:0,income});});
-    return rows.filter(r=>r.period.match(/(20\d{2})/)?.[1]===selectedYear && !/^Q/.test(r.period)).sort((a,b)=>periodTime(a.period)-periodTime(b.period));
+    const filtered=rows.filter(r=>r.period.match(/(20\d{2})/)?.[1]===selectedYear && !/^Q/.test(r.period));
+    if(selectedYear==="2024"){for(const month of months){const period=`${month} 2024`;if(!filtered.some(r=>r.period===period))filtered.push({period,realizedProfit:0,income:0});}}
+    return filtered.sort((a,b)=>periodTime(a.period)-periodTime(b.period));
   },[selectedYear,verifiedTotals,incomeTotals]);
   const annualData=useMemo(()=>{
     const years=new Set<string>();
@@ -1315,9 +1358,9 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
   const data=view==="year"?annualData:monthlyData;
   const allTimeSummary=useMemo<RobinhoodAllTimeSummary>(()=>({
     realizedProfit:annualData.reduce((sum,row)=>sum+row.realizedProfit,0),
-    dividendAmount:ROBINHOOD_INCOME_TRANSACTIONS.filter(item=>item.ticker.includes("Dividend")).reduce((sum,item)=>sum+item.amount,0),
-    extras:ROBINHOOD_INCOME_TRANSACTIONS.filter(item=>!item.ticker.includes("Dividend")).reduce((sum,item)=>sum+item.amount,0),
-  }),[annualData]);
+    dividendAmount:effectiveIncomeTransactions.filter(({item})=>item.ticker.includes("Dividend")).reduce((sum,{item})=>sum+item.amount,0),
+    extras:effectiveIncomeTransactions.filter(({item})=>!item.ticker.includes("Dividend")).reduce((sum,{item})=>sum+item.amount,0),
+  }),[annualData,effectiveIncomeTransactions]);
   useEffect(()=>{onAllTimeSummary?.(allTimeSummary)},[allTimeSummary,onAllTimeSummary]);
   const selectedTransactions=selectedPeriod?transactionsByPeriod[selectedPeriod]??[]:[];
   const [transactionSort,setTransactionSort]=useState<"date"|"realizedProfit">("realizedProfit");
@@ -1334,13 +1377,13 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
   },[selectedTransactions]);
   const changeTransactionSort=(column:"date"|"realizedProfit")=>{if(transactionSort===column)setTransactionSortDirection(current=>current==="asc"?"desc":"asc");else{setTransactionSort(column);setTransactionSortDirection("desc");}};
   const TransactionSortHeader=({label,column,right=false}:{label:string;column:"date"|"realizedProfit";right?:boolean})=>{const active=transactionSort===column;const SortIcon=!active?ArrowUpDown:transactionSortDirection==="asc"?ArrowUp:ArrowDown;return <button type="button" onClick={()=>changeTransactionSort(column)} className={cn("inline-flex w-full items-center gap-2 transition hover:text-zinc-200",right&&"justify-end",active&&"text-emerald-400")}>{label}<SortIcon size={14} className={active?"text-emerald-400":"opacity-25"}/></button>;};
-  const selectedIncomeTransactions=selectedPeriod?ROBINHOOD_INCOME_TRANSACTIONS.filter(item=>incomePeriod(item.date)===selectedPeriod):[];
+  const selectedIncomeTransactions=selectedPeriod?effectiveIncomeTransactions.filter(({item})=>incomePeriod(item.date)===selectedPeriod):[];
   const total=selectedTransactions.reduce((s,t)=>s+t.realizedProfit,0);
-  const incomeTotal=selectedIncomeTransactions.reduce((s,t)=>s+t.amount,0);
+  const incomeTotal=selectedIncomeTransactions.reduce((s,t)=>s+t.item.amount,0);
   const incomeCategory=(item:IncomeTransaction)=>item.ticker.includes("Dividend")?"Dividends":item.ticker==="Interest Payment"?"Interest":"Robinhood Gold";
-  const dividendTotal=selectedIncomeTransactions.filter(item=>incomeCategory(item)==="Dividends").reduce((s,t)=>s+t.amount,0);
-  const goldTotal=selectedIncomeTransactions.filter(item=>incomeCategory(item)==="Robinhood Gold").reduce((s,t)=>s+t.amount,0);
-  const interestTotal=selectedIncomeTransactions.filter(item=>incomeCategory(item)==="Interest").reduce((s,t)=>s+t.amount,0);
+  const dividendTotal=selectedIncomeTransactions.filter(({item})=>incomeCategory(item)==="Dividends").reduce((s,t)=>s+t.item.amount,0);
+  const goldTotal=selectedIncomeTransactions.filter(({item})=>incomeCategory(item)==="Robinhood Gold").reduce((s,t)=>s+t.item.amount,0);
+  const interestTotal=selectedIncomeTransactions.filter(({item})=>incomeCategory(item)==="Interest").reduce((s,t)=>s+t.item.amount,0);
   const positionTypeTotals=useMemo(()=>{
     const map=new Map<ProfitDrilldownTransaction["category"],{category:ProfitDrilldownTransaction["category"];total:number;count:number}>();
     selectedTransactions.forEach(tx=>{const current=map.get(tx.category)??{category:tx.category,total:0,count:0};current.total+=tx.realizedProfit;current.count+=1;map.set(tx.category,current);});
@@ -1367,11 +1410,12 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
         <Bar dataKey="income" name="Dividends & Interest" fill="#3b82f6" radius={[7,7,2,2]} maxBarSize={34} onClick={(entry:any)=>open(entry?.period)} style={{cursor:"pointer"}}>{data.map(row=><Cell key={`i-${row.period}`} fill={row.income<0?"url(#rhq-negative)":"url(#rhq-income)"}/>)}<LabelList dataKey="income" position="top" formatter={(v:any)=>wholeDollar(Number(v))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar>
       </BarChart></ResponsiveContainer></div></CardContent>
     </Card>
+    {editingIncome&&<div className="fixed inset-0 z-[80] grid place-items-center bg-black/75 p-4" onMouseDown={e=>{if(e.currentTarget===e.target)setEditingIncome(null)}}><Card className="w-full max-w-lg overflow-hidden"><div className="flex items-center justify-between border-b border-white/10 p-4"><h3 className="font-semibold">Edit Dividends & Interest</h3><button onClick={()=>setEditingIncome(null)} className="grid size-9 place-items-center rounded-xl border border-white/10"><X size={16}/></button></div><div className="grid gap-4 p-4 sm:grid-cols-2"><label><span className="mb-1.5 block text-xs text-zinc-500">Date</span><input type="date" value={incomeDraft.date} onChange={e=>setIncomeDraft(d=>({...d,date:e.target.value}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm"/></label><label><span className="mb-1.5 block text-xs text-zinc-500">Amount</span><input type="number" step="0.01" value={incomeDraft.amount} onChange={e=>setIncomeDraft(d=>({...d,amount:Number(e.target.value)}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm"/></label><label className="sm:col-span-2"><span className="mb-1.5 block text-xs text-zinc-500">Source</span><input value={incomeDraft.ticker} onChange={e=>setIncomeDraft(d=>({...d,ticker:e.target.value}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm"/></label></div><div className="flex items-center justify-between border-t border-white/10 p-4"><button onClick={deleteIncomeEditor} className="h-10 rounded-xl border border-red-400/25 bg-red-400/[.08] px-4 text-sm font-medium text-red-300">Delete Entry</button><div className="flex gap-2"><button onClick={()=>setEditingIncome(null)} className="h-10 rounded-xl border border-white/10 px-4 text-sm text-zinc-400">Cancel</button><button onClick={saveIncomeEditor} className="h-10 rounded-xl bg-blue-500 px-4 text-sm font-semibold text-white">Save Entry</button></div></div></Card></div>}
     {selectedPeriod&&<div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" onMouseDown={e=>{if(e.currentTarget===e.target)setSelectedPeriod(null)}}><div className="max-h-[88vh] w-full max-w-5xl overflow-auto rounded-2xl border border-white/10 bg-zinc-950 shadow-2xl">
       <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-zinc-950 px-5 py-4"><div className="flex items-center gap-2">{prev&&<button onClick={()=>setSelectedPeriod(prev)} className="grid size-9 place-items-center rounded-lg border border-white/10"><ChevronLeft size={17}/></button>}<h3 className="text-lg font-semibold">{selectedPeriod} Details</h3>{next&&<button onClick={()=>setSelectedPeriod(next)} className="grid size-9 place-items-center rounded-lg border border-white/10"><ChevronRight size={17}/></button>}</div><div className="absolute left-1/2 flex -translate-x-1/2 overflow-hidden rounded-xl border border-white/10"><button type="button" onClick={()=>setDetailView("profit")} className={cn("px-4 py-2 text-xs font-semibold transition",detailView==="profit"?"bg-emerald-500 text-zinc-950":"text-zinc-400 hover:text-white")}>Realized P/L</button><button type="button" onClick={()=>setDetailView("income")} className={cn("px-4 py-2 text-xs font-semibold transition",detailView==="income"?"bg-blue-500 text-white":"text-zinc-400 hover:text-white")}>Dividends & Interest</button></div><button onClick={()=>setSelectedPeriod(null)} className="grid size-9 place-items-center rounded-lg border border-white/10"><X size={17}/></button></div>
       <div className="p-5">{detailView==="profit"?<><div className="mb-5"><h4 className="mb-3 text-sm font-semibold">Profit By Position Type</h4><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"><div className="rounded-xl border border-white/10 p-4"><div className="text-xs uppercase tracking-[0.18em] text-zinc-500">Total Profit</div><div className={cn("mt-2 text-2xl font-semibold",total>=0?"positive":"negative")}>{money(total)}</div><div className="mt-2 text-xs text-zinc-600">{selectedTransactions.length} {selectedTransactions.length===1?"Transaction":"Transactions"}</div></div>{positionTypeTotals.map(item=><div key={item.category} className="rounded-xl border border-white/10 p-4"><div className="text-sm font-semibold text-zinc-400">{item.category}</div><div className={cn("mt-2 text-2xl font-semibold",item.total>=0?"positive":"negative")}>{money(item.total)}</div><div className="mt-2 text-xs text-zinc-600">{item.count} {item.count===1?"Transaction":"Transactions"}</div></div>)}</div></div>
       <div className="mb-5 overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]"><div className="border-b border-white/[.07] px-4 py-3"><h4 className="text-sm font-semibold">Profit By Ticker</h4></div><div className="overflow-x-auto"><table className="w-full min-w-[520px] text-sm"><thead className="bg-white/[.025] text-xs text-zinc-500"><tr><th className="px-4 py-3 text-left">Ticker</th><th className="px-4 py-3 text-right">Transactions</th><th className="px-4 py-3 text-right">Realized P/L</th></tr></thead><tbody>{tickerTotals.map(item=><tr key={item.ticker} className="border-t border-white/[.06]"><td className="px-4 py-3 font-semibold">{item.ticker}</td><td className="px-4 py-3 text-right text-zinc-400">{item.count}</td><td className={cn("px-4 py-3 text-right font-semibold",item.total>0?"positive":item.total<0?"negative":"text-zinc-400")}>{money(item.total)}</td></tr>)}</tbody></table></div></div>
-      <div className="overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]"><div className="border-b border-white/[.07] px-4 py-3"><h4 className="text-sm font-semibold">Profit By Transaction</h4></div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-white/[.025] text-xs text-zinc-500"><tr><th className="px-4 py-3 text-left">Rank</th><th className="px-4 py-3 text-left"><TransactionSortHeader label="Date" column="date" /></th><th className="px-4 py-3 text-left">Ticker</th><th className="px-4 py-3 text-left">Position</th><th className="px-4 py-3 text-left">Type</th><th className="px-4 py-3 text-right"><TransactionSortHeader label="Realized Profit" column="realizedProfit" right /></th></tr></thead><tbody>{sortedTransactions.map((tx,index)=><tr key={tx.id} className="border-t border-white/[.06]"><td className="px-4 py-3 font-semibold text-zinc-500">#{index+1}</td><td className="whitespace-nowrap px-4 py-3 text-zinc-400">{new Date(`${tx.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</td><td className="px-4 py-3 font-semibold">{tx.ticker}</td><td className="px-4 py-3 text-zinc-400">{tx.label}</td><td className="px-4 py-3">{tx.category}</td><td className={cn("px-4 py-3 text-right font-semibold",tx.realizedProfit>=0?"positive":"negative")}>{money(tx.realizedProfit)}</td></tr>)}</tbody></table></div></div></>:<><div className="mb-5 grid gap-3 sm:grid-cols-4"><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Dividends & Interest</div><div className={cn("mt-1 text-xl font-semibold",incomeTotal>=0?"positive":"negative")}>{money(incomeTotal)}</div></div><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Dividends</div><div className={cn("mt-1 text-xl font-semibold",dividendTotal>=0?"positive":"negative")}>{money(dividendTotal)}</div></div><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Robinhood Gold</div><div className={cn("mt-1 text-xl font-semibold",goldTotal>=0?"positive":"negative")}>{money(goldTotal)}</div></div><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Interest</div><div className={cn("mt-1 text-xl font-semibold",interestTotal>=0?"positive":"negative")}>{money(interestTotal)}</div></div></div><div className="overflow-x-auto"><table className="w-full min-w-[680px] text-sm"><thead className="border-y border-white/10 text-xs text-zinc-500"><tr><th className="px-3 py-3 text-left">Date</th><th className="px-3 py-3 text-left">Source</th><th className="px-3 py-3 text-left">Category</th><th className="px-3 py-3 text-right">Amount</th></tr></thead><tbody>{selectedIncomeTransactions.slice().sort((a,b)=>b.date.localeCompare(a.date)).map((item,index)=><tr key={`${item.date}-${item.ticker}-${index}`} className="border-b border-white/[.06]"><td className="px-3 py-3">{new Date(`${item.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</td><td className="px-3 py-3 font-medium">{item.ticker}</td><td className="px-3 py-3">{incomeCategory(item)}</td><td className={cn("px-3 py-3 text-right font-semibold",item.amount>=0?"positive":"negative")}>{money(item.amount)}</td></tr>)}</tbody></table></div></>}</div>
+      <div className="overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]"><div className="border-b border-white/[.07] px-4 py-3"><h4 className="text-sm font-semibold">Profit By Transaction</h4></div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-white/[.025] text-xs text-zinc-500"><tr><th className="px-4 py-3 text-left">Rank</th><th className="px-4 py-3 text-left"><TransactionSortHeader label="Date" column="date" /></th><th className="px-4 py-3 text-left">Ticker</th><th className="px-4 py-3 text-left">Position</th><th className="px-4 py-3 text-left">Type</th><th className="px-4 py-3 text-right"><TransactionSortHeader label="Realized Profit" column="realizedProfit" right /></th></tr></thead><tbody>{sortedTransactions.map((tx,index)=><tr key={tx.id} className="border-t border-white/[.06]"><td className="px-4 py-3 font-semibold text-zinc-500">#{index+1}</td><td className="whitespace-nowrap px-4 py-3 text-zinc-400">{new Date(`${tx.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</td><td className="px-4 py-3 font-semibold">{tx.ticker}</td><td className="px-4 py-3 text-zinc-400">{tx.label}</td><td className="px-4 py-3">{tx.category}</td><td className={cn("px-4 py-3 text-right font-semibold",tx.realizedProfit>=0?"positive":"negative")}>{money(tx.realizedProfit)}</td></tr>)}</tbody></table></div></div></>:<><div className="mb-5 grid gap-3 sm:grid-cols-4"><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Dividends & Interest</div><div className={cn("mt-1 text-xl font-semibold",incomeTotal>=0?"positive":"negative")}>{money(incomeTotal)}</div></div><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Dividends</div><div className={cn("mt-1 text-xl font-semibold",dividendTotal>=0?"positive":"negative")}>{money(dividendTotal)}</div></div><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Robinhood Gold</div><div className={cn("mt-1 text-xl font-semibold",goldTotal>=0?"positive":"negative")}>{money(goldTotal)}</div></div><div className="rounded-xl border border-white/10 p-4"><div className="text-xs text-zinc-500">Total Interest</div><div className={cn("mt-1 text-xl font-semibold",interestTotal>=0?"positive":"negative")}>{money(interestTotal)}</div></div></div><div className="overflow-x-auto"><table className="w-full min-w-[680px] text-sm"><thead className="border-y border-white/10 text-xs text-zinc-500"><tr><th className="px-3 py-3 text-left">Date</th><th className="px-3 py-3 text-left">Source</th><th className="px-3 py-3 text-left">Category</th><th className="px-3 py-3 text-right">Amount</th></tr></thead><tbody>{selectedIncomeTransactions.slice().sort((a,b)=>b.item.date.localeCompare(a.item.date)).map(({id,item})=><tr key={id} onClick={()=>openIncomeEditor(id,item)} className="cursor-pointer border-b border-white/[.06] transition hover:bg-white/[.035]" title="Click To Edit"><td className="px-3 py-3">{new Date(`${item.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</td><td className="px-3 py-3 font-medium">{item.ticker}</td><td className="px-3 py-3">{incomeCategory(item)}</td><td className={cn("px-3 py-3 text-right font-semibold",item.amount>=0?"positive":"negative")}>{money(item.amount)}</td></tr>)}</tbody></table></div></>}</div>
     </div></div>}
   </>;
 }
