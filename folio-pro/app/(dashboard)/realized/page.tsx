@@ -787,23 +787,19 @@ export default function Page() {
           <h1 className="text-2xl font-semibold sm:text-3xl">Realized Returns</h1>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-          <input ref={fileInputRef} className="hidden" type="file" accept=".csv" onChange={handleFileUpload} />
-          <Button onClick={() => fileInputRef.current?.click()} disabled={isImporting}>
-            <Upload className="mr-2 h-4 w-4" />{isImporting ? "Importing..." : "Import Document"}
-          </Button>
           <Button variant="outline" onClick={exportCsv}><Download className="mr-2 h-4 w-4" />Export CSV</Button>
         </div>
       </div>
 
       {message && <p className="mt-4 text-sm text-emerald-500">{message}</p>}
 
-      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4 [&>div>div]:p-4 [&>div>div>div:first-child]:text-xs [&>div>div>div:nth-child(2)]:mt-1.5 [&>div>div>div:nth-child(2)]:text-xl">
         <MetricCard label="Total Realized P/L" value={money(robinhoodAllTimeSummary.realizedProfit)} />
         <MetricCard label="Total Stocks P/L" value={money(totals.stocksPl)} />
         <MetricCard label="Total Options P/L" value={money(totals.optionsPl)} />
-        <MetricCard label="Total Dividend Amount" value={money(robinhoodAllTimeSummary.dividendAmount)} />
         <MetricCard label="Profitable Tickers" value={`${winners.length} of ${groups.length}`} />
         <MetricCard label="Loss Recovery Tickers" value={lossRecoveryTickers.toLocaleString()} />
+        <MetricCard label="Total Dividend Amount" value={money(robinhoodAllTimeSummary.dividendAmount)} />
         <MetricCard label="Robinhood Extras" value={money(robinhoodAllTimeSummary.extras)} />
       </div>
 
@@ -813,7 +809,6 @@ export default function Page() {
         <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="font-medium">Realized P/L & Dividends By Ticker</h2>
-            <p className="mt-1 text-xs text-zinc-500">Choose A Ticker Row To See Its Individual Stock And Option Entries.</p>
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="flex w-full flex-wrap justify-end gap-2">
@@ -863,7 +858,7 @@ export default function Page() {
                       <td className="whitespace-nowrap px-3 py-4 text-zinc-500">{group.latestDate || "—"}</td>
                       <td className="px-3 py-4 tabular-nums">{group.patNeeded > 0 ? money(group.patNeeded) : "-"}</td>
                       <td className="px-3 py-4 tabular-nums text-emerald-500">{group.dividendAmount ? money(group.dividendAmount) : "-"}</td>
-                      <td className="px-3 py-4 tabular-nums text-red-500">{group.dividendNraWithholding ? money(group.dividendNraWithholding) : "-"}</td>
+                      <td className="px-3 py-4 tabular-nums text-zinc-500">{group.dividendNraWithholding ? money(group.dividendNraWithholding) : "-"}</td>
                       <td className="whitespace-nowrap px-3 py-4 text-zinc-500">{group.lastDividendDate || "—"}</td>
                       <td className="max-w-80 whitespace-pre-wrap break-words px-3 py-4 text-zinc-500">{group.comment || "-"}</td>
                       <td className="px-3 py-4">
@@ -893,7 +888,7 @@ export default function Page() {
                                     <td className="px-3 py-3 tabular-nums text-red-500">{optionalMoney(position.loss)}</td>
                                     <td className="px-3 py-3 tabular-nums">-</td>
                                     <td className="px-3 py-3 tabular-nums text-emerald-500">{position.dividendAmount ? money(position.dividendAmount) : "-"}</td>
-                                    <td className="px-3 py-3 tabular-nums text-red-500">{position.dividendNraWithholding ? money(position.dividendNraWithholding) : "-"}</td>
+                                    <td className="px-3 py-3 tabular-nums text-zinc-500">{position.dividendNraWithholding ? money(position.dividendNraWithholding) : "-"}</td>
                                     <td className="whitespace-nowrap px-3 py-3 text-zinc-500">{position.lastDividendDate || "—"}</td>
                                     <td className="px-3 py-3">
                                       <div className="flex justify-center gap-2">
@@ -921,7 +916,7 @@ export default function Page() {
                 <td />
                 <td className="px-3 py-4 tabular-nums">{totalPatNeeded > 0 ? money(totalPatNeeded) : "-"}</td>
                 <td className="px-3 py-4 tabular-nums text-emerald-500">{money(totals.dividendAmount)}</td>
-                <td className="px-3 py-4 tabular-nums text-red-500">{money(totals.dividendNraWithholding)}</td>
+                <td className="px-3 py-4 tabular-nums text-zinc-500">{money(totals.dividendNraWithholding)}</td>
                 <td />
                 <td />
                 <td />

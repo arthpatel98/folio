@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { quarterlyIncome } from "@/lib/savings-investments-data";
@@ -1337,6 +1337,7 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
     return totals;
   },[transactionsByPeriod]);
   const incomeTotals=useMemo(()=>{const totals:Record<string,number>={};effectiveIncomeTransactions.forEach(({item})=>{const p=incomePeriod(item.date);totals[p]=(totals[p]??0)+item.amount;});return totals;},[effectiveIncomeTransactions]);
+  const incomeBreakdown=useMemo(()=>{const totals:Record<string,{dividends:number;extras:number}>={};effectiveIncomeTransactions.forEach(({item})=>{const p=incomePeriod(item.date);const row=totals[p]??{dividends:0,extras:0};if(item.ticker.includes("Dividend"))row.dividends+=item.amount;else row.extras+=item.amount;totals[p]=row;});return totals;},[effectiveIncomeTransactions]);
   const monthlyData=useMemo(()=>{
     const rows: Array<{period:string;realizedProfit:number;income:number}> = quarterlyIncome
       .filter(row=>!/^Q[1-4] 2025$/.test(row.period))
@@ -1369,7 +1370,18 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
       return {period:year,realizedProfit,income};
     });
   },[verifiedTotals,incomeTotals]);
-  const data=view==="year"?annualData:monthlyData;
+  const data=useMemo(()=>{
+    const base=view==="year"?annualData:monthlyData;
+    return base.map(row=>{
+      if(view==="year"){
+        const year=row.period; let dividends=0,extras=0;
+        Object.entries(incomeBreakdown).forEach(([period,values])=>{if(period.endsWith(` ${year}`)){dividends+=values.dividends;extras+=values.extras;}});
+        return {...row,dividends,extras};
+      }
+      const breakdown=incomeBreakdown[row.period]??{dividends:0,extras:0};
+      return {...row,...breakdown};
+    });
+  },[view,annualData,monthlyData,incomeBreakdown]);
   const allTimeSummary=useMemo<RobinhoodAllTimeSummary>(()=>({
     realizedProfit:annualData.reduce((sum,row)=>sum+row.realizedProfit,0),
     dividendAmount:effectiveIncomeTransactions.filter(({item})=>item.ticker.includes("Dividend")).reduce((sum,{item})=>sum+item.amount,0),
@@ -1415,16 +1427,19 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
   return <>
     <Card className="overflow-hidden">
       <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-zinc-200/70 dark:border-white/[.06]">
-        <div><h2 className="font-medium">Robinhood Quarterly Data</h2><p className="mt-1 text-xs text-zinc-500">Realized P/L Vs Dividends & Interest</p></div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <div className="inline-flex h-9 overflow-hidden rounded-xl border border-zinc-200 dark:border-white/10">{(["month","year"] as const).map(v=><button key={v} type="button" onClick={()=>setView(v)} className={cn("px-3 text-xs font-semibold capitalize transition",view===v?"bg-emerald-500 text-zinc-950":"text-zinc-500 hover:text-zinc-200")}>{v}</button>)}</div>
-          {view!=="year"&&<select value={selectedYear} onChange={e=>setSelectedYear(e.target.value)} className="h-9 rounded-xl border border-zinc-200 bg-transparent px-3 text-sm font-medium outline-none dark:border-white/10 dark:bg-zinc-950">{["2026","2025","2024"].map(y=><option key={y}>{y}</option>)}</select>}
+        <div><h2 className="font-medium">Robinhood Quarterly Data</h2></div>
+        <div className="flex flex-wrap items-center justify-end gap-2.5">
+          <div className="inline-flex h-10 items-center rounded-xl border border-white/[.08] bg-white/[.025] p-1 shadow-inner">
+            <button type="button" onClick={()=>setView("month")} className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition",view==="month"?"bg-emerald-500/15 text-emerald-400 shadow-sm ring-1 ring-emerald-500/25":"text-zinc-500 hover:bg-white/[.04] hover:text-zinc-200")}><CalendarDays size={14}/>Month</button>
+            <button type="button" onClick={()=>setView("year")} className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition",view==="year"?"bg-emerald-500/15 text-emerald-400 shadow-sm ring-1 ring-emerald-500/25":"text-zinc-500 hover:bg-white/[.04] hover:text-zinc-200")}><BarChart3 size={14}/>Year</button>
+          </div>
+          {view!=="year"&&<div className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-400"/><select value={selectedYear} onChange={e=>setSelectedYear(e.target.value)} className="h-10 appearance-none rounded-xl border border-white/[.08] bg-white/[.025] pl-9 pr-9 text-sm font-semibold outline-none transition hover:border-emerald-500/25 focus:border-emerald-500/40 dark:bg-zinc-950/70">{["2026","2025","2024"].map(y=><option key={y}>{y}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-400"/></div>}
         </div>
       </CardHeader>
       <CardContent className="pt-5"><div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:4}} onClick={(state:any)=>{const period=state?.activePayload?.[0]?.payload?.period;if(typeof period==="string")open(period);}} style={{cursor:"pointer"}}>
         <defs><linearGradient id="rhq-profit" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399"/><stop offset="100%" stopColor="#10b981" stopOpacity={0.65}/></linearGradient><linearGradient id="rhq-income" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa"/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.65}/></linearGradient><linearGradient id="rhq-negative" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#fb7185"/><stop offset="100%" stopColor="#e11d48" stopOpacity={0.72}/></linearGradient></defs>
         <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="period" tick={{fill:"#a1a1aa",fontSize:10,fontWeight:600}} axisLine={false} tickLine={false} interval={0}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={chartAxisValue}/>
-        <Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} formatter={(value:any)=>money(Number(value))} contentStyle={{background:"#18181b",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,color:"#f4f4f5",boxShadow:"0 12px 30px rgba(0,0,0,.25)"}} labelStyle={{color:"#f4f4f5",fontWeight:700}} itemStyle={{color:"#f4f4f5"}}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/>
+        <Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} content={({active,payload,label}:any)=>{if(!active||!payload?.length)return null;const row=payload[0]?.payload??{};return <div className="min-w-48 rounded-xl border border-white/10 bg-zinc-900/95 p-3 text-xs shadow-2xl backdrop-blur"><div className="mb-2 font-bold text-zinc-100">{label}</div><div className="space-y-1.5"><div className="flex items-center justify-between gap-6"><span className="text-emerald-400">Profit</span><span className="font-semibold text-zinc-100">{money(Number(row.realizedProfit??0))}</span></div><div className="flex items-center justify-between gap-6"><span className="text-blue-400">Dividends</span><span className="font-semibold text-zinc-100">{money(Number(row.dividends??0))}</span></div><div className="flex items-center justify-between gap-6"><span className="text-amber-400">Robinhood Extras</span><span className="font-semibold text-zinc-100">{money(Number(row.extras??0))}</span></div></div></div>;}}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/>
         <Bar dataKey="realizedProfit" name="Profit" fill="#10b981" radius={[7,7,2,2]} maxBarSize={34} onClick={(entry:any)=>open(entry?.period)} style={{cursor:"pointer"}}>{data.map(row=><Cell key={`p-${row.period}`} fill={row.realizedProfit<0?"url(#rhq-negative)":"url(#rhq-profit)"}/>)}<LabelList dataKey="realizedProfit" position="top" formatter={(v:any)=>wholeDollar(Number(v))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar>
         <Bar dataKey="income" name="Dividends & Interest" fill="#3b82f6" radius={[7,7,2,2]} maxBarSize={34} onClick={(entry:any)=>open(entry?.period)} style={{cursor:"pointer"}}>{data.map(row=><Cell key={`i-${row.period}`} fill={row.income<0?"url(#rhq-negative)":"url(#rhq-income)"}/>)}<LabelList dataKey="income" position="top" formatter={(v:any)=>wholeDollar(Number(v))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/></Bar>
       </BarChart></ResponsiveContainer></div></CardContent>
