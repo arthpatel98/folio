@@ -806,10 +806,8 @@ export default function Page() {
       <div className="mt-6"><RobinhoodQuarterlyData onAllTimeSummary={setRobinhoodAllTimeSummary} /></div>
 
       <Card className="mt-6 overflow-hidden p-5">
-        <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="font-medium">Realized P/L & Dividends By Ticker</h2>
-          </div>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <h2 className="font-medium">Realized P/L & Dividends By Ticker</h2>
           <div className="flex flex-col items-end gap-2">
             <div className="flex w-full flex-wrap justify-end gap-2">
               <div className="relative w-full sm:w-64">
@@ -817,7 +815,6 @@ export default function Page() {
               <Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search Ticker Or Comment..." className="pl-9" />
               </div>
             </div>
-            <p className="text-xs text-zinc-500">{filteredAndSortedGroups.length} of {groups.length} Tickers</p>
           </div>
         </div>
 

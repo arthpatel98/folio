@@ -21,7 +21,7 @@ function MetricBlock({ label, value, subvalue, positive, icon: Icon, tone = "gre
 }
 
 function PerformanceMiniCard({label,value,positive}:{label:string;value:string;positive:boolean}) {
-  return <div className="rounded-3xl border border-white/10 bg-zinc-950/40 p-5 shadow-sm"><div className="text-sm text-zinc-400">{label}</div><div className={cn("mt-5 text-2xl font-semibold tracking-tight",positive?"text-emerald-400":"text-rose-400")}>{value}</div></div>;
+  return <div className="rounded-3xl border border-white/10 bg-zinc-950/40 p-4 shadow-sm"><div className="text-xs font-medium text-zinc-400">{label}</div><div className={cn("mt-3 text-xl font-semibold tracking-tight",positive?"text-emerald-400":"text-rose-400")}>{value}</div></div>;
 }
 
 function PortfolioValueMetric({ value, dayReturn, dayReturnPct }: { value: number; dayReturn: number; dayReturnPct: number }) {
@@ -419,19 +419,19 @@ export default function Page() {
         <MetricBlock label="Cash" value={money(availableCash)} subvalue={`${summary.value ? ((availableCash / summary.value) * 100).toFixed(2) : "0.00"}% of Portfolio`} icon={Banknote} tone="purple"/>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="row-span-2 rounded-3xl border border-white/10 bg-zinc-950/40 p-6 shadow-sm">
-          <div className="grid size-12 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-400"><TrendingUp size={24}/></div>
-          <div className="mt-7 text-sm text-zinc-400">Investment</div>
-          <div className="mt-2 text-3xl font-semibold tracking-tight">{money(performanceAccount.invested)}</div>
-          <div className={cn("mt-4 inline-flex rounded-full px-3 py-1.5 text-sm font-semibold",performanceAccount.totalReturn>=0?"bg-emerald-400/10 text-emerald-400":"bg-rose-400/10 text-rose-400")}>{performanceAccount.totalReturn>=0?"+":""}{(performanceAccount.totalReturn*100).toFixed(2)}%</div>
+      <section className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="row-span-2 rounded-3xl border border-white/10 bg-zinc-950/40 p-4 shadow-sm">
+          <div className="grid size-10 place-items-center rounded-xl bg-emerald-500/10 text-emerald-400"><TrendingUp size={20}/></div>
+          <div className="mt-4 text-xs font-medium text-zinc-400">Investment</div>
+          <div className="mt-1.5 text-2xl font-semibold tracking-tight">{money(performanceAccount.invested)}</div>
+          <div className={cn("mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",performanceAccount.totalReturn>=0?"bg-emerald-400/10 text-emerald-400":"bg-rose-400/10 text-rose-400")}>{performanceAccount.totalReturn>=0?"+":""}{(performanceAccount.totalReturn*100).toFixed(2)}%</div>
         </div>
         <PerformanceMiniCard label="Total Gain" value={money(performanceAccount.gain)} positive={performanceAccount.gain>=0}/>
         <PerformanceMiniCard label="Total Return" value={`${performanceAccount.totalReturn>=0?"+":""}${(performanceAccount.totalReturn*100).toFixed(2)}%`} positive={performanceAccount.totalReturn>=0}/>
         <PerformanceMiniCard label="CAGR" value={`${performanceAccount.cagr>=0?"+":""}${(performanceAccount.cagr*100).toFixed(2)}%`} positive={performanceAccount.cagr>=0}/>
         <PerformanceMiniCard label="2026 YTD" value={`${performanceAccount.ytd>=0?"+":""}${(performanceAccount.ytd*100).toFixed(2)}%`} positive={performanceAccount.ytd>=0}/>
-        <div className="rounded-3xl border border-white/10 bg-zinc-950/40 p-5 shadow-sm"><div className="flex items-center justify-between"><div className="text-sm text-zinc-400">Portfolio Start</div><CalendarDays size={18} className="text-zinc-600"/></div><div className="mt-5 text-lg font-semibold text-zinc-200">{performanceAccount.start}</div></div>
-        <div className="rounded-3xl border border-white/10 bg-zinc-950/40 p-5 shadow-sm"><div className="flex items-center justify-between"><div className="text-sm text-zinc-400">All-Time High</div><Star size={18} className="text-zinc-600"/></div>{editingAth?<div className="mt-4 flex flex-wrap gap-2"><input autoFocus type="number" step="1" value={activeAth.value||""} onChange={e=>updateAth("value",e.target.value)} className="h-9 w-32 rounded-xl border border-white/10 bg-transparent px-3 text-sm outline-none"/><input type="date" value={activeAth.date} onChange={e=>updateAth("date",e.target.value)} onKeyDown={e=>{if(e.key==="Enter")setEditingAth(false)}} className="h-9 w-40 rounded-xl border border-white/10 bg-transparent px-3 text-sm outline-none"/><button type="button" onClick={()=>setEditingAth(false)} className="h-9 rounded-xl border border-white/10 px-3 text-xs text-zinc-400">Done</button></div>:<button type="button" onClick={()=>setEditingAth(true)} title="Click To Edit All-Time High" className="mt-4 block text-left"><span className="block text-lg font-semibold text-zinc-200">{money(activeAth.value)}</span><span className="mt-1 block text-sm text-zinc-500">on {compactDate(activeAth.date)}</span></button>}</div>
+        <div className="rounded-3xl border border-white/10 bg-zinc-950/40 p-4 shadow-sm"><div className="flex items-center justify-between"><div className="text-xs font-medium text-zinc-400">Portfolio Start</div><CalendarDays size={18} className="text-zinc-600"/></div><div className="mt-3 text-base font-semibold text-zinc-200">{performanceAccount.start}</div></div>
+        <div className="rounded-3xl border border-white/10 bg-zinc-950/40 p-4 shadow-sm"><div className="flex items-center justify-between"><div className="text-xs font-medium text-zinc-400">All-Time High</div><Star size={18} className="text-zinc-600"/></div>{editingAth?<div className="mt-4 flex flex-wrap gap-2"><input autoFocus type="number" step="1" value={activeAth.value||""} onChange={e=>updateAth("value",e.target.value)} className="h-9 w-32 rounded-xl border border-white/10 bg-transparent px-3 text-sm outline-none"/><input type="date" value={activeAth.date} onChange={e=>updateAth("date",e.target.value)} onKeyDown={e=>{if(e.key==="Enter")setEditingAth(false)}} className="h-9 w-40 rounded-xl border border-white/10 bg-transparent px-3 text-sm outline-none"/><button type="button" onClick={()=>setEditingAth(false)} className="h-9 rounded-xl border border-white/10 px-3 text-xs text-zinc-400">Done</button></div>:<button type="button" onClick={()=>setEditingAth(true)} title="Click To Edit All-Time High" className="mt-3 block text-left"><span className="block text-base font-semibold text-zinc-200">{money(activeAth.value)}</span><span className="mt-1 block text-xs text-zinc-500">on {compactDate(activeAth.date)}</span></button>}</div>
       </section>
 
       <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-950/30">
