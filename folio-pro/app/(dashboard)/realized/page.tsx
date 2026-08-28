@@ -137,6 +137,44 @@ function makePosition(rawSymbol: string, amount: number, fees: number, lastSellD
   };
 }
 
+
+const ROTH_IRA_SUMMARY_POSITIONS: RealizedPosition[] = [
+  makePosition("MSTZ",2211.60,0,"","roth-summary-mstz"),
+  makePosition("IREN",1976.12,0,"","roth-summary-iren"),
+  makePosition("CIFR",1382.14,0,"","roth-summary-cifr"),
+  makePosition("HIMZ",1015.90,0,"","roth-summary-himz"),
+  makePosition("VSTL",733.34,0,"","roth-summary-vstl-1"),
+  makePosition("ROBN",681.58,0,"","roth-summary-robn"),
+  makePosition("PLTR Option",547.18,0,"","roth-summary-pltr-option"),
+  makePosition("MMYT",430.33,0,"","roth-summary-mmyt"),
+  makePosition("NFLX Option",334.58,0,"","roth-summary-nflx-option"),
+  makePosition("NEBX Option",322.66,0,"","roth-summary-nebx-option-1"),
+  makePosition("OKLO",317.63,0,"","roth-summary-oklo"),
+  makePosition("NEBX Option",315.31,0,"","roth-summary-nebx-option-2"),
+  makePosition("CRCL",305.79,0,"","roth-summary-crcl"),
+  makePosition("ONDS",289.92,0,"","roth-summary-onds"),
+  makePosition("MAGS",218.60,0,"","roth-summary-mags"),
+  makePosition("NVDX",218.59,0,"","roth-summary-nvdx"),
+  makePosition("VST",149.09,0,"","roth-summary-vst"),
+  makePosition("HOOD",76.30,0,"","roth-summary-hood"),
+  makePosition("ONDS Option",69.30,0,"","roth-summary-onds-option"),
+  makePosition("RDDT",64.86,0,"","roth-summary-rddt"),
+  makePosition("CRDO",64.77,0,"","roth-summary-crdo"),
+  makePosition("NBIS",51.95,0,"","roth-summary-nbis"),
+  makePosition("PLTU",46.07,0,"","roth-summary-pltu"),
+  makePosition("VSTL",-0.38,0,"","roth-summary-vstl-2"),
+  makePosition("NEBX Option",-50.34,0,"","roth-summary-nebx-option-3"),
+  makePosition("SOXS",-883.98,0,"","roth-summary-soxs-1"),
+  makePosition("NEBX",-1538.53,0,"","roth-summary-nebx-stock"),
+  makePosition("SOXS",-1692.36,0,"","roth-summary-soxs-2"),
+];
+
+function mergeRothSummaryPositions(items: RealizedPosition[]) {
+  // Remove the old leaked Robinhood IREN seed that earlier versions placed in the Roth bucket.
+  const cleaned=items.filter(item=>!item.id.startsWith("roth-default-"));
+  const existingIds=new Set(cleaned.map(item=>item.id));
+  return [...cleaned,...ROTH_IRA_SUMMARY_POSITIONS.filter(item=>!existingIds.has(item.id))];
+}
 function normalizeHeader(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -287,7 +325,7 @@ export default function Page() {
   const defaultPositionsByPortfolio = useMemo<PositionsByPortfolio>(() => ({
     robinhood: initialPositions,
     "fidelity-401k": [],
-    "fidelity-roth": initialPositions.filter((item) => item.symbol === "IREN").map((item) => ({ ...item, id: `roth-${item.id}` })),
+    "fidelity-roth": ROTH_IRA_SUMMARY_POSITIONS,
   }), []);
   const [positionsByPortfolio, setPositionsByPortfolio] = useState<PositionsByPortfolio>(defaultPositionsByPortfolio);
   const [editingPosition, setEditingPosition] = useState<RealizedPosition | null>(null);
@@ -379,13 +417,13 @@ export default function Page() {
           setPositionsByPortfolio({
             robinhood: migrated,
             "fidelity-401k": [],
-            "fidelity-roth": migrated.filter((item) => item.symbol === "IREN").map((item) => ({ ...item, id: `roth-${item.id}` })),
+            "fidelity-roth": ROTH_IRA_SUMMARY_POSITIONS,
           });
         } else if (parsed && typeof parsed === "object") {
           setPositionsByPortfolio({
             robinhood: migratePositions(parsed.robinhood ?? []),
             "fidelity-401k": migratePositions(parsed["fidelity-401k"] ?? []),
-            "fidelity-roth": migratePositions(parsed["fidelity-roth"] ?? []),
+            "fidelity-roth": mergeRothSummaryPositions(migratePositions(parsed["fidelity-roth"] ?? [])),
           });
         }
       } catch { window.localStorage.removeItem(STORAGE_KEY); }
@@ -794,13 +832,13 @@ export default function Page() {
       {message && <p className="mt-4 text-sm text-emerald-500">{message}</p>}
 
       <div className="mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4 [&>div>div]:p-4 [&>div>div>div:first-child]:text-xs [&>div>div>div:nth-child(2)]:mt-1.5 [&>div>div>div:nth-child(2)]:text-xl">
-        <MetricCard label="Total Realized P/L" value={money(robinhoodAllTimeSummary.realizedProfit)} />
+        <MetricCard label="Total Realized P/L" value={money(activePortfolioId==="robinhood"?robinhoodAllTimeSummary.realizedProfit:totals.realized)} />
         <MetricCard label="Total Stocks P/L" value={money(totals.stocksPl)} />
         <MetricCard label="Total Options P/L" value={money(totals.optionsPl)} />
         <MetricCard label="Profitable Tickers" value={`${winners.length} of ${groups.length}`} />
         <MetricCard label="Loss Recovery Tickers" value={lossRecoveryTickers.toLocaleString()} />
-        <MetricCard label="Total Dividend Amount" value={money(robinhoodAllTimeSummary.dividendAmount)} />
-        <MetricCard label="Robinhood Extras" value={money(robinhoodAllTimeSummary.extras)} />
+        <MetricCard label="Total Dividend Amount" value={money(activePortfolioId==="robinhood"?robinhoodAllTimeSummary.dividendAmount:totals.dividendAmount)} />
+        <MetricCard label={activePortfolioId==="robinhood"?"Robinhood Extras":"Extras"} value={money(activePortfolioId==="robinhood"?robinhoodAllTimeSummary.extras:0)} />
       </div>
 
       <div className="mt-6"><RobinhoodQuarterlyData onAllTimeSummary={setRobinhoodAllTimeSummary} /></div>

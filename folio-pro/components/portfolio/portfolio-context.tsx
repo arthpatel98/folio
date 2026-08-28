@@ -9,8 +9,8 @@ export type Portfolio = { id: PortfolioId; name: string; subtitle: string; badge
 
 export const portfolios: Portfolio[] = [
   { id: "robinhood", name: "Robinhood", subtitle: "Taxable Brokerage", badge: "RH" },
-  { id: "fidelity-401k", name: "Fidelity 401(k)", subtitle: "Retirement", badge: "401K" },
   { id: "fidelity-roth", name: "Fidelity Roth IRA", subtitle: "Retirement", badge: "ROTH" },
+  { id: "fidelity-401k", name: "Fidelity 401(k)", subtitle: "Retirement", badge: "401K" },
   { id: "all", name: "All Portfolios", subtitle: "Combined view", badge: "ALL" },
 ];
 
