@@ -73,6 +73,7 @@ const REALIZED_IGNORED_TRANSACTION_IDS_KEY = "folio-realized-ignored-transaction
 const REALIZED_TICKER_COMMENTS_KEY = "folio-realized-ticker-comments-v1";
 const REALIZED_ID_SCHEMA_KEY = "folio-realized-portfolio-id-schema-version";
 const REALIZED_ROTH_BUCKET_FIX_KEY = "folio-realized-roth-bucket-fix-v1";
+const REALIZED_REMOVED_POSITION_IDS_KEY = "folio-realized-removed-position-ids-v1";
 type RealizedPortfolioId = "robinhood" | "fidelity-401k" | "fidelity-roth";
 type PositionsByPortfolio = Record<RealizedPortfolioId, RealizedPosition[]>;
 
@@ -331,6 +332,7 @@ export default function Page() {
   const [editingPosition, setEditingPosition] = useState<RealizedPosition | null>(null);
   const [editingGroup, setEditingGroup] = useState<{ symbol: string; comment: string } | null>(null);
   const [ignoredTransactionIds, setIgnoredTransactionIds] = useState<Record<RealizedPortfolioId, string[]>>({ robinhood: [], "fidelity-401k": [], "fidelity-roth": [] });
+  const [removedPositionIds, setRemovedPositionIds] = useState<Record<RealizedPortfolioId, string[]>>({ robinhood: [], "fidelity-401k": [], "fidelity-roth": [] });
   const [tickerCommentsByPortfolio, setTickerCommentsByPortfolio] = useState<Record<RealizedPortfolioId, Record<string, string>>>({ robinhood: {}, "fidelity-401k": {}, "fidelity-roth": {} });
   const [message, setMessage] = useState("");
   const [isImporting, setIsImporting] = useState(false);
@@ -384,6 +386,18 @@ export default function Page() {
       move401kDataToRoth(REALIZED_TICKER_COMMENTS_KEY, (roth, k401) => ({ ...(k401 && typeof k401 === "object" ? k401 : {}), ...(roth && typeof roth === "object" ? roth : {}) }));
       window.localStorage.setItem(REALIZED_ROTH_BUCKET_FIX_KEY, "1");
     }
+    let savedRemovedIds: Record<RealizedPortfolioId,string[]> = { robinhood: [], "fidelity-401k": [], "fidelity-roth": [] };
+    try {
+      const parsedRemoved = JSON.parse(window.localStorage.getItem(REALIZED_REMOVED_POSITION_IDS_KEY) ?? "null") as Partial<Record<RealizedPortfolioId,string[]>> | null;
+      if(parsedRemoved){
+        savedRemovedIds={
+          robinhood:Array.isArray(parsedRemoved.robinhood)?parsedRemoved.robinhood:[],
+          "fidelity-401k":Array.isArray(parsedRemoved["fidelity-401k"])?parsedRemoved["fidelity-401k"]:[],
+          "fidelity-roth":Array.isArray(parsedRemoved["fidelity-roth"])?parsedRemoved["fidelity-roth"]:[],
+        };
+        setRemovedPositionIds(savedRemovedIds);
+      }
+    } catch {}
     const currentSaved = window.localStorage.getItem(STORAGE_KEY);
     const previousSaved = PREVIOUS_STORAGE_KEYS.map((key) => window.localStorage.getItem(key)).find(Boolean);
     const saved = currentSaved ?? previousSaved;
@@ -417,13 +431,13 @@ export default function Page() {
           setPositionsByPortfolio({
             robinhood: migrated,
             "fidelity-401k": [],
-            "fidelity-roth": ROTH_IRA_SUMMARY_POSITIONS,
+            "fidelity-roth": ROTH_IRA_SUMMARY_POSITIONS.filter(position=>position.lastSellDate && !savedRemovedIds["fidelity-roth"].includes(position.id)),
           });
         } else if (parsed && typeof parsed === "object") {
           setPositionsByPortfolio({
             robinhood: migratePositions(parsed.robinhood ?? []),
             "fidelity-401k": migratePositions(parsed["fidelity-401k"] ?? []),
-            "fidelity-roth": mergeRothSummaryPositions(migratePositions(parsed["fidelity-roth"] ?? [])),
+            "fidelity-roth": migratePositions(parsed["fidelity-roth"] ?? []).filter(position=>position.lastSellDate && !savedRemovedIds["fidelity-roth"].includes(position.id)),
           });
         }
       } catch { window.localStorage.removeItem(STORAGE_KEY); }
@@ -449,6 +463,10 @@ export default function Page() {
   useEffect(() => {
     if (hasHydrated) window.localStorage.setItem(REALIZED_IGNORED_TRANSACTION_IDS_KEY, JSON.stringify(ignoredTransactionIds));
   }, [hasHydrated, ignoredTransactionIds]);
+
+  useEffect(() => {
+    if (hasHydrated) window.localStorage.setItem(REALIZED_REMOVED_POSITION_IDS_KEY, JSON.stringify(removedPositionIds));
+  }, [hasHydrated, removedPositionIds]);
 
   useEffect(() => {
     try {
@@ -484,7 +502,10 @@ export default function Page() {
     const feeTransactionSignature = portfolioIds.flatMap((portfolioId) => transactionsByPortfolio[portfolioId])
       .map((transaction) => `${transaction.id}:${transaction.fees}:${transaction.realizedGain ?? ""}`)
       .sort().join("|");
-    const base: RealizedPosition[] = portfolioIds.flatMap((portfolioId) => positionsByPortfolio[portfolioId].map((position) => {
+    const base: RealizedPosition[] = portfolioIds.flatMap((portfolioId) => positionsByPortfolio[portfolioId]
+      .filter(position=>!removedPositionIds[portfolioId].includes(position.id))
+      .filter(position=>portfolioId!=="fidelity-roth"||Boolean(position.lastSellDate))
+      .map((position) => {
       const keepManualFees = position.manualFees && position.feeTransactionSignature === feeTransactionSignature;
       return {
         ...position,
@@ -547,7 +568,7 @@ export default function Page() {
       else base.push(makePosition(symbol + (type === "option" ? " Option" : ""), 0, fees, "", `tracked-fee-${symbol}-${type}`));
     });
     return base;
-  }, [activePortfolioId, ignoredTransactionIds, positionsByPortfolio, transactionsByPortfolio]);
+  }, [activePortfolioId, ignoredTransactionIds, removedPositionIds, positionsByPortfolio, transactionsByPortfolio]);
 
   const totals = useMemo(() => ({
     realized: visiblePositions.reduce((sum, item) => sum + item.amount, 0),
@@ -688,6 +709,11 @@ export default function Page() {
         return next;
       });
     }
+    setRemovedPositionIds(current=>({
+      robinhood:Array.from(new Set([...current.robinhood,...positionsByPortfolio.robinhood.filter(item=>selectedPositionIds.has(item.id)).map(item=>item.id)])),
+      "fidelity-401k":Array.from(new Set([...current["fidelity-401k"],...positionsByPortfolio["fidelity-401k"].filter(item=>selectedPositionIds.has(item.id)).map(item=>item.id)])),
+      "fidelity-roth":Array.from(new Set([...current["fidelity-roth"],...positionsByPortfolio["fidelity-roth"].filter(item=>selectedPositionIds.has(item.id)).map(item=>item.id)])),
+    }));
     setPositionsByPortfolio((current) => ({
       robinhood: current.robinhood.filter((item) => !selectedPositionIds.has(item.id)),
       "fidelity-401k": current["fidelity-401k"].filter((item) => !selectedPositionIds.has(item.id)),
@@ -775,6 +801,7 @@ export default function Page() {
   function removePosition(position: RealizedPosition) {
     if (!window.confirm(`Remove this ${position.type} entry for ${position.symbol}?`)) return;
     ignoreSourceTransactions(position);
+    setRemovedPositionIds(current=>({...current,[targetPortfolioId]:Array.from(new Set([...current[targetPortfolioId],position.id]))}));
     setPositions((current) => current.filter((item) => item.id !== position.id));
     setSelectedPositionIds((current) => { const next = new Set(current); next.delete(position.id); return next; });
     const removesTicker = visiblePositions.filter((item) => item.symbol === position.symbol && item.id !== position.id).length === 0;

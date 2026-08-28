@@ -1464,11 +1464,15 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
     Object.entries(verifiedTotals).forEach(([period,realizedProfit])=>{const existing=rows.find(r=>r.period===period);if(existing)existing.realizedProfit=realizedProfit;else rows.push({period,realizedProfit,income:incomeTotals[period]??0});});
     Object.entries(incomeTotals).forEach(([period,income])=>{const existing=rows.find(r=>r.period===period);if(existing)existing.income=income;else rows.push({period,realizedProfit:0,income});});
     const filtered=rows.filter(r=>r.period.match(/(20\d{2})/)?.[1]===selectedYear && !/^Q/.test(r.period));
-    if(!isRobinhood||selectedYear==="2024"){for(const month of months){const period=`${month} ${selectedYear}`;if(!filtered.some(r=>r.period===period))filtered.push({period,realizedProfit:0,income:0});}}
-    return filtered.sort((a,b)=>periodTime(a.period)-periodTime(b.period));
+    const now=new Date();
+    const currentYear=String(now.getFullYear());
+    const maxMonthIndex=selectedYear===currentYear?now.getMonth():11;
+    const monthLimit=!isRobinhood&&selectedYear==="2026"?Math.min(maxMonthIndex,7):maxMonthIndex;
+    if(!isRobinhood||selectedYear==="2024"){for(const [index,month] of months.entries()){if(index>monthLimit)break;const period=`${month} ${selectedYear}`;if(!filtered.some(r=>r.period===period))filtered.push({period,realizedProfit:0,income:0});}}
+    return filtered.filter(r=>{if(isRobinhood||selectedYear!=="2026")return true;const month=r.period.split(" ")[0];return months.indexOf(month)<=7;}).sort((a,b)=>periodTime(a.period)-periodTime(b.period));
   },[selectedYear,verifiedTotals,incomeTotals,isRobinhood]);
   const annualData=useMemo(()=>{
-    const years=new Set<string>(["2024","2025","2026"]);
+    const years=new Set<string>(isRobinhood?["2024","2025","2026"]:["2025","2026"]);
     if(isRobinhood)quarterlyIncome.forEach(row=>{const y=String(row.period).match(/(20\d{2})/)?.[1];if(y)years.add(y);});
     Object.keys(verifiedTotals).forEach(period=>{const y=period.match(/(20\d{2})/)?.[1];if(y)years.add(y);});
     Object.keys(incomeTotals).forEach(period=>{const y=period.match(/(20\d{2})/)?.[1];if(y)years.add(y);});
@@ -1550,7 +1554,7 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
             <button type="button" onClick={()=>setView("month")} className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition",view==="month"?"bg-emerald-500/15 text-emerald-400 shadow-sm ring-1 ring-emerald-500/25":"text-zinc-500 hover:bg-white/[.04] hover:text-zinc-200")}><CalendarDays size={14}/>Month</button>
             <button type="button" onClick={()=>setView("year")} className={cn("inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition",view==="year"?"bg-emerald-500/15 text-emerald-400 shadow-sm ring-1 ring-emerald-500/25":"text-zinc-500 hover:bg-white/[.04] hover:text-zinc-200")}><BarChart3 size={14}/>Year</button>
           </div>
-          {view!=="year"&&<div className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-400"/><select value={selectedYear} onChange={e=>setSelectedYear(e.target.value)} className="h-10 appearance-none rounded-xl border border-white/[.08] bg-white/[.025] pl-9 pr-9 text-sm font-semibold outline-none transition hover:border-emerald-500/25 focus:border-emerald-500/40 dark:bg-zinc-950/70">{["2026","2025","2024"].map(y=><option key={y}>{y}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-400"/></div>}
+          {view!=="year"&&<div className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-400"/><select value={selectedYear} onChange={e=>setSelectedYear(e.target.value)} className="h-10 appearance-none rounded-xl border border-white/[.08] bg-white/[.025] pl-9 pr-9 text-sm font-semibold outline-none transition hover:border-emerald-500/25 focus:border-emerald-500/40 dark:bg-zinc-950/70">{(isRobinhood?["2026","2025","2024"]:["2026","2025"]).map(y=><option key={y}>{y}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-400"/></div>}
         </div>
       </CardHeader>
       <CardContent className="pt-5"><div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:4}} onClick={(state:any)=>{const period=state?.activePayload?.[0]?.payload?.period;if(typeof period==="string")open(period);}} style={{cursor:"pointer"}}>
