@@ -1649,7 +1649,7 @@ export default function SavingsInvestmentsPage() {
       "Aug 2026": 469.88,
     };
 
-    const rows = quarterlyIncome.map((row) => ({
+    const rows: { period: string; realizedProfit: number; income: number }[] = quarterlyIncome.map((row) => ({
       period: row.period,
       realizedProfit: row.rothProfit,
       income: row.rothIncome,
