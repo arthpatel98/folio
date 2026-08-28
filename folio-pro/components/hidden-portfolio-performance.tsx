@@ -1626,11 +1626,51 @@ export default function SavingsInvestmentsPage() {
     return mergeMonthlySales(base, nonVerifiedMonthlySales);
   }, [realizedSalesByMonth,verifiedCloseDateMonthlyTotals]);
 
-  const rothQuarterly = useMemo(() => mergeMonthlySales(quarterlyIncome.map((row) => ({
-    period: row.period,
-    realizedProfit: row.rothProfit,
-    income: row.rothIncome,
-  })), realizedSalesByMonth.roth), [realizedSalesByMonth]);
+  const rothQuarterly = useMemo(() => {
+    // Fidelity Roth IRA closed-lot realized P/L imported from the Fidelity
+    // Portfolio Closed Lots report dated Aug 27, 2026. Keep this account
+    // isolated from Robinhood and place each gain/loss in its actual sale month.
+    const fidelityRothClosedLotsByMonth: Record<string, number> = {
+      "Jan 2025": 218.60,
+      "Feb 2025": 1781.29,
+      "May 2025": 1608.72,
+      "Jun 2025": 2043.83,
+      "Aug 2025": 779.46,
+      "Sep 2025": 1015.90,
+      "Oct 2025": 779.41,
+      "Nov 2025": 808.05,
+      "Jan 2026": 582.41,
+      "Feb 2026": 322.66,
+      "Mar 2026": -1427.77,
+      "Apr 2026": -1508.22,
+      "May 2026": 547.18,
+      "Jun 2026": 51.95,
+      "Jul 2026": -415.33,
+      "Aug 2026": 469.88,
+    };
+
+    const rows = quarterlyIncome.map((row) => ({
+      period: row.period,
+      realizedProfit: row.rothProfit,
+      income: row.rothIncome,
+    }));
+
+    Object.entries(fidelityRothClosedLotsByMonth).forEach(([period, realizedProfit]) => {
+      const existing = rows.find((row) => row.period === period);
+      if (existing) existing.realizedProfit = realizedProfit;
+      else rows.push({ period, realizedProfit, income: 0 });
+    });
+
+    // Manual Roth transactions continue to flow into the chart by date.
+    // Avoid adding a duplicate static amount when a month is already supplied
+    // by the Fidelity closed-lots report.
+    const additionalMonthlySales = new Map(
+      Array.from(realizedSalesByMonth.roth.entries()).filter(
+        ([period]) => fidelityRothClosedLotsByMonth[period] === undefined,
+      ),
+    );
+    return mergeMonthlySales(rows, additionalMonthlySales);
+  }, [realizedSalesByMonth]);
 
   const incomeTotals = useMemo(() => {
     const sum = (rows: { realizedProfit: number; income: number }[]) => ({
