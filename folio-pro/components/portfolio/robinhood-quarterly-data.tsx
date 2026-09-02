@@ -23,6 +23,13 @@ type IncomeEdit = Partial<IncomeTransaction> & { deleted?: boolean };
 type IncomeEdits = Record<string, IncomeEdit>;
 const INCOME_EDITS_KEY = "folio-robinhood-income-edits-v1";
 const incomeId=(item:IncomeTransaction,index:number)=>`${item.date}|${item.ticker}|${item.amount}|${index}`;
+const incomeSourceFromTransaction=(tx:Transaction)=>{
+  const descriptor=[tx.notes,tx.source,tx.symbol].filter(Boolean).join(" ").toLowerCase();
+  if(descriptor.includes("gold deposit boost"))return "Gold Deposit Boost Payout";
+  if(tx.type==="dividend")return `${(tx.symbol||"Dividend").toUpperCase()} Dividend`;
+  if(tx.type==="interest")return "Interest Payment";
+  return null;
+};
 const ROBINHOOD_INCOME_TRANSACTIONS: IncomeTransaction[] = [
   // Dividends
   { date: "2024-02-29", ticker: "ADM Dividend", amount: 0.54 },
@@ -121,6 +128,7 @@ const ROBINHOOD_INCOME_TRANSACTIONS: IncomeTransaction[] = [
   { date: "2026-05-31", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
   { date: "2026-06-30", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
   { date: "2026-07-31", ticker: "Gold Deposit Boost Payout", amount: 7.34 },
+  { date: "2026-08-31", ticker: "Gold Deposit Boost Payout", amount: 2.08 },
 
   // Interest Payments
   { date: "2024-07-31", ticker: "Interest Payment", amount: 3.39 },
@@ -1395,13 +1403,30 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
   useEffect(()=>{try{const raw=window.localStorage.getItem(VERIFIED_PROFIT_EDITS_KEY);if(raw)setEdits(JSON.parse(raw));const incomeRaw=window.localStorage.getItem(INCOME_EDITS_KEY);if(incomeRaw)setIncomeEdits(JSON.parse(incomeRaw));}catch{}},[]);
   const saveEdit=(id:string,patch:VerifiedProfitEdit)=>setEdits(current=>{const next={...current,[id]:{...(current[id]??{}),...patch}};try{window.localStorage.setItem(VERIFIED_PROFIT_EDITS_KEY,JSON.stringify(next));}catch{}return next;});
   const effectiveIncomeTransactions=useMemo(()=>{
-    const staticRows=includesRobinhood?ROBINHOOD_INCOME_TRANSACTIONS.map((item,index)=>{const id=incomeId(item,index);const patch=incomeEdits[id]??{};return patch.deleted?null:{id,item:{...item,...patch} as IncomeTransaction};}).filter((row):row is {id:string;item:IncomeTransaction}=>row!==null):[];
-    const staticKeys=new Set(staticRows.map(({item})=>`${item.date}|${item.ticker.toUpperCase()}|${item.amount.toFixed(2)}`));
-    const liveRows=activeTransactions.filter(tx=>tx.type==="dividend"||tx.type==="interest").map(tx=>{
-      const source=tx.type==="dividend"?`${(tx.symbol||"Dividend").toUpperCase()} Dividend`:"Interest Payment";
-      const item:IncomeTransaction={date:tx.date,ticker:source,amount:Number(tx.amount)||0};
-      return {id:`live-income-${tx.id}`,item};
-    }).filter(({item})=>!staticKeys.has(`${item.date}|${item.ticker.toUpperCase()}|${item.amount.toFixed(2)}`));
+    const staticDefinitions=includesRobinhood?ROBINHOOD_INCOME_TRANSACTIONS.map((item,index)=>{
+      const id=incomeId(item,index);
+      const patch=incomeEdits[id]??{};
+      const edited={...item,...patch} as IncomeTransaction;
+      return {id,original:item,edited,deleted:Boolean(patch.deleted)};
+    }):[];
+    const staticRows=staticDefinitions.filter(row=>!row.deleted).map(({id,edited})=>({id,item:edited}));
+    // Always reserve the original static fingerprint as well as the edited one. This prevents a
+    // matching live transaction from reappearing after a static dividend/income row is deleted.
+    const staticKeys=new Set<string>();
+    staticDefinitions.forEach(({original,edited})=>{
+      staticKeys.add(`${original.date}|${original.ticker.toUpperCase()}|${original.amount.toFixed(2)}`);
+      staticKeys.add(`${edited.date}|${edited.ticker.toUpperCase()}|${edited.amount.toFixed(2)}`);
+    });
+    const liveRows=activeTransactions.map(tx=>{
+      const source=incomeSourceFromTransaction(tx);
+      if(!source)return null;
+      const original:IncomeTransaction={date:tx.date,ticker:source,amount:Number(tx.amount)||0};
+      if(staticKeys.has(`${original.date}|${original.ticker.toUpperCase()}|${original.amount.toFixed(2)}`))return null;
+      const id=`live-income-${tx.id}`;
+      const patch=incomeEdits[id]??{};
+      if(patch.deleted)return null;
+      return {id,item:{...original,...patch} as IncomeTransaction};
+    }).filter((row):row is {id:string;item:IncomeTransaction}=>row!==null);
     return [...staticRows,...liveRows];
   },[activeTransactions,incomeEdits,includesRobinhood]);
   const persistIncomeEdit=(id:string,patch:IncomeEdit)=>setIncomeEdits(current=>{const next={...current,[id]:{...(current[id]??{}),...patch}};try{window.localStorage.setItem(INCOME_EDITS_KEY,JSON.stringify(next));}catch{}return next;});

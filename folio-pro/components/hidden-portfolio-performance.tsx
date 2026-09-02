@@ -113,6 +113,7 @@ const ROBINHOOD_DIVIDENDS: DividendTransaction[] = [
   { date: "2026-05-31", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
   { date: "2026-06-30", ticker: "Gold Deposit Boost Payout", amount: 8.31 },
   { date: "2026-07-31", ticker: "Gold Deposit Boost Payout", amount: 7.34 },
+  { date: "2026-08-31", ticker: "Gold Deposit Boost Payout", amount: 2.08 },
 
   // Interest Payments
   { date: "2024-07-31", ticker: "Interest Payment", amount: 3.39 },
