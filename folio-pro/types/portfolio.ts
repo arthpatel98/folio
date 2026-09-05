@@ -68,6 +68,7 @@ export interface Transaction {
   price?: number;
   amount: number;
   date: string;
+  createdAt?: string;
   fees: number;
   notes?: string;
   source?: string;

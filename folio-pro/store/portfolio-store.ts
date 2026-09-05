@@ -323,7 +323,8 @@ export const usePortfolioStore = create<State>()(
       addTransaction: (transaction) =>
         set((state) => {
           const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
-          const updated = [transaction, ...state.transactionsByPortfolio[target]];
+          const stampedTransaction = transaction.createdAt ? transaction : { ...transaction, createdAt: new Date().toISOString() };
+          const updated = [stampedTransaction, ...state.transactionsByPortfolio[target]];
           const transactionsByPortfolio = { ...state.transactionsByPortfolio, [target]: updated };
           return {
             transactionsByPortfolio,
