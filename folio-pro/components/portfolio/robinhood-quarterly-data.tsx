@@ -17,8 +17,6 @@ type ProfitDrilldownTransaction = {
 type VerifiedProfitEdit = Partial<ProfitDrilldownTransaction> & { deleted?: boolean };
 type VerifiedProfitEdits = Record<string, VerifiedProfitEdit>;
 const VERIFIED_PROFIT_EDITS_KEY = "folio-robinhood-verified-profit-edits-v1";
-const AUG_2026_PROFIT_EDIT_EXPIRY_KEY = "folio-v52-aug-2026-profit-edit-expiry";
-const AUG_2026_PROFIT_EDIT_WINDOW_MS = 2 * 60 * 60 * 1000;
 
 type IncomeTransaction = { date: string; ticker: string; amount: number };
 type IncomeEdit = Partial<IncomeTransaction> & { deleted?: boolean };
@@ -1403,10 +1401,7 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
   const [incomeDraft,setIncomeDraft]=useState<IncomeTransaction>({date:"",ticker:"",amount:0});
   const [editingProfit,setEditingProfit]=useState<ProfitDrilldownTransaction|null>(null);
   const [profitDraft,setProfitDraft]=useState<ProfitDrilldownTransaction|null>(null);
-  const [aug2026ProfitEditExpiry,setAug2026ProfitEditExpiry]=useState(0);
-  const [clockNow,setClockNow]=useState(()=>Date.now());
-  useEffect(()=>{try{const raw=window.localStorage.getItem(VERIFIED_PROFIT_EDITS_KEY);if(raw)setEdits(JSON.parse(raw));const incomeRaw=window.localStorage.getItem(INCOME_EDITS_KEY);if(incomeRaw)setIncomeEdits(JSON.parse(incomeRaw));let expiry=Number(window.localStorage.getItem(AUG_2026_PROFIT_EDIT_EXPIRY_KEY)||0);if(!expiry){expiry=Date.now()+AUG_2026_PROFIT_EDIT_WINDOW_MS;window.localStorage.setItem(AUG_2026_PROFIT_EDIT_EXPIRY_KEY,String(expiry));}setAug2026ProfitEditExpiry(expiry);}catch{}},[]);
-  useEffect(()=>{if(!aug2026ProfitEditExpiry||clockNow>=aug2026ProfitEditExpiry)return;const timer=window.setInterval(()=>setClockNow(Date.now()),30000);return()=>window.clearInterval(timer);},[aug2026ProfitEditExpiry,clockNow]);
+  useEffect(()=>{try{const raw=window.localStorage.getItem(VERIFIED_PROFIT_EDITS_KEY);if(raw)setEdits(JSON.parse(raw));const incomeRaw=window.localStorage.getItem(INCOME_EDITS_KEY);if(incomeRaw)setIncomeEdits(JSON.parse(incomeRaw));}catch{}},[]);
   const saveEdit=(id:string,patch:VerifiedProfitEdit)=>setEdits(current=>{const next={...current,[id]:{...(current[id]??{}),...patch}};try{window.localStorage.setItem(VERIFIED_PROFIT_EDITS_KEY,JSON.stringify(next));}catch{}return next;});
   const effectiveIncomeTransactions=useMemo(()=>{
     const staticDefinitions=includesRobinhood?ROBINHOOD_INCOME_TRANSACTIONS.map((item,index)=>{
@@ -1436,12 +1431,11 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
     return [...staticRows,...liveRows];
   },[activeTransactions,incomeEdits,includesRobinhood]);
   const persistIncomeEdit=(id:string,patch:IncomeEdit)=>setIncomeEdits(current=>{const next={...current,[id]:{...(current[id]??{}),...patch}};try{window.localStorage.setItem(INCOME_EDITS_KEY,JSON.stringify(next));}catch{}return next;});
-  const canEditIncome=(date:string)=>date>="2026-09-01";
+  const canEditIncome=(date:string)=>isRobinhood&&date.startsWith("2026-09-");
   const openIncomeEditor=(id:string,item:IncomeTransaction)=>{if(!canEditIncome(item.date))return;setEditingIncome({id,item});setIncomeDraft({...item});};
   const saveIncomeEditor=()=>{if(!editingIncome)return;persistIncomeEdit(editingIncome.id,incomeDraft);setEditingIncome(null);};
   const deleteIncomeEditor=()=>{if(!editingIncome)return;persistIncomeEdit(editingIncome.id,{deleted:true});setEditingIncome(null);};
-  const aug2026ProfitEditingActive=selectedPeriod==="Aug 2026"&&aug2026ProfitEditExpiry>0&&clockNow<aug2026ProfitEditExpiry;
-  const canEditProfit=(tx:ProfitDrilldownTransaction)=>activePortfolioId==="fidelity-roth"||(isRobinhood&&aug2026ProfitEditingActive&&tx.date.startsWith("2026-08-"));
+  const canEditProfit=(tx:ProfitDrilldownTransaction)=>activePortfolioId==="fidelity-roth"||(isRobinhood&&tx.date.startsWith("2026-09-"));
   const openProfitEditor=(tx:ProfitDrilldownTransaction)=>{if(!canEditProfit(tx))return;setEditingProfit(tx);setProfitDraft({...tx});};
   const saveProfitEditor=()=>{if(!editingProfit||!profitDraft)return;saveEdit(editingProfit.id,profitDraft);setEditingProfit(null);setProfitDraft(null);};
   const deleteProfitEditor=()=>{if(!editingProfit)return;saveEdit(editingProfit.id,{deleted:true});setEditingProfit(null);setProfitDraft(null);};
@@ -1584,7 +1578,7 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
   const idx=selectedPeriod?available.indexOf(selectedPeriod):-1;
   const prev=idx>0?available[idx-1]:null, next=idx>=0&&idx<available.length-1?available[idx+1]:null;
   const open=(period:string)=>{if(view==="year"){setSelectedYear(period);setView("month");return;}if(period.match(/^[A-Z][a-z]{2} 20\d{2}$/)){setSelectedPeriod(period);setDetailView("profit");}};
-  const BarValueLabel=(props:any)=>{const {x,y,width,height,value}=props;if(value===undefined||value===null)return null;const numericValue=Number(value);const labelY=numericValue<0?Number(y)+Number(height)+7:Number(y)-7;return <text x={Number(x)+Number(width)/2} y={labelY} textAnchor="middle" dominantBaseline={numericValue<0?"hanging":"auto"} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke">{wholeDollar(numericValue)}</text>;};
+  const BarValueLabel=(props:any)=>{const {x,y,width,height,value}=props;if(value===undefined||value===null)return null;const numericValue=Number(value);const isNegative=numericValue<0;const labelY=isNegative?Number(y)+Number(height)+8:Number(y)-8;return <text x={Number(x)+Number(width)/2} y={labelY} textAnchor="middle" dominantBaseline={isNegative?"hanging":"auto"} fill={isNegative?"#fb7185":"#e4e4e7"} fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke">{wholeDollar(numericValue)}</text>;};
   return <>
     <Card className="overflow-hidden">
       <CardHeader className="flex flex-row items-start justify-between gap-4 border-b border-zinc-200/70 dark:border-white/[.06]">
@@ -1597,9 +1591,9 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
           {view!=="year"&&<div className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-400"/><select value={selectedYear} onChange={e=>setSelectedYear(e.target.value)} className="h-10 appearance-none rounded-xl border border-white/[.08] bg-white/[.025] pl-9 pr-9 text-sm font-semibold outline-none transition hover:border-emerald-500/25 focus:border-emerald-500/40 dark:bg-zinc-950/70">{(isRobinhood?["2026","2025","2024"]:["2026","2025"]).map(y=><option key={y}>{y}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-400"/></div>}
         </div>
       </CardHeader>
-      <CardContent className="pt-5"><div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:12}} onClick={(state:any)=>{const period=state?.activePayload?.[0]?.payload?.period;if(typeof period==="string")open(period);}} style={{cursor:"pointer"}}>
+      <CardContent className="pt-5"><div className="h-80"><ResponsiveContainer width="100%" height="100%"><BarChart data={data} barGap={6} barCategoryGap="22%" margin={{left:4,right:12,top:28,bottom:24}} onClick={(state:any)=>{const period=state?.activePayload?.[0]?.payload?.period;if(typeof period==="string")open(period);}} style={{cursor:"pointer"}}>
         <defs><linearGradient id="rhq-profit" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#34d399"/><stop offset="100%" stopColor="#10b981" stopOpacity={0.65}/></linearGradient><linearGradient id="rhq-income" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#60a5fa"/><stop offset="100%" stopColor="#3b82f6" stopOpacity={0.65}/></linearGradient><linearGradient id="rhq-negative" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#fb7185"/><stop offset="100%" stopColor="#e11d48" stopOpacity={0.72}/></linearGradient></defs>
-        <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="period" tick={{fill:"#a1a1aa",fontSize:10,fontWeight:600}} axisLine={false} tickLine={false} interval={0}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={chartAxisValue} padding={{top:12,bottom:26}}/>
+        <CartesianGrid strokeDasharray="3 6" vertical={false} stroke="rgba(161,161,170,.13)"/><XAxis dataKey="period" tick={{fill:"#a1a1aa",fontSize:10,fontWeight:600}} axisLine={false} tickLine={false} interval={0} tickMargin={18}/><YAxis tick={{fill:"#71717a",fontSize:10}} axisLine={false} tickLine={false} tickFormatter={chartAxisValue} padding={{top:12,bottom:44}}/>
         <Tooltip cursor={{fill:"rgba(161,161,170,.06)"}} content={({active,payload,label}:any)=>{if(!active||!payload?.length)return null;const row=payload[0]?.payload??{};return <div className="min-w-48 rounded-xl border border-white/10 bg-zinc-900/95 p-3 text-xs shadow-2xl backdrop-blur"><div className="mb-2 font-bold text-zinc-100">{label}</div><div className="space-y-1.5"><div className="flex items-center justify-between gap-6"><span className="text-emerald-400">Profit</span><span className="font-semibold text-zinc-100">{money(Number(row.realizedProfit??0))}</span></div><div className="flex items-center justify-between gap-6"><span className="text-blue-400">Dividends</span><span className="font-semibold text-zinc-100">{money(Number(row.dividends??0))}</span></div><div className="flex items-center justify-between gap-6"><span className="text-amber-400">{isRobinhood?"Robinhood Extras":"Extras"}</span><span className="font-semibold text-zinc-100">{money(Number(row.extras??0))}</span></div></div></div>;}}/><Legend wrapperStyle={{fontSize:12,paddingTop:14}} iconType="circle"/>
         <Bar dataKey="realizedProfit" name="Profit" fill="#10b981" radius={[7,7,2,2]} maxBarSize={34} onClick={(entry:any)=>open(entry?.period)} style={{cursor:"pointer"}}>{data.map(row=><Cell key={`p-${row.period}`} fill={row.realizedProfit<0?"url(#rhq-negative)":"url(#rhq-profit)"}/>)}<LabelList dataKey="realizedProfit" content={<BarValueLabel/>}/></Bar>
         <Bar dataKey="income" name="Dividends & Interest" fill="#3b82f6" radius={[7,7,2,2]} maxBarSize={34} onClick={(entry:any)=>open(entry?.period)} style={{cursor:"pointer"}}>{data.map(row=><Cell key={`i-${row.period}`} fill={row.income<0?"url(#rhq-negative)":"url(#rhq-income)"}/>)}<LabelList dataKey="income" content={<BarValueLabel/>}/></Bar>
