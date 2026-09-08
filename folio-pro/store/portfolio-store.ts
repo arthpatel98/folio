@@ -472,11 +472,18 @@ export const usePortfolioStore = create<State>()(
             ? fifoSale.costBasis
             : closedQuantity * (existing?.averageCost ?? holding.averageCost) * multiplier;
           const realizedProceeds = closedQuantity * price * multiplier;
-          const realizedGain = closedQuantity > 0
+          const grossRealizedGain = closedQuantity > 0
             ? (assetType === "option"
                 ? (price - (existing?.averageCost ?? holding.averageCost)) * closedQuantity * multiplier * Math.sign(oldQuantityForRealized)
                 : realizedProceeds - realizedCostBasis)
             : undefined;
+          // Fidelity Roth IRA stock-sale realized P/L is net of platform fees.
+          // Keep options and every other portfolio on the existing calculation.
+          const realizedGain = grossRealizedGain === undefined
+            ? undefined
+            : (target === "fidelity-roth" && assetType === "stock" && action === "sell"
+                ? grossRealizedGain - safeFees
+                : grossRealizedGain);
           const selectedTaxLots = closesStock && fifoSale ? fifoSale.selectedLots.map((lot) => ({
             ...lot,
             realizedGain: lot.quantity * price - lot.costBasis,
