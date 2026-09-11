@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { optionCollateral } from "@/lib/calculations/portfolio";
 import type { Holding } from "@/types/portfolio";
 import { PORTFOLIO_ID_SCHEMA_VERSION } from "@/lib/portfolio-id-migration";
+import { DCA_UPDATED_EVENT, loadDcaPositions } from "@/lib/dca-storage";
+import type { DcaPosition } from "@/lib/dca-data";
 
 const ROBINHOOD_TARGETS = [
   ["Oct 31, 2026",120147,0],["Dec 31, 2026",137088,16941],["Feb 28, 2027",156417,19329],["Apr 28, 2027",178472,22055],["Jun 28, 2027",203636,25164],["Aug 28, 2027",232349,28713],["Oct 28, 2027",265110,32761],["Dec 28, 2027",302491,37381],["Feb 28, 2028",345142,42651],["Apr 28, 2028",393807,48665],["Jun 28, 2028",449334,55527],["Aug 28, 2028",512690,63356],["Oct 28, 2028",584980,72290],["Dec 28, 2028",667462,82482],
@@ -53,6 +55,8 @@ export default function TargetPlannerPage(){
   const [newBuyPriceInputs,setNewBuyPriceInputs]=useState<Record<string,string>>({});
   const [reinvestmentStepsByDate,setReinvestmentStepsByDate]=useState<Record<string,ReinvestmentStep[]>>({});
   const [selectedPathPositionsByDate,setSelectedPathPositionsByDate]=useState<Record<string,Record<string,boolean>>>({});
+  const [includeFuturePurchases,setIncludeFuturePurchases]=useState(false);
+  const [dcaPositions,setDcaPositions]=useState<DcaPosition[]>([]);
   const storageKey=`folio-target-scenarios-by-date:${activeId}`;
   const pathwayStorageKey=`folio-target-pathway-by-date:${activeId}`;
   const pathwaySelectionStorageKey=`folio-target-pathway-selection-by-date:${activeId}`;
@@ -69,6 +73,14 @@ export default function TargetPlannerPage(){
       });
       localStorage.setItem(migrationKey,String(PORTFOLIO_ID_SCHEMA_VERSION));
     }
+  },[]);
+  useEffect(()=>{
+    const refresh=()=>setDcaPositions(loadDcaPositions());
+    refresh();
+    window.addEventListener(DCA_UPDATED_EVENT,refresh);
+    const onStorage=(event:StorageEvent)=>{if(event.key?.startsWith("folio-dca-positions"))refresh();};
+    window.addEventListener("storage",onStorage);
+    return()=>{window.removeEventListener(DCA_UPDATED_EVENT,refresh);window.removeEventListener("storage",onStorage);};
   },[]);
   useEffect(()=>{
     const savedDate=localStorage.getItem(targetDateStorageKey);
@@ -125,23 +137,54 @@ export default function TargetPlannerPage(){
   const selectedTarget=rows.find(r=>r.date===selectedDate)??rows[0];
   const baseGap=Math.max(0,selectedTarget.target-currentValue);
   const owned=selectedHoldings.filter(h=>Math.abs(h.shares)>0).sort((a,b)=>a.symbol.localeCompare(b.symbol)||positionLabel(a).localeCompare(positionLabel(b)));
+  const futurePurchasesBySymbol=(()=>{
+    const portfolioIds=activeId==="all"?["robinhood","fidelity-roth"]:[activeId];
+    const map=new Map<string,{shares:number;cost:number}>();
+    dcaPositions.forEach(position=>{
+      if(!portfolioIds.includes(position.portfolioId??""))return;
+      const isOptionPosition=position.id.includes("-option-")||/\b(?:call|put)\b/i.test(position.label??"");
+      if(isOptionPosition)return;
+      const symbol=position.symbol.trim().toUpperCase();
+      const futureLots=position.lots.filter(lot=>lot.future);
+      if(!futureLots.length)return;
+      const current=map.get(symbol)??{shares:0,cost:0};
+      futureLots.forEach(lot=>{
+        const shares=Number(lot.shares)||0;
+        const cost=Number(lot.amount)||shares*(Number(lot.price)||0);
+        current.shares+=Math.max(0,shares);
+        current.cost+=Math.max(0,cost);
+      });
+      map.set(symbol,current);
+    });
+    return map;
+  })();
+  const appliedFutureSymbols=new Set<string>();
   const details=owned.map(h=>{
     const k=keyFor(h); const s=scenarios[k]??{targetPrice:0,newBuyPrice:0,additionalQty:0,gapShare:25};
     const multiplier=h.assetType==="option"?100:1;
     const direction=h.assetType==="option"?(Math.sign(h.shares)||1):1;
-    const ownedQty=Math.abs(h.shares); const totalQty=ownedQty+Math.max(0,s.additionalQty);
+    const ownedQty=Math.abs(h.shares);
+    const symbol=h.symbol.trim().toUpperCase();
+    const canApplyFuture=includeFuturePurchases&&h.assetType!=="option"&&!appliedFutureSymbols.has(symbol);
+    const futurePurchase=canApplyFuture?(futurePurchasesBySymbol.get(symbol)??{shares:0,cost:0}):{shares:0,cost:0};
+    if(canApplyFuture)appliedFutureSymbols.add(symbol);
+    const futureShares=futurePurchase.shares;
+    const futureCost=futurePurchase.cost;
+    const modeledOwnedQty=ownedQty+futureShares;
+    const totalQty=modeledOwnedQty+Math.max(0,s.additionalQty);
     const existingProfit=(s.targetPrice-h.currentPrice)*ownedQty*multiplier*direction;
+    const futureProfit=futureShares>0?s.targetPrice*futureShares-futureCost:0;
     const hasNewPurchase=s.newBuyPrice>0&&s.additionalQty>0;
     const addedProfit=hasNewPurchase?(s.targetPrice-s.newBuyPrice)*Math.max(0,s.additionalQty)*multiplier*direction:0;
-    const totalProfit=existingProfit+addedProfit;
-    const investment=Math.max(0,s.additionalQty)*Math.max(0,s.newBuyPrice)*multiplier;
+    const totalProfit=existingProfit+futureProfit+addedProfit;
+    const investment=futureCost+Math.max(0,s.additionalQty)*Math.max(0,s.newBuyPrice)*multiplier;
     const expectedReturn=h.currentPrice>0?((s.targetPrice-h.currentPrice)/h.currentPrice)*100*direction:0;
     const gapCovered=baseGap>0?totalProfit/baseGap*100:100;
     const desiredProfit=baseGap*(s.gapShare/100);
     const profitPerUnit=Math.max(0,(s.targetPrice-h.currentPrice)*multiplier*direction);
     const qtyForGoal=profitPerUnit>0?Math.ceil(desiredProfit/profitPerUnit):0;
-    const extraForGoal=Math.max(0,qtyForGoal-ownedQty);
-    return {h,k,s,multiplier,ownedQty,totalQty,existingProfit,addedProfit,totalProfit,investment,expectedReturn,gapCovered,desiredProfit,qtyForGoal,extraForGoal};
+    const extraForGoal=Math.max(0,qtyForGoal-modeledOwnedQty);
+    return {h,k,s,multiplier,ownedQty,modeledOwnedQty,futureShares,futureCost,totalQty,existingProfit,futureProfit,addedProfit,totalProfit,investment,expectedReturn,gapCovered,desiredProfit,qtyForGoal,extraForGoal};
   });
   const scenarioProfit=finite(details.reduce((s,d)=>s+finite(d.totalProfit),0));
   const totalInvestment=finite(details.reduce((s,d)=>s+finite(d.investment),0));
@@ -151,7 +194,7 @@ export default function TargetPlannerPage(){
   const remainingGapBeforeSteps=scenarioRemainingGap;
   const sellSelections=details.filter(d=>d.s.targetPrice>0&&selectedPathPositions[d.k]).map(d=>({
     ...d,
-    saleProceeds:d.s.targetPrice*d.ownedQty*d.multiplier,
+    saleProceeds:d.s.targetPrice*d.modeledOwnedQty*d.multiplier,
   }));
   const totalSaleProceeds=sellSelections.reduce((sum,d)=>sum+d.saleProceeds,0);
   const startingCashPool=finite(totalSaleProceeds+remainingAvailableCash);
@@ -246,17 +289,23 @@ export default function TargetPlannerPage(){
             <p className="mt-2 text-xs text-zinc-500">Available Cash: <span className="font-medium text-white">{money2(remainingAvailableCash)}</span></p>
             {cashError&&<p className="mt-2 text-sm font-medium text-red-400">{cashError}</p>}
           </div>
-          <label className="w-full lg:w-auto lg:min-w-56">
-            <span className="mb-2 block text-xs font-medium tracking-wider text-zinc-500">Target Date</span>
-            <div className="relative">
-              <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-blue-300"/>
-              <select value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} className="h-11 w-full appearance-none rounded-xl border border-blue-400/25 bg-blue-400/[.07] pl-10 pr-10 text-sm font-medium text-blue-100 outline-none transition focus:border-blue-300/60 focus:ring-2 focus:ring-blue-400/15">{rows.map(r=><option key={r.date} value={r.date}>{r.date}</option>)}</select>
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-blue-300">▼</span>
-            </div>
-          </label>
+          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-end lg:w-auto">
+            <label className="inline-flex h-11 cursor-pointer items-center justify-between gap-4 rounded-xl border border-emerald-400/20 bg-emerald-400/[.05] px-4 sm:min-w-64">
+              <span><span className="block text-xs font-medium text-zinc-300">Include Future Purchases</span><span className="mt-0.5 block text-[11px] text-zinc-500">From Return Simulator Purchase Lots</span></span>
+              <span className={cn("relative h-6 w-11 shrink-0 rounded-full transition",includeFuturePurchases?"bg-emerald-400":"bg-white/10")}><input type="checkbox" checked={includeFuturePurchases} onChange={e=>setIncludeFuturePurchases(e.target.checked)} className="sr-only"/><span className={cn("absolute top-1 size-4 rounded-full bg-white transition-all",includeFuturePurchases?"left-6":"left-1")}/></span>
+            </label>
+            <label className="w-full sm:w-auto sm:min-w-56">
+              <span className="mb-2 block text-xs font-medium tracking-wider text-zinc-500">Target Date</span>
+              <div className="relative">
+                <CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-blue-300"/>
+                <select value={selectedDate} onChange={e=>setSelectedDate(e.target.value)} className="h-11 w-full appearance-none rounded-xl border border-blue-400/25 bg-blue-400/[.07] pl-10 pr-10 text-sm font-medium text-blue-100 outline-none transition focus:border-blue-300/60 focus:ring-2 focus:ring-blue-400/15">{rows.map(r=><option key={r.date} value={r.date}>{r.date}</option>)}</select>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-blue-300">▼</span>
+              </div>
+            </label>
+          </div>
         </div>
       </div>
-      <div className="-mx-px overflow-x-auto overscroll-x-contain pb-1"><table className="w-full min-w-[1180px] text-sm"><thead className="bg-white/[.035] text-left text-xs tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Use In Target Path</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Owned</th><th className="px-4 py-3">Average Cost</th><th className="px-4 py-3">Current Price</th><th className="px-4 py-3">Your Target Price</th><th className="px-4 py-3">Expected Return</th><th className="px-4 py-3">Profit At Target</th><th className="px-4 py-3">Target Gap Covered</th></tr></thead><tbody>{details.map(d=><tr key={d.k} className="border-t border-white/[.06]"><td className="px-4 py-3"><label className="inline-flex cursor-pointer items-center gap-2"><input type="checkbox" checked={Boolean(selectedPathPositions[d.k])} onChange={()=>togglePathPosition(d.k)} className="size-4 rounded border-white/20 bg-zinc-950 accent-emerald-500"/><span className={cn("text-xs font-medium",selectedPathPositions[d.k]?"text-emerald-300":"text-zinc-500")}>{selectedPathPositions[d.k]?"Selected":"Select"}</span></label></td><td className="px-4 py-3"><div className="font-medium">{positionLabel(d.h)}</div></td><td className="px-4 py-3">{d.ownedQty.toLocaleString()} {d.h.assetType==="option"?"Contracts":"Shares"}</td><td className="px-4 py-3">{money2(d.h.averageCost)}</td><td className="px-4 py-3">{money2(d.h.currentPrice)}</td><td className="px-4 py-3"><div className="relative w-28"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-blue-300">$</span><input type="text" inputMode="decimal" value={targetPriceInputs[d.k] ?? ((scenarios[d.k]?.targetPrice ?? 0) === 0 ? "" : Number(scenarios[d.k]?.targetPrice).toFixed(2))} onChange={e=>{const value=e.target.value;if(/^\d*(?:\.\d{0,2})?$/.test(value)){setTargetPriceInputs(prev=>({...prev,[d.k]:value}));update(d.k,{targetPrice:value===""?0:Number(value)},d.h);}}} onBlur={()=>setTargetPriceInputs(prev=>{const next={...prev};const value=next[d.k];if(value!==undefined&&value!==""){next[d.k]=Number(value).toFixed(2);}return next;})} className="h-9 w-full rounded-lg border border-blue-400/20 bg-blue-400/[.06] pl-7 pr-3 text-blue-200 outline-none"/></div></td><td className={cn("px-4 py-3 font-medium",d.expectedReturn>=0?"text-emerald-400":"text-red-400")}>{d.expectedReturn>=0?"+":""}{pct(d.expectedReturn)}</td><td className={cn("px-4 py-3 font-medium",d.totalProfit>=0?"text-emerald-400":"text-red-400")}>{d.totalProfit>=0?"+":""}{money2(d.totalProfit)}</td><td className="px-4 py-3">{pct(d.gapCovered)}</td></tr>)}</tbody></table></div>
+      <div className="-mx-px overflow-x-auto overscroll-x-contain pb-1"><table className="w-full min-w-[1180px] text-sm"><thead className="bg-white/[.035] text-left text-xs tracking-wider text-zinc-500"><tr><th className="px-4 py-3">Use In Target Path</th><th className="px-4 py-3">Position</th><th className="px-4 py-3">Owned</th><th className="px-4 py-3">Average Cost</th><th className="px-4 py-3">Current Price</th><th className="px-4 py-3">Your Target Price</th><th className="px-4 py-3">Expected Return</th><th className="px-4 py-3">Profit At Target</th><th className="px-4 py-3">Target Gap Covered</th></tr></thead><tbody>{details.map(d=><tr key={d.k} className="border-t border-white/[.06]"><td className="px-4 py-3"><label className="inline-flex cursor-pointer items-center gap-2"><input type="checkbox" checked={Boolean(selectedPathPositions[d.k])} onChange={()=>togglePathPosition(d.k)} className="size-4 rounded border-white/20 bg-zinc-950 accent-emerald-500"/><span className={cn("text-xs font-medium",selectedPathPositions[d.k]?"text-emerald-300":"text-zinc-500")}>{selectedPathPositions[d.k]?"Selected":"Select"}</span></label></td><td className="px-4 py-3"><div className="font-medium">{positionLabel(d.h)}</div></td><td className="px-4 py-3"><div>{d.ownedQty.toLocaleString()} {d.h.assetType==="option"?"Contracts":"Shares"}</div>{d.futureShares>0&&<div className="mt-1 text-xs font-medium text-emerald-300">+ {d.futureShares.toLocaleString()} Future Shares</div>}</td><td className="px-4 py-3">{money2(d.h.averageCost)}</td><td className="px-4 py-3">{money2(d.h.currentPrice)}</td><td className="px-4 py-3"><div className="relative w-28"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-blue-300">$</span><input type="text" inputMode="decimal" value={targetPriceInputs[d.k] ?? ((scenarios[d.k]?.targetPrice ?? 0) === 0 ? "" : Number(scenarios[d.k]?.targetPrice).toFixed(2))} onChange={e=>{const value=e.target.value;if(/^\d*(?:\.\d{0,2})?$/.test(value)){setTargetPriceInputs(prev=>({...prev,[d.k]:value}));update(d.k,{targetPrice:value===""?0:Number(value)},d.h);}}} onBlur={()=>setTargetPriceInputs(prev=>{const next={...prev};const value=next[d.k];if(value!==undefined&&value!==""){next[d.k]=Number(value).toFixed(2);}return next;})} className="h-9 w-full rounded-lg border border-blue-400/20 bg-blue-400/[.06] pl-7 pr-3 text-blue-200 outline-none"/></div></td><td className={cn("px-4 py-3 font-medium",d.expectedReturn>=0?"text-emerald-400":"text-red-400")}>{d.expectedReturn>=0?"+":""}{pct(d.expectedReturn)}</td><td className={cn("px-4 py-3 font-medium",d.totalProfit>=0?"text-emerald-400":"text-red-400")}>{d.totalProfit>=0?"+":""}{money2(d.totalProfit)}</td><td className="px-4 py-3">{pct(d.gapCovered)}</td></tr>)}</tbody></table></div>
     </Card>
 
     <Card className="overflow-hidden">

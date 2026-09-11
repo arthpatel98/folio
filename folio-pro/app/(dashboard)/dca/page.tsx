@@ -72,6 +72,7 @@ export default function DcaPage() {
   const holdingsByPortfolio = usePortfolioStore((state) => state.holdingsByPortfolio);
   const transactionsByPortfolio = usePortfolioStore((state) => state.transactionsByPortfolio);
   const activeHoldings = usePortfolioStore((state) => state.holdings);
+  const cashByPortfolio = usePortfolioStore((state) => state.cashByPortfolio);
   const [allPositions, setAllPositions] = useState<DcaPosition[]>([]);
   const [positionId, setPositionId] = useState("");
   const positionIdRef = useRef("");
@@ -385,6 +386,17 @@ export default function DcaPage() {
     return { amount, shares, avg, value, profit, roi, oldAvg, avgDaysHeld };
   }, [lots, sellPrice]);
 
+  const activePortfolioValue = useMemo(() => {
+    const holdingsValue = activeHoldings.reduce((sum, holding) => sum + holdingMetrics(holding).marketValue, 0);
+    const cashValue = activeId === "all"
+      ? cashByPortfolio.robinhood + cashByPortfolio["fidelity-401k"] + cashByPortfolio["fidelity-roth"]
+      : cashByPortfolio[activeId] ?? 0;
+    return holdingsValue + cashValue;
+  }, [activeHoldings, activeId, cashByPortfolio]);
+  const totalInvestmentPortfolioPct = activePortfolioValue
+    ? Math.abs(totals.amount / activePortfolioValue) * 100
+    : 0;
+
   const targetPrice = toNumber(sellPrice);
   const currentMarketPrice = selectedHolding?.currentPrice ?? 0;
   const returnNeededFromCurrent = currentMarketPrice > 0
@@ -443,6 +455,20 @@ export default function DcaPage() {
   const partialProfit = partialLotRows.reduce((sum,row)=>sum+row.returnValue,0);
   const partialProceeds = partialSelectedShares*targetPrice;
   const consumedCostBasis = partialLotRows.reduce((sum,row)=>sum+row.costBasis,0);
+  const partialReturnPct = consumedCostBasis ? partialProfit / consumedCostBasis * 100 : 0;
+  const partialAvgDaysHeld = (() => {
+    if (partialSelectedShares <= 0) return 0;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const weightedDays = partialLotRows.reduce((sum, row) => {
+      if (row.used <= 0) return sum;
+      const rawDate = row.lot.date;
+      const added = new Date(`${rawDate}T00:00:00`);
+      if (Number.isNaN(added.getTime())) return sum;
+      const days = Math.max(0, Math.floor((today.getTime() - added.getTime()) / 86400000));
+      return sum + days * row.used;
+    }, 0);
+    return Math.round(weightedDays / partialSelectedShares);
+  })();
   const remainingShares = Math.max(totals.shares-partialSelectedShares,0);
   const remainingCostBasis = Math.max(totals.amount-consumedCostBasis,0);
   const remainingAverageCost = remainingShares?remainingCostBasis/remainingShares:0;
@@ -557,7 +583,7 @@ export default function DcaPage() {
       </div>
     ) : (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-6">
-        {[ ["Total Investment", totals.amount ? money(totals.amount) : "—"], ["Total Shares", totals.shares ? formatShares(totals.shares) : "—"], ["Average Price", totals.avg ? money(totals.avg) : "—"], ["Average Days Held", totals.avgDaysHeld ? `${totals.avgDaysHeld.toLocaleString()} Days` : "—"], ["Potential Return", totals.amount ? signedMoney(totals.profit) : "—"], ["Potential Return %", totals.amount ? pct(totals.roi) : "—"] ].map(([label, value], index) => <div key={label} className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">{label}</p><p className={cn("mt-3 text-2xl font-semibold", index >= 4 && (totals.profit > 0 ? "text-emerald-400" : totals.profit < 0 ? "text-rose-400" : "text-zinc-100"))}>{value}</p></div>)}
+        {[ ["Total Investment", totals.amount ? money(totals.amount) : "—"], ["Total Shares", totals.shares ? formatShares(totals.shares) : "—"], ["Average Price", totals.avg ? money(totals.avg) : "—"], ["Average Days Held", totals.avgDaysHeld ? `${totals.avgDaysHeld.toLocaleString()} Days` : "—"], ["Potential Return", totals.amount ? signedMoney(totals.profit) : "—"], ["Potential Return %", totals.amount ? pct(totals.roi) : "—"] ].map(([label, value], index) => <div key={label} className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5"><p className="text-sm text-zinc-500">{label}</p><p className={cn("mt-3 text-2xl font-semibold", index >= 4 && (totals.profit > 0 ? "text-emerald-400" : totals.profit < 0 ? "text-rose-400" : "text-zinc-100"))}>{value}</p>{index===0&&<p className="mt-2 text-sm text-zinc-500">{activePortfolioValue ? `${totalInvestmentPortfolioPct.toFixed(2)}% of Portfolio` : "—"}</p>}</div>)}
       </div>
     )}
 
@@ -654,10 +680,11 @@ export default function DcaPage() {
         {partialLotRows.length>0&&<div className="mt-5 max-h-64 overflow-auto rounded-xl border border-white/10"><table className="min-w-full text-xs"><thead className="sticky top-0 bg-zinc-950 text-zinc-400"><tr><th className="px-3 py-2 text-left">Buy Date Lot</th><th className="px-3 py-2 text-right">Available</th><th className="px-3 py-2 text-right">Buy</th><th className="px-3 py-2 text-right">Sell Shares</th><th className="px-3 py-2 text-right">Return</th></tr></thead><tbody>{partialLotRows.map(row=><tr key={row.key} className={cn("border-t border-white/10",row.used>0&&"bg-emerald-500/[.035]")}><td className="px-3 py-2">{row.date}</td><td className="px-3 py-2 text-right">{formatShares(row.shares)}</td><td className="px-3 py-2 text-right">{money(row.buyPrice)}</td><td className="px-3 py-2 text-right">{partialTaxLotMethod==="custom"?<input type="number" min={0} max={row.shares} step="any" value={partialCustomLots[row.key]??""} onChange={e=>{const raw=e.target.value;const value=raw===""?"":String(Math.max(0,Math.min(row.shares,Number(raw)||0)));setPartialCustomLots(current=>({...current,[row.key]:value}));}} placeholder="0" className="h-8 w-20 rounded-lg border border-white/10 bg-black/20 px-2 text-right outline-none"/>:<span className={row.used>0?"font-medium text-emerald-400":"text-zinc-600"}>{row.used>0?formatShares(row.used):"—"}</span>}</td><td className={cn("px-3 py-2 text-right",row.returnValue>0?"text-emerald-400":row.returnValue<0?"text-rose-400":"text-zinc-600")}>{row.used>0?signedMoney(row.returnValue):"—"}</td></tr>)}</tbody></table></div>}
         {partialTaxLotMethod==="custom"&&<div className={cn("mt-3 rounded-xl border px-3 py-2 text-xs",Math.abs(partialSelectedShares-safeSharesToSell)<=1e-6?"border-emerald-500/20 bg-emerald-500/[.05] text-emerald-400":"border-amber-500/20 bg-amber-500/[.05] text-amber-400")}>Selected {formatShares(partialSelectedShares)} of {formatShares(safeSharesToSell)} requested shares.</div>}
         <div className="mt-5 space-y-3 text-sm">
-          <div className="flex justify-between"><span className="text-zinc-400">Selected Shares</span><span>{formatShares(partialSelectedShares)}</span></div>
           <div className="flex justify-between"><span className="text-zinc-400">Cost Basis</span><span>{money(consumedCostBasis)}</span></div>
           <div className="flex justify-between"><span className="text-zinc-400">Proceeds</span><span>{money(partialProceeds)}</span></div>
           <div className="flex justify-between"><span className="text-zinc-400">Net Realized Return</span><span className={partialProfit>=0?"text-emerald-400":"text-rose-400"}>{signedMoney(partialProfit)}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-400">Avg Days Held</span><span>{partialSelectedShares>0?`${partialAvgDaysHeld.toLocaleString()} Days`:"—"}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-400">% Return</span><span className={partialReturnPct>0?"text-emerald-400":partialReturnPct<0?"text-rose-400":"text-zinc-200"}>{partialSelectedShares>0?pct(partialReturnPct):"—"}</span></div>
           <div className="flex justify-between"><span className="text-zinc-400">Remaining Shares</span><span>{formatShares(remainingShares)}</span></div>
           <div className="flex justify-between"><span className="text-zinc-400">Remaining Cost Basis</span><span>{money(remainingCostBasis)}</span></div>
           <div className="flex justify-between"><span className="text-zinc-400">New Average Cost</span><span>{money(remainingAverageCost)}</span></div>

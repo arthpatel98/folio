@@ -12,6 +12,7 @@ import { AssetType, Holding, Sector } from "@/types/portfolio";
 const sectors: Sector[] = [
   "AI / Enterprise Software",
   "AI Data Centers",
+  "AI Infrastructure",
   "Cloud / AI / Software",
   "Crypto / Bitcoin",
   "Digital Advertising / AI",

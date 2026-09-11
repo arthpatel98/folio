@@ -16,7 +16,7 @@ const NEW_POSITION = "__new_position__";
 const optionContractKey = (holding: Holding) => holding.optionSymbol || [holding.symbol, holding.optionType ?? "option", holding.optionExpiry ?? "", holding.optionStrike ?? "", holding.company].join("|");
 
 const sectors: Sector[] = [
-  "AI / Enterprise Software", "AI Data Centers", "Cloud / AI / Software", "Crypto / Bitcoin",
+  "AI / Enterprise Software", "AI Data Centers", "AI Infrastructure", "Cloud / AI / Software", "Crypto / Bitcoin",
   "Digital Advertising / AI", "Drones", "Space", "Defense", "BioTech", "E-Commerce & Cloud",
   "Education Technology", "Electrical Equipment / Power Infrastructure", "ETF",
   "Ethereum / Crypto Treasury", "Financials", "Healthcare", "Memory Semiconductors",
