@@ -557,7 +557,7 @@ export const usePortfolioStore = create<State>()(
             optionExpiry: holding.optionExpiry,
             optionStrike: holding.optionStrike,
             optionSymbol: holding.optionSymbol,
-            notes: `${action === "buy" ? "Bought" : "Sold"} from Holdings${fees > 0 ? " | Platform Fee" : ""}`,
+            notes: `${action === "buy" ? "Bought" : "Sold"} from Holdings | ${assetType === "stock" ? `Company: ${holding.company}` : `Security: ${holding.company}`}${fees > 0 ? " | Platform Fee" : ""}`,
             source: "Holdings",
             cashImpact: cashChange,
             realizedGain,

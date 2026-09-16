@@ -67,6 +67,8 @@ const createInitialForm = (action: "buy" | "sell" = "buy", assetType: AssetType 
 
 export function AddHoldingDialog() {
   const holdings = usePortfolioStore((state) => state.holdings);
+  const holdingsByPortfolio = usePortfolioStore((state) => state.holdingsByPortfolio);
+  const transactionsByPortfolio = usePortfolioStore((state) => state.transactionsByPortfolio);
   const executeTrade = usePortfolioStore((state) => state.executeTrade);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<FormState>(() => createInitialForm());
@@ -82,6 +84,26 @@ export function AddHoldingDialog() {
   const ownedOptions = useMemo(() => holdings
     .filter((holding) => holding.assetType === "option" && holding.shares !== 0)
     .slice().sort((a, b) => a.company.localeCompare(b.company)), [holdings]);
+
+  // Reuse company names from Folio's own history so reopening a stock position does not
+  // require retyping a company name. Current holdings take priority; older imported or
+  // Holdings-created stock transactions are used only as a fallback.
+  const historicalStockNames = useMemo(() => {
+    const names = new Map<string, string>();
+    Object.values(holdingsByPortfolio).flat().forEach((holding) => {
+      if ((holding.assetType ?? "stock") !== "stock" || !holding.company?.trim()) return;
+      names.set(holding.symbol.trim().toUpperCase(), holding.company.trim());
+    });
+    Object.values(transactionsByPortfolio).flat().forEach((transaction) => {
+      if (!transaction.symbol || (transaction.assetType ?? "stock") !== "stock" || !transaction.notes) return;
+      const notes = transaction.notes.trim();
+      const imported = notes.match(/Imported Robinhood CSV\s*·\s*(?:Buy|Sell)\s*·\s*([^\n]+)/i);
+      const holdingsCreated = notes.match(/(?:Company|Security):\s*([^|\n]+)/i);
+      const company = (holdingsCreated?.[1] ?? imported?.[1])?.trim();
+      if (company) names.set(transaction.symbol.trim().toUpperCase(), company);
+    });
+    return names;
+  }, [holdingsByPortfolio, transactionsByPortfolio]);
 
   const matching = useMemo(() => {
     if (form.assetType === "option" && form.action === "buy") return undefined;
@@ -142,7 +164,7 @@ export function AddHoldingDialog() {
           next.optionType = found.optionType ?? current.optionType;
           next.optionExpiry = found.optionExpiry ?? "";
         } else {
-          next.company = "";
+          next.company = current.assetType === "stock" ? (historicalStockNames.get(value.trim().toUpperCase()) ?? "") : "";
           next.sector = "";
           next.optionType = "buy-call";
           next.optionExpiry = "";
