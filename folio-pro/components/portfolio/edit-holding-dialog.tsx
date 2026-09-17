@@ -1,13 +1,14 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { FormEvent, ReactNode, useEffect, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { usePortfolioStore } from "@/store/portfolio-store";
+import { usePortfolioStore, type DataPortfolioId } from "@/store/portfolio-store";
 import { toast } from "sonner";
 import { AssetType, Holding, Sector } from "@/types/portfolio";
+import { getBundledHistoricalCompanyNames } from "@/lib/historical-company-names";
 
 const sectors: Sector[] = [
   "AI / Enterprise Software",
@@ -68,6 +69,9 @@ function toForm(holding: Holding): HoldingForm {
 
 export function EditHoldingDialog({ holding, children, onDelete }: { holding: Holding; children?: ReactNode; onDelete?: () => void }) {
   const updateHolding = usePortfolioStore((state) => state.updateHolding);
+  const activePortfolioId = usePortfolioStore((state) => state.activePortfolioId);
+  const holdingsByPortfolio = usePortfolioStore((state) => state.holdingsByPortfolio);
+  const transactionsByPortfolio = usePortfolioStore((state) => state.transactionsByPortfolio);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<HoldingForm>(() => toForm(holding));
   const [error, setError] = useState("");
@@ -76,8 +80,34 @@ export function EditHoldingDialog({ holding, children, onDelete }: { holding: Ho
     if (!open) setForm(toForm(holding));
   }, [holding, open]);
 
+  const historicalStockNames = useMemo(() => {
+    const names = new Map<string, string>();
+    if (activePortfolioId === "all") return names;
+    const portfolioId = activePortfolioId as DataPortfolioId;
+    Object.entries(getBundledHistoricalCompanyNames(portfolioId)).forEach(([symbol, company]) => names.set(symbol, company));
+    (transactionsByPortfolio[portfolioId] ?? []).forEach((transaction) => {
+      if (!transaction.symbol || (transaction.assetType ?? "stock") !== "stock" || !transaction.notes) return;
+      const notes = transaction.notes.trim();
+      const imported = notes.match(/Imported Robinhood CSV\s*·\s*(?:Buy|Sell)\s*·\s*([^\n]+)/i);
+      const holdingsCreated = notes.match(/(?:Company|Security):\s*([^|\n]+)/i);
+      const company = (holdingsCreated?.[1] ?? imported?.[1])?.trim();
+      if (company) names.set(transaction.symbol.trim().toUpperCase(), company);
+    });
+    (holdingsByPortfolio[portfolioId] ?? []).forEach((item) => {
+      if ((item.assetType ?? "stock") !== "stock" || !item.company?.trim()) return;
+      names.set(item.symbol.trim().toUpperCase(), item.company.trim());
+    });
+    return names;
+  }, [activePortfolioId, holdingsByPortfolio, transactionsByPortfolio]);
+
   const update = (field: keyof HoldingForm, value: string) =>
-    setForm((current) => ({ ...current, [field]: value }));
+    setForm((current) => {
+      const next = { ...current, [field]: value };
+      if (field === "symbol" && current.assetType === "stock") {
+        next.company = historicalStockNames.get(value.trim().toUpperCase()) ?? "";
+      }
+      return next;
+    });
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { AssetType, Holding, OptionType, Sector } from "@/types/portfolio";
 import { getStockTaxLots, type StockTaxLot, type TaxLotMethod } from "@/lib/dca-storage";
 import { cn, money } from "@/lib/utils";
+import { getBundledHistoricalCompanyNames } from "@/lib/historical-company-names";
 
 const NEW_POSITION = "__new_position__";
 
@@ -90,11 +91,10 @@ export function AddHoldingDialog() {
   // Holdings-created stock transactions are used only as a fallback.
   const historicalStockNames = useMemo(() => {
     const names = new Map<string, string>();
-    Object.values(holdingsByPortfolio).flat().forEach((holding) => {
-      if ((holding.assetType ?? "stock") !== "stock" || !holding.company?.trim()) return;
-      names.set(holding.symbol.trim().toUpperCase(), holding.company.trim());
-    });
-    Object.values(transactionsByPortfolio).flat().forEach((transaction) => {
+    if (activePortfolioId === "all") return names;
+    const portfolioId = activePortfolioId as DataPortfolioId;
+    Object.entries(getBundledHistoricalCompanyNames(portfolioId)).forEach(([symbol, company]) => names.set(symbol, company));
+    (transactionsByPortfolio[portfolioId] ?? []).forEach((transaction) => {
       if (!transaction.symbol || (transaction.assetType ?? "stock") !== "stock" || !transaction.notes) return;
       const notes = transaction.notes.trim();
       const imported = notes.match(/Imported Robinhood CSV\s*·\s*(?:Buy|Sell)\s*·\s*([^\n]+)/i);
@@ -102,8 +102,13 @@ export function AddHoldingDialog() {
       const company = (holdingsCreated?.[1] ?? imported?.[1])?.trim();
       if (company) names.set(transaction.symbol.trim().toUpperCase(), company);
     });
+    // Current holdings are the highest-priority name source, but only inside the selected portfolio.
+    (holdingsByPortfolio[portfolioId] ?? []).forEach((holding) => {
+      if ((holding.assetType ?? "stock") !== "stock" || !holding.company?.trim()) return;
+      names.set(holding.symbol.trim().toUpperCase(), holding.company.trim());
+    });
     return names;
-  }, [holdingsByPortfolio, transactionsByPortfolio]);
+  }, [activePortfolioId, holdingsByPortfolio, transactionsByPortfolio]);
 
   const matching = useMemo(() => {
     if (form.assetType === "option" && form.action === "buy") return undefined;

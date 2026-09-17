@@ -1500,9 +1500,9 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
     const now=new Date();
     const currentYear=String(now.getFullYear());
     const maxMonthIndex=selectedYear===currentYear?now.getMonth():11;
-    const monthLimit=!isRobinhood&&selectedYear==="2026"?Math.min(maxMonthIndex,7):maxMonthIndex;
+    const monthLimit=maxMonthIndex;
     if(!isRobinhood||selectedYear==="2024"){for(const [index,month] of months.entries()){if(index>monthLimit)break;const period=`${month} ${selectedYear}`;if(!filtered.some(r=>r.period===period))filtered.push({period,realizedProfit:0,income:0});}}
-    return filtered.filter(r=>{if(isRobinhood||selectedYear!=="2026")return true;const month=r.period.split(" ")[0];return months.indexOf(month)<=7;}).sort((a,b)=>periodTime(a.period)-periodTime(b.period));
+    return filtered.sort((a,b)=>periodTime(a.period)-periodTime(b.period));
   },[selectedYear,verifiedTotals,incomeTotals,isRobinhood]);
   const annualData=useMemo(()=>{
     const years=new Set<string>(isRobinhood?["2024","2025","2026"]:["2025","2026"]);
