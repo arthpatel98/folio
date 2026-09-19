@@ -79,6 +79,7 @@ export interface Transaction {
   optionExpiry?: string;
   optionStrike?: number;
   optionSymbol?: string;
+  positionLabel?: string;
   realizedGain?: number;
   realizedCostBasis?: number;
   realizedProceeds?: number;

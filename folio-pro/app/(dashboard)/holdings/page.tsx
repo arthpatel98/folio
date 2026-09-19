@@ -41,6 +41,7 @@ function PortfolioValueMetric({ value, dayReturn, dayReturnPct }: { value: numbe
 
 const PORTFOLIO_CLOSE_SNAPSHOTS_KEY = "folio-portfolio-close-snapshots-v1";
 const PERFORMANCE_ATH_KEY = "folio-portfolio-performance-all-time-high-v1";
+const FIDELITY_401K_YTD_KEY = "folio-fidelity-401k-2026-ytd-v1";
 const DEFAULT_PERFORMANCE_ATH: Record<string,{value:number;date:string}> = {
   robinhood:{value:108128,date:"2025-11-05"},
   "fidelity-roth":{value:20134,date:"2025-08-06"},
@@ -82,6 +83,9 @@ export default function Page() {
   const [closeSnapshots, setCloseSnapshots] = useState<Record<string, number>>({});
   const [performanceAth,setPerformanceAth]=useState<Record<string,{value:number;date:string}>>(DEFAULT_PERFORMANCE_ATH);
   const [editingAth,setEditingAth]=useState(false);
+  const [fidelity401kYtd,setFidelity401kYtd]=useState<number|null>(null);
+  const [editing401kYtd,setEditing401kYtd]=useState(false);
+  const [fidelity401kYtdDraft,setFidelity401kYtdDraft]=useState("");
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -129,6 +133,7 @@ export default function Page() {
   }, []);
 
   useEffect(()=>{try{const saved=JSON.parse(window.localStorage.getItem(PERFORMANCE_ATH_KEY)??"{}");if(saved&&typeof saved==="object")setPerformanceAth(current=>({...current,...saved}));}catch{}},[]);
+  useEffect(()=>{try{const raw=window.localStorage.getItem(FIDELITY_401K_YTD_KEY);if(raw!==null){const value=Number(raw);if(Number.isFinite(value))setFidelity401kYtd(value);}}catch{}},[]);
 
   useEffect(() => {
     const captureClose = () => {
@@ -177,14 +182,23 @@ export default function Page() {
     const cagrBaseYears=name==="Fidelity Roth IRA"?1.0833:2;
     const cagrYears=cagrBaseYears+monthFraction;
     const cagr=invested>0&&current>0?Math.pow(current/invested,1/cagrYears)-1:0;
-    const ytd=name==="Robinhood"?current/83745-1:name==="Fidelity Roth IRA"?current/16452-1:0.1465;
+    const ytd=name==="Robinhood"?current/83745-1:name==="Fidelity Roth IRA"?current/16452-1:(fidelity401kYtd??0.1465);
     return {...base,current,invested,gain,totalReturn,cagr,ytd};
-  },[activePortfolioId,summary.value]);
+  },[activePortfolioId,summary.value,fidelity401kYtd]);
   const activeAth=performanceAth[activePortfolioId]??DEFAULT_PERFORMANCE_ATH[activePortfolioId]??DEFAULT_PERFORMANCE_ATH.robinhood;
   const updateAth=(field:"value"|"date",raw:string)=>{
     const next={...performanceAth,[activePortfolioId]:{...activeAth,[field]:field==="value"?(Number(raw)||0):raw}};
     setPerformanceAth(next);
     try{window.localStorage.setItem(PERFORMANCE_ATH_KEY,JSON.stringify(next));}catch{}
+  };
+  const save401kYtd=()=>{
+    const pctValue=Number(fidelity401kYtdDraft);
+    if(Number.isFinite(pctValue)){
+      const decimal=pctValue/100;
+      setFidelity401kYtd(decimal);
+      try{window.localStorage.setItem(FIDELITY_401K_YTD_KEY,String(decimal));}catch{}
+    }
+    setEditing401kYtd(false);
   };
 
   const positionValue = summary.invested;
@@ -429,7 +443,7 @@ export default function Page() {
         <PerformanceMiniCard label="Total Gain" value={money(performanceAccount.gain)} positive={performanceAccount.gain>=0}/>
         <PerformanceMiniCard label="Total Return" value={`${performanceAccount.totalReturn>=0?"+":""}${(performanceAccount.totalReturn*100).toFixed(2)}%`} positive={performanceAccount.totalReturn>=0}/>
         <PerformanceMiniCard label="CAGR" value={`${performanceAccount.cagr>=0?"+":""}${(performanceAccount.cagr*100).toFixed(2)}%`} positive={performanceAccount.cagr>=0}/>
-        <PerformanceMiniCard label="2026 YTD" value={`${performanceAccount.ytd>=0?"+":""}${(performanceAccount.ytd*100).toFixed(2)}%`} positive={performanceAccount.ytd>=0}/>
+        {isFidelity401k ? <div className="rounded-3xl border border-white/10 bg-zinc-950/40 p-4 shadow-sm"><div className="text-xs font-medium text-zinc-400">2026 YTD</div>{editing401kYtd?<div className="mt-3 flex items-center gap-2"><input autoFocus type="number" step="0.01" value={fidelity401kYtdDraft} onChange={e=>setFidelity401kYtdDraft(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")save401kYtd();if(e.key==="Escape")setEditing401kYtd(false);}} className="h-9 min-w-0 flex-1 rounded-xl border border-white/10 bg-transparent px-3 text-sm outline-none"/><span className="text-sm text-zinc-500">%</span><button type="button" onClick={save401kYtd} className="h-9 rounded-xl border border-white/10 px-3 text-xs text-zinc-300">Done</button></div>:<button type="button" onClick={()=>{setFidelity401kYtdDraft((performanceAccount.ytd*100).toFixed(2));setEditing401kYtd(true);}} title="Click To Edit 2026 YTD %" className={cn("mt-3 block text-left text-xl font-semibold tracking-tight transition hover:underline",performanceAccount.ytd>=0?"text-emerald-400":"text-rose-400")}>{performanceAccount.ytd>=0?"+":""}{(performanceAccount.ytd*100).toFixed(2)}%</button>}</div> : <PerformanceMiniCard label="2026 YTD" value={`${performanceAccount.ytd>=0?"+":""}${(performanceAccount.ytd*100).toFixed(2)}%`} positive={performanceAccount.ytd>=0}/>}
         <div className="rounded-3xl border border-white/10 bg-zinc-950/40 p-4 shadow-sm"><div className="flex items-center justify-between"><div className="text-xs font-medium text-zinc-400">Portfolio Start</div><CalendarDays size={18} className="text-zinc-600"/></div><div className="mt-3 text-base font-semibold text-zinc-200">{performanceAccount.start}</div></div>
         <div className="rounded-3xl border border-white/10 bg-zinc-950/40 p-4 shadow-sm"><div className="flex items-center justify-between"><div className="text-xs font-medium text-zinc-400">All-Time High</div><Star size={18} className="text-zinc-600"/></div>{editingAth?<div className="mt-4 flex flex-wrap gap-2"><input autoFocus type="number" step="1" value={activeAth.value||""} onChange={e=>updateAth("value",e.target.value)} className="h-9 w-32 rounded-xl border border-white/10 bg-transparent px-3 text-sm outline-none"/><input type="date" value={activeAth.date} onChange={e=>updateAth("date",e.target.value)} onKeyDown={e=>{if(e.key==="Enter")setEditingAth(false)}} className="h-9 w-40 rounded-xl border border-white/10 bg-transparent px-3 text-sm outline-none"/><button type="button" onClick={()=>setEditingAth(false)} className="h-9 rounded-xl border border-white/10 px-3 text-xs text-zinc-400">Done</button></div>:<button type="button" onClick={()=>setEditingAth(true)} title="Click To Edit All-Time High" className="mt-3 block text-left"><span className="block text-base font-semibold text-zinc-200">{money(activeAth.value)}</span><span className="mt-1 block text-xs text-zinc-500">on {compactDate(activeAth.date)}</span></button>}</div>
       </section>

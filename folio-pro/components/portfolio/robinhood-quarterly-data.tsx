@@ -1431,11 +1431,11 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
     return [...staticRows,...liveRows];
   },[activeTransactions,incomeEdits,includesRobinhood]);
   const persistIncomeEdit=(id:string,patch:IncomeEdit)=>setIncomeEdits(current=>{const next={...current,[id]:{...(current[id]??{}),...patch}};try{window.localStorage.setItem(INCOME_EDITS_KEY,JSON.stringify(next));}catch{}return next;});
-  const canEditIncome=(date:string)=>isRobinhood&&date.startsWith("2026-09-");
+  const canEditIncome=(date:string)=>(isRobinhood||activePortfolioId==="fidelity-roth")&&date.startsWith("2026-09-");
   const openIncomeEditor=(id:string,item:IncomeTransaction)=>{if(!canEditIncome(item.date))return;setEditingIncome({id,item});setIncomeDraft({...item});};
   const saveIncomeEditor=()=>{if(!editingIncome)return;persistIncomeEdit(editingIncome.id,incomeDraft);setEditingIncome(null);};
   const deleteIncomeEditor=()=>{if(!editingIncome)return;persistIncomeEdit(editingIncome.id,{deleted:true});setEditingIncome(null);};
-  const canEditProfit=(tx:ProfitDrilldownTransaction)=>activePortfolioId==="fidelity-roth"||(isRobinhood&&tx.date.startsWith("2026-09-"));
+  const canEditProfit=(tx:ProfitDrilldownTransaction)=>(isRobinhood||activePortfolioId==="fidelity-roth")&&tx.date.startsWith("2026-09-");
   const openProfitEditor=(tx:ProfitDrilldownTransaction)=>{if(!canEditProfit(tx))return;setEditingProfit(tx);setProfitDraft({...tx});};
   const saveProfitEditor=()=>{if(!editingProfit||!profitDraft)return;saveEdit(editingProfit.id,profitDraft);setEditingProfit(null);setProfitDraft(null);};
   const deleteProfitEditor=()=>{if(!editingProfit)return;saveEdit(editingProfit.id,{deleted:true});setEditingProfit(null);setProfitDraft(null);};
@@ -1472,8 +1472,15 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
       const legacyOptionLabel=[tx.symbol.toUpperCase(),tx.optionExpiry?new Date(`${tx.optionExpiry}T12:00:00`).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):"",tx.optionStrike!==undefined?`$${tx.optionStrike}`:"",optionKind.includes("put")?"Put":"Call"].filter(Boolean).join(" ");
       const expiryText=tx.optionExpiry?new Date(`${tx.optionExpiry}T12:00:00`).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}):"";
       const newOptionLabel=[tx.symbol.toUpperCase(),tx.optionStrike!==undefined?`$${tx.optionStrike}`:"",optionKind.includes("put")?"Put":"Call",expiryText?`Exp ${expiryText}`:""].filter(Boolean).join(" ");
+      // New Holdings-originated realized transactions carry the exact Position text from
+      // the source holding before it is reduced/removed. Stocks use Company Name and
+      // options use Contract Details. This keeps Robinhood and Roth IRA bar-chart
+      // drilldowns portfolio-specific without asking the user to re-enter Position.
+      const storedPositionLabel=tx.positionLabel?.trim();
+      const notesPositionLabel=tx.notes?.match(/(?:Company|Security):\s*([^|]+)/i)?.[1]?.trim();
+      const exactPositionLabel=storedPositionLabel||notesPositionLabel;
       const displayLabel=isNewTransaction
-        ? (option?(tx.optionSymbol||newOptionLabel):(holding?.company||tx.symbol.toUpperCase()))
+        ? (exactPositionLabel||(option?(tx.optionSymbol||newOptionLabel):(holding?.company||tx.symbol.toUpperCase())))
         : (option?(tx.optionSymbol||legacyOptionLabel):tx.symbol.toUpperCase());
       const liveTx:ProfitDrilldownTransaction={id:`live-${tx.id}`,date:tx.date,ticker:tx.symbol.toUpperCase(),label:displayLabel,quantity:tx.quantity??null,price:tx.price??null,proceeds:tx.realizedProceeds??null,realizedProfit:tx.realizedGain,category,preserveLabelCasing:true};
       const patch=edits[liveTx.id]??{}; if(patch.deleted)return;
