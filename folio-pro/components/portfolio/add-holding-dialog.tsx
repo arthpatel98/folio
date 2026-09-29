@@ -294,7 +294,7 @@ export function AddHoldingDialog() {
 
             {isRemoveStock ? <>
               <Field label="Ticker Symbol"><select required value={form.symbol} onChange={(e) => update("symbol", e.target.value)} className="field-select" autoFocus><option value="">Select Ticker</option>{ownedStocks.map((holding) => <option key={holding.symbol} value={holding.symbol}>{holding.symbol}</option>)}</select></Field>
-              <Field label="Sell Shares"><Input required type="number" min="0.000001" step="any" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /></Field>
+              <Field label="Sell Shares"><Input required type="number" min="0.000001" step="any" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /><span className="mt-1.5 block text-xs font-normal text-zinc-500">Available Shares: {(matching?.shares ?? 0).toLocaleString(undefined,{maximumFractionDigits:6})}</span></Field>
               <Field label="Sell Price"><Input required type="number" min="0.000001" step="any" value={form.tradePrice} onChange={(e) => update("tradePrice", e.target.value)} /></Field>
               <DateField label="Sell Date" value={form.tradeDate} onChange={(value) => update("tradeDate", value)} />
               <MoneyField label="Platform Fees" value={form.platformFees} onChange={(value) => update("platformFees", value)} />

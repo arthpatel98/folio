@@ -276,14 +276,13 @@ export const usePortfolioStore = create<State>()(
           const removedHolding = state.holdingsByPortfolio[target].find((item) => holdingKey(item) === removedKey);
           const updated = state.holdingsByPortfolio[target].filter((item) => holdingKey(item) !== removedKey);
           const holdingsByPortfolio = { ...state.holdingsByPortfolio, [target]: updated };
-          // Closing a short option through the Holdings remove action always pays the
-          // close cost from cash: contracts × current/sell price (no 100x multiplier, per
-          // the requested cash rule). Sell-put collateral is derived from open positions,
-          // so removing contracts automatically releases strike × contracts × 100 into the
-          // displayed available Cash without adding it to stored cash a second time.
+          // Closing a short option pays the full quoted option cost from cash.
+          // Equity option premiums are quoted per share, so Buy to Close uses the
+          // standard 100x contract multiplier. Sell-put collateral remains derived from
+          // open positions and is released separately when the position is removed.
           const contracts = Math.abs(removedHolding?.shares ?? 0);
           const closePrice = Math.max(0, removedHolding?.currentPrice ?? 0);
-          const closeCost = contracts * closePrice;
+          const closeCost = contracts * closePrice * 100;
           const isShortOption = removedHolding?.assetType === "option"
             && (removedHolding.optionType === "sell-call" || removedHolding.optionType === "sell-put");
           const cashDelta = isShortOption ? -closeCost : 0;
@@ -430,11 +429,11 @@ export const usePortfolioStore = create<State>()(
         const safeFees = Number.isFinite(fees) ? Math.max(0, fees) : 0;
         const isRemovingShortOption = assetType === "option" && action === "sell" &&
           (holding.optionType === "sell-call" || holding.optionType === "sell-put");
-        const shortOptionCloseCost = Math.abs(quantity) * price;
+        const shortOptionCloseCost = Math.abs(quantity) * price * multiplier;
         const baseCashChange = isRemovingShortOption
-          // Sell-put collateral is not stored as a cash debit; it is subtracted from
-          // available cash while the position is open. Reducing/removing the position
-          // therefore releases collateral automatically, while this pays only close cost.
+          // Buy to Close for both short calls and short puts pays the quoted premium
+          // using the standard 100x option multiplier. Sell-put collateral is still
+          // released separately because it is derived from the remaining open position.
           ? -shortOptionCloseCost
           : assetType === "option"
             ? -signedDelta * price * multiplier
@@ -552,6 +551,7 @@ export const usePortfolioStore = create<State>()(
             price,
             amount: tradeValue,
             date: tradeDate || new Date().toISOString().slice(0, 10),
+            createdAt: new Date().toISOString(),
             fees: safeFees,
             assetType,
             optionType: holding.optionType,
