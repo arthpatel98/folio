@@ -136,6 +136,7 @@ const exactAverageDaysHeld=(tx:Transaction)=>{
 const explicitAverageDaysHeld=(tx:Transaction)=>{
   const symbol=(tx.symbol||"").trim().toUpperCase();
   if(tx.date==="2026-08-07"&&tx.type==="sell"&&symbol==="PLTR")return 25;
+  if(tx.date==="2026-09-25"&&symbol==="BMNR")return 8;
   if(symbol==="NVDA"&&tx.assetType==="option"&&tx.optionType==="buy-call"&&tx.optionExpiry==="2027-06-17")return 62;
   return null;
 };
@@ -368,17 +369,44 @@ export default function TransactionsPage(){
   useEffect(()=>{ if(page>pageCount)setPage(pageCount); },[page,pageCount]);
   const pagedRows=useMemo(()=>filteredRows.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE),[filteredRows,page]);
 
-  const thisMonthTransactionCount=useMemo(()=>{
-    const now=new Date();
-    const monthPrefix=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-`;
-    return allRows.filter(({transaction:tx})=>tx.date.startsWith(monthPrefix)).length;
-  },[allRows]);
+  const summaryRows=useMemo(()=>allRows.filter(({transaction:tx,portfolioId})=>{
+    if(category!=="all"&&categoryFor(tx)!==category)return false;
+    if(typeFilter!=="all"&&tx.type!==typeFilter)return false;
+    const haystack=[tx.symbol,displayType(tx),tx.notes,tx.source,PORTFOLIO_NAMES[portfolioId],optionLabel(tx)].filter(Boolean).join(" ").toLowerCase();
+    return !query.trim()||haystack.includes(query.trim().toLowerCase());
+  }),[allRows,category,typeFilter,query]);
 
-  const thisMonthPl=useMemo(()=>{
+  const monthlySummary=useMemo(()=>{
     const now=new Date();
-    const monthPrefix=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-`;
-    return allRows.reduce((sum,{transaction:tx})=>tx.date.startsWith(monthPrefix)?sum+(tx.realizedGain||0):sum,0);
-  },[allRows]);
+    const currentYear=now.getFullYear();
+    const currentMonth=now.getMonth();
+    const previousDate=new Date(currentYear,currentMonth-1,1);
+    const currentPrefix=`${currentYear}-${String(currentMonth+1).padStart(2,"0")}-`;
+    const previousPrefix=`${previousDate.getFullYear()}-${String(previousDate.getMonth()+1).padStart(2,"0")}-`;
+    const previousLabel=previousDate.toLocaleDateString("en-US",{month:"short",year:"numeric"});
+    let currentCount=0;
+    let previousCount=0;
+    let currentPl=0;
+    let previousPl=0;
+    summaryRows.forEach(({transaction:tx})=>{
+      if(tx.date.startsWith(currentPrefix)){
+        currentCount+=1;
+        currentPl+=tx.realizedGain||0;
+      }else if(tx.date.startsWith(previousPrefix)){
+        previousCount+=1;
+        previousPl+=tx.realizedGain||0;
+      }
+    });
+    return {currentCount,previousCount,currentPl,previousPl,previousLabel};
+  },[summaryRows]);
+
+  const comparisonText=(current:number,previous:number,kind:"money"|"count")=>{
+    const difference=current-previous;
+    const differenceLabel=kind==="money"?signedMoney(difference):`${difference>0?"+":""}${difference.toLocaleString()}`;
+    const percent=Math.abs(previous)>1e-9?Math.abs(difference/previous*100):null;
+    const percentLabel=percent===null?"":` (${difference>=0?"+":"-"}${percent.toFixed(1)}%)`;
+    return `vs ${monthlySummary.previousLabel}: ${differenceLabel}${percentLabel}`;
+  };
 
   const recordEntry=()=>{
     const amount=Number(entryAmount);
@@ -405,8 +433,8 @@ export default function TransactionsPage(){
     </div>
 
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-2">
-      <Summary icon={TrendingUp} label="This Month P/L" value={signedMoney(thisMonthPl)} good={thisMonthPl>=0}/>
-      <Summary icon={ReceiptText} label="Total Transactions This Month" value={thisMonthTransactionCount.toLocaleString()}/>
+      <Summary icon={TrendingUp} label="This Month P/L" value={signedMoney(monthlySummary.currentPl)} good={monthlySummary.currentPl>=0} comparison={comparisonText(monthlySummary.currentPl,monthlySummary.previousPl,"money")} comparisonGood={monthlySummary.currentPl>=monthlySummary.previousPl}/>
+      <Summary icon={ReceiptText} label="Total Transactions This Month" value={monthlySummary.currentCount.toLocaleString()} comparison={comparisonText(monthlySummary.currentCount,monthlySummary.previousCount,"count")} comparisonGood={monthlySummary.currentCount>=monthlySummary.previousCount}/>
     </div>
 
     <Card className="overflow-hidden">
@@ -509,6 +537,6 @@ function EditableCell({kind,value,display,onSave,className,options}:{kind:"text"
   </td>;
 }
 
-function Summary({icon:Icon,label,value,good=false}:{icon:any;label:string;value:string;good?:boolean}){
-  return <Card className="p-3 sm:p-4"><div className="flex items-center gap-2 text-xs text-zinc-500"><span className={cn("grid size-8 place-items-center rounded-lg",good?"bg-emerald-400/15 text-emerald-400":"bg-blue-400/15 text-blue-300")}><Icon size={16}/></span>{label}</div><div className={cn("mt-3 break-words text-lg font-semibold",good&&"text-emerald-400")}>{value}</div></Card>
+function Summary({icon:Icon,label,value,good=false,comparison,comparisonGood}:{icon:any;label:string;value:string;good?:boolean;comparison?:string;comparisonGood?:boolean}){
+  return <Card className="p-3 sm:p-4"><div className="flex items-center gap-2 text-xs text-zinc-500"><span className={cn("grid size-8 place-items-center rounded-lg",good?"bg-emerald-400/15 text-emerald-400":"bg-blue-400/15 text-blue-300")}><Icon size={16}/></span>{label}</div><div className={cn("mt-3 break-words text-lg font-semibold",good&&"text-emerald-400")}>{value}</div>{comparison&&<div className={cn("mt-1.5 text-[11px] font-medium",comparisonGood===true?"text-emerald-400/80":comparisonGood===false?"text-rose-300/80":"text-zinc-500")}>{comparison}</div>}</Card>
 }
