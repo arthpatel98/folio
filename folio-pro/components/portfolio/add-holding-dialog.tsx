@@ -41,6 +41,7 @@ type FormState = {
   sector: "" | Sector;
   optionType: OptionType;
   optionExpiry: string;
+  optionStrike: string;
   tradeDate: string;
   platformFees: string;
   selectedContractKey: string;
@@ -63,7 +64,7 @@ const formatTradeDate = (value: string) => {
 
 const createInitialForm = (action: "buy" | "sell" = "buy", assetType: AssetType = "stock"): FormState => ({
   action, assetType, symbol: "", company: "", quantity: "", tradePrice: "", sector: "",
-  optionType: "buy-call", optionExpiry: "", tradeDate: todayInputValue(), platformFees: "0.00", selectedContractKey: "",
+  optionType: "buy-call", optionExpiry: "", optionStrike: "", tradeDate: todayInputValue(), platformFees: "0.00", selectedContractKey: "",
 });
 
 export function AddHoldingDialog() {
@@ -168,11 +169,13 @@ export function AddHoldingDialog() {
           next.sector = found.sector;
           next.optionType = found.optionType ?? current.optionType;
           next.optionExpiry = found.optionExpiry ?? "";
+          next.optionStrike = found.optionStrike != null ? String(found.optionStrike) : "";
         } else {
           next.company = current.assetType === "stock" ? (historicalStockNames.get(value.trim().toUpperCase()) ?? "") : "";
           next.sector = "";
           next.optionType = "buy-call";
           next.optionExpiry = "";
+          next.optionStrike = "";
         }
       }
       return next;
@@ -189,7 +192,8 @@ export function AddHoldingDialog() {
       sector: found.sector,
       optionType: found.optionType ?? current.optionType,
       optionExpiry: found.optionExpiry ?? "",
-    } : { ...current, selectedContractKey: "", symbol: "", company: "", optionExpiry: "" });
+      optionStrike: found.optionStrike != null ? String(found.optionStrike) : "",
+    } : { ...current, selectedContractKey: "", symbol: "", company: "", optionExpiry: "", optionStrike: "" });
   };
 
   const selectBuyStock = (value: string) => {
@@ -205,6 +209,8 @@ export function AddHoldingDialog() {
     const quantity = Number(form.quantity);
     const tradePrice = Number(form.tradePrice);
     const platformFees = Number(form.platformFees || 0);
+    const parsedStrikeFromDetails = form.company.match(/\$(\d+(?:\.\d+)?)\s*(?:Put|Call)\b/i)?.[1] ?? form.company.match(/(?:Put|Call)\s*\$(\d+(?:\.\d+)?)/i)?.[1];
+    const optionStrike = Number(form.optionStrike || parsedStrikeFromDetails || matching?.optionStrike || 0);
     const isOption = form.assetType === "option";
     const isRemoveStock = form.action === "sell" && form.assetType === "stock";
     const isRemoveOption = form.action === "sell" && form.assetType === "option";
@@ -227,6 +233,7 @@ export function AddHoldingDialog() {
     if (!Number.isFinite(tradePrice) || tradePrice < 0 || (!isRemoveOption && tradePrice === 0)) return setError(isOption ? (isRemoveOption ? "Enter A Valid Sell Price." : "Contract Cost Is Required.") : (isRemoveStock ? "Sell Price Is Required." : "Share Price Is Required."));
     if (!matching && !sector) return setError("Select Sector Is Required.");
     if (isOption && form.action === "buy" && !form.optionExpiry) return setError("Option Expiry Is Required.");
+    if (isOption && form.action === "buy" && form.optionType === "sell-put" && (!Number.isFinite(optionStrike) || optionStrike <= 0)) return setError("Strike Price Is Required For Sell Put Collateral.");
     if (isRemoveStock && stockTaxLots.length > 0 && selectedTaxLotShares + 1e-6 < quantity) return setError("Simulator Tax Lots Do Not Contain Enough Shares For This Sale.");
     if (isRemoveStock && taxLotMethod === "custom" && Math.abs(selectedTaxLotShares - quantity) > 1e-6) return setError("Custom Tax-Lot Shares Must Exactly Match The Shares Being Sold.");
 
@@ -249,7 +256,7 @@ export function AddHoldingDialog() {
         dividendYield: matching?.dividendYield ?? 0, sector: sector as Sector,
         optionType: isOption ? (matching?.optionType ?? form.optionType) : undefined,
         optionExpiry: isOption ? (matching?.optionExpiry ?? form.optionExpiry) : undefined,
-        optionStrike: matching?.optionStrike, optionSymbol: matching?.optionSymbol, updatedAt: "Just now",
+        optionStrike: isOption && Number.isFinite(optionStrike) && optionStrike > 0 ? optionStrike : matching?.optionStrike, optionSymbol: matching?.optionSymbol, updatedAt: "Just now",
       },
     });
 
@@ -346,6 +353,8 @@ export function AddHoldingDialog() {
               <Field label="Contracts"><Input required type="number" step="1" max={form.optionType === "sell-call" || form.optionType === "sell-put" ? -1 : undefined} min={form.optionType === "sell-call" || form.optionType === "sell-put" ? undefined : 1} value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /></Field>
               <Field label="Contract Cost"><Input required type="number" min="0.000001" step="any" value={form.tradePrice} onChange={(e) => update("tradePrice", e.target.value)} /></Field>
               <Field label="Option Type"><select required value={form.optionType} onChange={(e) => { const nextType = e.target.value as OptionType; update("optionType", nextType); const currentQuantity = Number(form.quantity); if (Number.isFinite(currentQuantity) && currentQuantity !== 0) update("quantity", String(nextType === "sell-call" || nextType === "sell-put" ? -Math.abs(currentQuantity) : Math.abs(currentQuantity))); }} className="field-select">{optionTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></Field>
+              <Field label="Strike Price"><Input required={form.optionType === "sell-put"} type="number" min="0.000001" step="any" value={form.optionStrike} onChange={(e) => update("optionStrike", e.target.value)} /></Field>
+              {form.optionType === "sell-put" && Number(form.optionStrike || 0) > 0 && Number(form.quantity || 0) !== 0 && <div className="sm:col-span-2 -mt-2 text-xs font-normal text-violet-500">Collateral: {money(Math.abs(Number(form.quantity)) * Number(form.optionStrike) * 100)}</div>}
               <DateField label="Option Expiry" value={form.optionExpiry} onChange={(value) => update("optionExpiry", value)} />
               <DateField label="Buy Date" value={form.tradeDate} onChange={(value) => update("tradeDate", value)} />
               <MoneyField label="Platform Fees" value={form.platformFees} onChange={(value) => update("platformFees", value)} />
