@@ -1,2 +1,0 @@
-insert into securities(symbol,company_name,asset_type,sector) values
-('AAPL','Apple Inc.','equity','Technology'),('MSFT','Microsoft Corporation','equity','Technology'),('NVDA','NVIDIA Corporation','equity','Technology'),('JPM','JPMorgan Chase & Co.','equity','Financials'),('LLY','Eli Lilly and Company','equity','Healthcare'),('VOO','Vanguard S&P 500 ETF','etf','ETFs'),('BTC','Bitcoin','crypto','Crypto') on conflict do nothing;
