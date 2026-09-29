@@ -1,0 +1,23 @@
+@tailwind base; @tailwind components; @tailwind utilities;
+:root{--background:0 0% 98%;--foreground:240 10% 4%;--card:0 0% 100%;--border:240 6% 88%;--muted:240 4% 46%;--primary:142 71% 45%;--destructive:0 72% 51%}.dark{--background:240 10% 4%;--foreground:0 0% 96%;--card:240 8% 7%;--border:240 6% 14%;--muted:240 5% 63%}
+*{border-color:hsl(var(--border))} html{background:hsl(var(--background))} body{min-height:100vh;background:radial-gradient(circle at 50% -10%,rgba(34,197,94,.07),transparent 30%),hsl(var(--background));color:hsl(var(--foreground));font-feature-settings:"rlig" 1,"calt" 1}.glass{background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.02));backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.08)}.positive{color:#4ade80}.negative{color:#fb7185}.scrollbar-none::-webkit-scrollbar{display:none}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+
+@media (max-width: 640px) {
+  html, body { overflow-x: hidden; }
+  main { width: 100%; min-width: 0; }
+  h1 { font-size: 1.75rem !important; line-height: 2.1rem !important; }
+  input, select, textarea, button { min-width: 0; }
+  input, select, textarea { font-size: 16px !important; }
+  table th, table td { padding-left: .75rem !important; padding-right: .75rem !important; }
+}
