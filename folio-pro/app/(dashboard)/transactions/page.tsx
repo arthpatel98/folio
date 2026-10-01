@@ -22,6 +22,7 @@ const TYPE_LABELS: Record<TransactionType,string> = {
   sell: "Sell",
   dividend: "Dividend",
   interest: "Interest",
+  "robinhood-gold": "Robinhood Gold",
   split: "Split",
   deposit: "Deposit",
   withdrawal: "Withdrawal",
@@ -36,7 +37,7 @@ const TYPE_LABELS: Record<TransactionType,string> = {
 };
 
 type Category = "all" | "stocks" | "options" | "income" | "cash";
-type CashEntryType = "dividend" | "interest" | "deposit" | "withdrawal" | "transfer" | "cash-adjustment";
+type CashEntryType = "dividend" | "interest" | "robinhood-gold" | "deposit" | "withdrawal" | "transfer" | "cash-adjustment";
 type TransactionRow = { transaction: Transaction; portfolioId: DataPortfolioId };
 type TransactionEditOverride = Partial<Transaction> & {
   cashValueOverride?: number;
@@ -80,7 +81,7 @@ const typeBadgeClass=(tx:Transaction)=>{
   if(optionDisplay==="Sell to Close")return "border-blue-400/25 bg-blue-400/[.09] text-blue-300";
   if(tx.type==="buy"||tx.type==="position-added")return "border-blue-400/20 bg-blue-400/[.07] text-blue-300";
   if(tx.type==="sell"||tx.type==="position-removed")return "border-amber-400/20 bg-amber-400/[.07] text-amber-300";
-  if(tx.type==="dividend"||tx.type==="interest")return "border-emerald-400/20 bg-emerald-400/[.07] text-emerald-300";
+  if(tx.type==="dividend"||tx.type==="interest"||tx.type==="robinhood-gold")return "border-emerald-400/20 bg-emerald-400/[.07] text-emerald-300";
   return "border-white/10 bg-white/[.03] text-zinc-400";
 };
 
@@ -88,7 +89,7 @@ const transactionCashImpact=(tx:Transaction)=>{
   const amount=Math.abs(tx.amount||0);
   const regular=typeof tx.cashImpact==="number"
     ? tx.cashImpact
-    : tx.type==="sell"||tx.type==="dividend"||tx.type==="interest"||tx.type==="deposit"
+    : tx.type==="sell"||tx.type==="dividend"||tx.type==="interest"||tx.type==="robinhood-gold"||tx.type==="deposit"
       ? amount-(tx.fees||0)
       : tx.type==="buy"||tx.type==="withdrawal"
         ? -amount-(tx.fees||0)
@@ -169,7 +170,7 @@ const isActualPortfolioTransaction=(tx:Transaction)=>{
 };
 
 const categoryFor=(tx:Transaction):Exclude<Category,"all">=>{
-  if(tx.type==="dividend"||tx.type==="interest") return "income";
+  if(tx.type==="dividend"||tx.type==="interest"||tx.type==="robinhood-gold") return "income";
   if(["deposit","withdrawal","transfer","cash-adjustment"].includes(tx.type)) return "cash";
   return tx.assetType==="option" ? "options" : "stocks";
 };
@@ -406,12 +407,16 @@ export default function TransactionsPage(){
   const recordEntry=()=>{
     const amount=Number(entryAmount);
     if(!Number.isFinite(amount)||amount===0)return;
+    const normalizedTicker=entrySymbol.trim().toUpperCase();
+    const isRobinhoodGold=entryType==="robinhood-gold";
+    const dividendSource=entryType==="dividend" ? `${normalizedTicker||"Dividend"} Dividend` : undefined;
     addCashTransaction({
       type:entryType,
       amount:entryType==="cash-adjustment"?amount:Math.abs(amount),
       date:entryDate,
-      symbol:entrySymbol,
+      symbol:isRobinhoodGold ? "Gold Deposit Boost Payout" : normalizedTicker,
       notes:entryNotes,
+      source:isRobinhoodGold ? "Gold Deposit Boost Payout" : dividendSource,
     });
     setEntryAmount("");
     setEntrySymbol("");
@@ -499,9 +504,9 @@ export default function TransactionsPage(){
       <Card className="w-full max-w-lg overflow-hidden">
         <div className="flex items-center justify-between border-b border-white/10 p-4"><div><h2 className="font-semibold">Record Cash / Income</h2><p className="mt-1 text-xs text-zinc-500">For {activeId==="all"?"selected portfolio":PORTFOLIO_NAMES[activeId]}</p></div><button onClick={()=>setShowAdd(false)} className="grid size-9 place-items-center rounded-xl border border-white/10 text-zinc-500 hover:text-white"><X size={16}/></button></div>
         <div className="space-y-4 p-4">
-          <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">Transaction Type</span><select value={entryType} onChange={e=>setEntryType(e.target.value as CashEntryType)} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none">{(["deposit","withdrawal","dividend","interest","transfer","cash-adjustment"] as CashEntryType[]).map(type=><option key={type} value={type}>{TYPE_LABELS[type]}</option>)}</select></label>
+          <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">Transaction Type</span><select value={entryType} onChange={e=>{const next=e.target.value as CashEntryType;setEntryType(next);if(next==="robinhood-gold")setEntrySymbol("Gold Deposit Boost Payout");else if(entryType==="robinhood-gold")setEntrySymbol("");}} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none">{(["deposit","withdrawal","dividend","interest","robinhood-gold","transfer","cash-adjustment"] as CashEntryType[]).filter(type=>type!=="robinhood-gold"||activeId==="robinhood"||activeId==="all").map(type=><option key={type} value={type}>{TYPE_LABELS[type]}</option>)}</select></label>
           <div className="grid grid-cols-2 gap-3"><label><span className="mb-1.5 block text-xs text-zinc-500">Amount</span><div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">$</span><input type="number" step="0.01" value={entryAmount} onChange={e=>setEntryAmount(e.target.value)} placeholder="0.00" className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 pl-7 pr-3 text-sm outline-none"/></div></label><label><span className="mb-1.5 block text-xs text-zinc-500">Date</span><input type="date" value={entryDate} onChange={e=>setEntryDate(e.target.value)} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-xs outline-none"/></label></div>
-          <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">Ticker (optional)</span><input value={entrySymbol} onChange={e=>setEntrySymbol(e.target.value.toUpperCase())} placeholder="Example: NVDA" className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"/></label>
+          <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">Ticker (optional)</span><input value={entrySymbol} onChange={e=>setEntrySymbol(e.target.value.toUpperCase())} disabled={entryType==="robinhood-gold"} placeholder="Example: NVDA" className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"/></label>
           <label className="block"><span className="mb-1.5 block text-xs text-zinc-500">Comment (optional)</span><textarea value={entryNotes} onChange={e=>setEntryNotes(e.target.value)} rows={3} placeholder="Add a note..." className="w-full resize-none rounded-xl border border-white/10 bg-zinc-950 p-3 text-sm outline-none"/></label>
           {entryType==="cash-adjustment"&&<div className="rounded-xl border border-blue-400/15 bg-blue-400/[.04] p-3 text-xs leading-5 text-zinc-500">For Cash Adjustment, use a positive amount to add cash or a negative amount to subtract cash.</div>}
           {activeId==="fidelity-401k"&&<div className="rounded-xl border border-amber-400/15 bg-amber-400/[.04] p-3 text-xs leading-5 text-amber-200/70">Fidelity 401(k) cash is fixed at $0 in Folio. This entry will be recorded in history without changing displayed cash.</div>}

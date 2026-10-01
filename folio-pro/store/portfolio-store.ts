@@ -153,7 +153,7 @@ type State = {
   updateHolding: (originalHolding: Holding, holding: Holding) => void;
   removeHolding: (holding: Holding) => void;
   addTransaction: (transaction: Transaction) => void;
-  addCashTransaction: (entry: { type: "dividend" | "interest" | "deposit" | "withdrawal" | "transfer" | "cash-adjustment"; amount: number; date?: string; symbol?: string; notes?: string }) => void;
+  addCashTransaction: (entry: { type: "dividend" | "interest" | "robinhood-gold" | "deposit" | "withdrawal" | "transfer" | "cash-adjustment"; amount: number; date?: string; symbol?: string; notes?: string; source?: string }) => void;
   executeTrade: (trade: { action: "buy" | "sell"; holding: Holding; quantity: number; price: number; tradeDate?: string; fees?: number; taxLotMethod?: TaxLotMethod; customTaxLots?: Record<string, number> }) => { ok: boolean; message?: string };
   updateStockQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>, portfolioId?: DataPortfolioId) => void;
   updateOptionQuotes: (quotes: Record<string, { currentPrice: number; previousClose: number }>, portfolioId?: DataPortfolioId) => void;
@@ -336,7 +336,7 @@ export const usePortfolioStore = create<State>()(
           const target = state.activePortfolioId === "all" ? "robinhood" : state.activePortfolioId;
           const rawAmount = Number.isFinite(entry.amount) ? entry.amount : 0;
           const amount = Math.abs(rawAmount);
-          const positiveTypes = new Set(["dividend", "interest", "deposit"]);
+          const positiveTypes = new Set(["dividend", "interest", "robinhood-gold", "deposit"]);
           const negativeTypes = new Set(["withdrawal"]);
           const signedCashImpact = positiveTypes.has(entry.type)
             ? amount
@@ -354,7 +354,7 @@ export const usePortfolioStore = create<State>()(
             date: entry.date || new Date().toISOString().slice(0, 10),
             fees: 0,
             notes: entry.notes?.trim() || undefined,
-            source: "Transactions",
+            source: entry.source?.trim() || "Transactions",
             cashImpact,
           };
           const transactionsByPortfolio = {

@@ -49,6 +49,7 @@ export type TransactionType =
   | "sell"
   | "dividend"
   | "interest"
+  | "robinhood-gold"
   | "split"
   | "deposit"
   | "withdrawal"

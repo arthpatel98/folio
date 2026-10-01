@@ -1915,7 +1915,7 @@ function QuarterlyChart({ title, subtitle, data, onProfitBarClick, selectedYear,
           {data.map((row)=><Cell key={`profit-${row.period}`} fill={row.realizedProfit<0?`url(#${gradientId}-negative)`:`url(#${gradientId}-profit)`}/>)}
           <LabelList dataKey="realizedProfit" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/>
         </Bar>
-        <Bar dataKey="income" name="Dividends & Interest" fill={`url(#${gradientId}-income)`} radius={[7,7,2,2]} maxBarSize={34} onClick={openProfitDetail} style={{cursor:onProfitBarClick?"pointer":"default"}}>
+        <Bar dataKey="income" name="Dividend & Interest" fill={`url(#${gradientId}-income)`} radius={[7,7,2,2]} maxBarSize={34} onClick={openProfitDetail} style={{cursor:onProfitBarClick?"pointer":"default"}}>
           {data.map((row)=><Cell key={`income-${row.period}`} fill={row.income<0?`url(#${gradientId}-negative)`:`url(#${gradientId}-income)`}/>)}
           <LabelList dataKey="income" position="top" formatter={(value: any)=>chartValueLabel(Number(value))} fill="#e4e4e7" fontSize={11} fontWeight={700} stroke="#09090b" strokeWidth={2} paintOrder="stroke"/>
         </Bar>
@@ -2053,7 +2053,7 @@ function ProfitDrilldownModal({period,groups,total,dividends,onEditTransaction,o
         </div>
         <div className="inline-flex h-9 overflow-hidden rounded-xl border border-white/10">
           <button type="button" onClick={()=>setDetailView("profit")} className={cn("px-4 text-xs font-semibold transition",detailView==="profit"?"bg-emerald-500 text-zinc-950":"text-zinc-400 hover:text-white")}>Realized P/L</button>
-          <button type="button" onClick={()=>setDetailView("dividends")} className={cn("px-4 text-xs font-semibold transition",detailView==="dividends"?"bg-blue-500 text-white":"text-zinc-400 hover:text-white")}>Dividends & Interest</button>
+          <button type="button" onClick={()=>setDetailView("dividends")} className={cn("px-4 text-xs font-semibold transition",detailView==="dividends"?"bg-blue-500 text-white":"text-zinc-400 hover:text-white")}>Dividend & Interest</button>
         </div>
         <button type="button" onClick={onClose} className="grid size-9 shrink-0 place-items-center justify-self-end rounded-xl border border-white/10 text-zinc-500 transition hover:bg-white/[.05] hover:text-white" aria-label="Close Details"><X size={17}/></button>
       </div>
@@ -2061,7 +2061,7 @@ function ProfitDrilldownModal({period,groups,total,dividends,onEditTransaction,o
         {detailView==="dividends" ? <div>
           <div className="mb-5 grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-white/[.08] bg-white/[.025] p-5">
-              <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Dividends</p>
+              <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Dividend</p>
               <p className={cn("mt-3 text-2xl font-semibold",totalDividends>=0?"text-blue-400":"text-rose-400")}>{money(totalDividends)}</p>
             </div>
             <div className="rounded-2xl border border-white/[.08] bg-white/[.025] p-5">
@@ -2074,12 +2074,12 @@ function ProfitDrilldownModal({period,groups,total,dividends,onEditTransaction,o
             </div>
           </div>
           <div className="mb-5 rounded-2xl border border-white/[.08] bg-white/[.025] p-5">
-            <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Dividends & Interest</p>
+            <p className="text-xs uppercase tracking-[.14em] text-zinc-600">Total Dividend & Interest</p>
             <p className={cn("mt-3 text-3xl font-semibold",dividendTotal>=0?"text-blue-400":"text-rose-400")}>{money(dividendTotal)}</p>
             <p className="mt-2 text-xs text-zinc-600">{dividends.length} {dividends.length===1?"Entry":"Entries"}</p>
           </div>
           <div className="overflow-hidden rounded-2xl border border-white/[.08] bg-white/[.02]">
-            <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Dividends & Interest By Transaction</h3></div>
+            <div className="border-b border-white/[.07] px-4 py-3"><h3 className="text-sm font-semibold">Dividend & Interest By Transaction</h3></div>
             {dividends.length===0?<div className="px-6 py-14 text-center text-sm text-zinc-500">No dividend or interest entries are available for {period}.</div>:<div className="overflow-x-auto"><table className="w-full min-w-[680px] text-sm">
               <thead className="bg-white/[.025] text-left text-xs text-zinc-500"><tr><th className="px-4 py-3">Date</th><th className="px-4 py-3">Source</th><th className="px-4 py-3">Category</th><th className="px-4 py-3 text-right">Amount</th></tr></thead>
               <tbody>{[...dividends].sort((a,b)=>a.date.localeCompare(b.date)).map((dividend,index)=><tr key={`${dividend.date}-${dividend.ticker}-${index}`} className="border-t border-white/[.06]"><td className="px-4 py-3 text-zinc-400">{new Date(`${dividend.date}T12:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</td><td className="px-4 py-3 font-semibold">{dividend.ticker}</td><td className="px-4 py-3 text-zinc-400">{incomeCategory(dividend)}</td><td className={cn("px-4 py-3 text-right font-semibold",dividend.amount>=0?"text-blue-400":"text-rose-400")}>{money(dividend.amount)}</td></tr>)}</tbody>
