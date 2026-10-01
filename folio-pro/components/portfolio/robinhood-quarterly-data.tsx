@@ -1381,6 +1381,61 @@ const periodTime=(period:string)=>{const m=period.match(/^([A-Z][a-z]{2}) (20\d{
 
 export type RobinhoodAllTimeSummary = { realizedProfit: number; dividendAmount: number; extras: number };
 
+export function getBarChartRealizedProfitForPeriod(
+  activePortfolioId: "robinhood" | "fidelity-roth" | "fidelity-401k" | "all",
+  transactionsByPortfolio: Record<"robinhood" | "fidelity-roth" | "fidelity-401k", Transaction[]>,
+  period: string,
+) {
+  let edits: VerifiedProfitEdits = {};
+  if (typeof window !== "undefined") {
+    try {
+      const raw = window.localStorage.getItem(VERIFIED_PROFIT_EDITS_KEY);
+      if (raw) edits = JSON.parse(raw);
+    } catch {}
+  }
+
+  const includesRobinhood = activePortfolioId === "robinhood" || activePortfolioId === "all";
+  const includesFidelityRoth = activePortfolioId === "fidelity-roth" || activePortfolioId === "all";
+  const activeTransactions = activePortfolioId === "all"
+    ? [...transactionsByPortfolio.robinhood, ...transactionsByPortfolio["fidelity-roth"], ...transactionsByPortfolio["fidelity-401k"]]
+    : transactionsByPortfolio[activePortfolioId];
+
+  let total = 0;
+  const addIfPeriodMatches = (tx: ProfitDrilldownTransaction, patch: VerifiedProfitEdit = {}) => {
+    if (patch.deleted) return;
+    const edited = { ...tx, ...patch };
+    const date = new Date(`${edited.date}T12:00:00`);
+    if (Number.isNaN(date.getTime())) return;
+    const editedPeriod = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(date);
+    if (editedPeriod === period) total += Number(edited.realizedProfit) || 0;
+  };
+
+  if (includesRobinhood) {
+    Object.values(ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS).flat().forEach(tx => addIfPeriodMatches(tx, edits[tx.id] ?? {}));
+  }
+  if (includesFidelityRoth) {
+    ROTH_IRA_CLOSED_LOT_TRANSACTIONS.forEach(tx => addIfPeriodMatches(tx, edits[tx.id] ?? {}));
+  }
+
+  activeTransactions.forEach(tx => {
+    if (tx.realizedGain === undefined || !tx.symbol || !tx.date) return;
+    const date = new Date(`${tx.date}T12:00:00`);
+    if (Number.isNaN(date.getTime())) return;
+    const txPeriod = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(date);
+    // Match the bar chart's existing rule: verified Robinhood months replace live rows.
+    if (includesRobinhood && ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS[txPeriod]) return;
+    const patch = edits[`live-${tx.id}`] ?? {};
+    if (patch.deleted) return;
+    const editedDate = patch.date ? new Date(`${patch.date}T12:00:00`) : date;
+    if (Number.isNaN(editedDate.getTime())) return;
+    const editedPeriod = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" }).format(editedDate);
+    if (editedPeriod !== period) return;
+    total += Number(patch.realizedProfit ?? tx.realizedGain) || 0;
+  });
+
+  return total;
+}
+
 export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?: (summary: RobinhoodAllTimeSummary) => void }) {
   const activePortfolioId=usePortfolioStore((state)=>state.activePortfolioId);
   const transactionsByPortfolio=usePortfolioStore((state)=>state.transactionsByPortfolio);

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { CalendarDays, CircleDollarSign, Plus, ReceiptText, Search, TrendingUp, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { getBarChartRealizedProfitForPeriod } from "@/components/portfolio/robinhood-quarterly-data";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore, type DataPortfolioId } from "@/store/portfolio-store";
 import { cn } from "@/lib/utils";
@@ -136,7 +137,7 @@ const exactAverageDaysHeld=(tx:Transaction)=>{
 const explicitAverageDaysHeld=(tx:Transaction)=>{
   const symbol=(tx.symbol||"").trim().toUpperCase();
   if(tx.date==="2026-08-07"&&tx.type==="sell"&&symbol==="PLTR")return 25;
-  if(tx.date==="2026-09-25"&&symbol==="BMNR")return 8;
+  if(tx.date==="2026-09-25"&&tx.type==="sell"&&symbol==="BMNR")return 8;
   if(symbol==="NVDA"&&tx.assetType==="option"&&tx.optionType==="buy-call"&&tx.optionExpiry==="2027-06-17")return 62;
   return null;
 };
@@ -387,26 +388,20 @@ export default function TransactionsPage(){
     let currentCount=0;
     let previousCount=0;
     let currentPl=0;
-    let previousPl=0;
     summaryRows.forEach(({transaction:tx})=>{
       if(tx.date.startsWith(currentPrefix)){
         currentCount+=1;
         currentPl+=tx.realizedGain||0;
       }else if(tx.date.startsWith(previousPrefix)){
         previousCount+=1;
-        previousPl+=tx.realizedGain||0;
       }
     });
+    const previousPl=getBarChartRealizedProfitForPeriod(activeId,transactionsByPortfolio,previousLabel);
     return {currentCount,previousCount,currentPl,previousPl,previousLabel};
-  },[summaryRows]);
+  },[summaryRows,activeId,transactionsByPortfolio]);
 
-  const comparisonText=(current:number,previous:number,kind:"money"|"count")=>{
-    const difference=current-previous;
-    const differenceLabel=kind==="money"?signedMoney(difference):`${difference>0?"+":""}${difference.toLocaleString()}`;
-    const percent=Math.abs(previous)>1e-9?Math.abs(difference/previous*100):null;
-    const percentLabel=percent===null?"":` (${difference>=0?"+":"-"}${percent.toFixed(1)}%)`;
-    return `vs ${monthlySummary.previousLabel}: ${differenceLabel}${percentLabel}`;
-  };
+  const previousMonthMoneyText=`vs ${monthlySummary.previousLabel}: ${signedMoney(monthlySummary.previousPl)}`;
+  const previousMonthCountText=`vs ${monthlySummary.previousLabel}: ${monthlySummary.previousCount.toLocaleString()}`;
 
   const recordEntry=()=>{
     const amount=Number(entryAmount);
@@ -433,8 +428,8 @@ export default function TransactionsPage(){
     </div>
 
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-2">
-      <Summary icon={TrendingUp} label="This Month P/L" value={signedMoney(monthlySummary.currentPl)} good={monthlySummary.currentPl>=0} comparison={comparisonText(monthlySummary.currentPl,monthlySummary.previousPl,"money")} comparisonGood={monthlySummary.currentPl>=monthlySummary.previousPl}/>
-      <Summary icon={ReceiptText} label="Total Transactions This Month" value={monthlySummary.currentCount.toLocaleString()} comparison={comparisonText(monthlySummary.currentCount,monthlySummary.previousCount,"count")} comparisonGood={monthlySummary.currentCount>=monthlySummary.previousCount}/>
+      <Summary icon={TrendingUp} label="This Month P/L" value={signedMoney(monthlySummary.currentPl)} good={monthlySummary.currentPl>=0} comparison={previousMonthMoneyText} comparisonGood={monthlySummary.previousPl>=0}/>
+      <Summary icon={ReceiptText} label="Total Transactions This Month" value={monthlySummary.currentCount.toLocaleString()} comparison={previousMonthCountText}/>
     </div>
 
     <Card className="overflow-hidden">
