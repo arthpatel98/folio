@@ -255,10 +255,14 @@ export default function TransactionsPage(){
       return false;
     });
     const applyEdits=(portfolioId:DataPortfolioId,tx:Transaction):Transaction=>{
+      const descriptor=`${tx.symbol??""} ${tx.positionLabel??""} ${tx.source??""} ${tx.notes??""}`.toLowerCase();
+      const normalizedTx = portfolioId==="robinhood" && tx.date==="2026-08-31" && Math.abs(Math.abs(tx.amount)-2.08)<0.001 && descriptor.includes("gold deposit boost")
+        ? {...tx,type:"robinhood-gold" as const,symbol:"Gold Deposit Boost Payout",source:"Gold Deposit Boost Payout",positionLabel:"Gold Deposit Boost Payout"}
+        : tx;
       const patch=transactionEdits[editKey(portfolioId,tx.id)];
-      if(!patch)return tx;
+      if(!patch)return normalizedTx;
       const {cashValueOverride: _cashValueOverride,realizedPctOverride: _realizedPctOverride,avgDaysOverride: _avgDaysOverride,...transactionPatch}=patch;
-      return {...tx,...transactionPatch};
+      return {...normalizedTx,...transactionPatch};
     };
     const merged: Record<DataPortfolioId, Transaction[]> = {
       robinhood:[...existingRobinhood,...importedToAdd].map(tx=>applyEdits("robinhood",tx)),
@@ -368,6 +372,18 @@ export default function TransactionsPage(){
 
   useEffect(()=>setPage(1),[activeId,category,typeFilter,fromDate,toDate,query]);
   const pageCount=Math.max(1,Math.ceil(filteredRows.length/PAGE_SIZE));
+  const paginationItems=useMemo(() => {
+    if(pageCount<=5)return Array.from({length:pageCount},(_,index)=>index+1);
+    const pages=new Set<number>([1,pageCount,page]);
+    if(page>1)pages.add(page-1);
+    if(page<pageCount)pages.add(page+1);
+    if(page<=3){pages.add(2);pages.add(3);}
+    if(page>=pageCount-2){pages.add(pageCount-1);pages.add(pageCount-2);}
+    const sorted=[...pages].filter(value=>value>=1&&value<=pageCount).sort((a,b)=>a-b);
+    const items:Array<number|"ellipsis">=[];
+    sorted.forEach((value,index)=>{if(index>0&&value-sorted[index-1]>1)items.push("ellipsis");items.push(value);});
+    return items;
+  },[page,pageCount]);
   useEffect(()=>{ if(page>pageCount)setPage(pageCount); },[page,pageCount]);
   const pagedRows=useMemo(()=>filteredRows.slice((page-1)*PAGE_SIZE,page*PAGE_SIZE),[filteredRows,page]);
 
@@ -442,7 +458,7 @@ export default function TransactionsPage(){
         <div className="flex flex-wrap gap-2">{categories.map(([id,label])=><button key={id} onClick={()=>setCategory(id)} className={cn("rounded-xl border px-3 py-2 text-xs font-medium transition",category===id?"border-emerald-400/25 bg-emerald-400/10 text-emerald-300":"border-white/10 text-zinc-500 hover:bg-white/[.04] hover:text-zinc-300")}>{label}</button>)}</div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_190px_165px_165px]">
           <label className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search Ticker, Comment" className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 pl-10 pr-3 text-sm outline-none focus:border-emerald-400/30"/></label>
-          <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value as "all"|TransactionType)} className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"><option value="all">All transaction types</option>{(["buy","sell","dividend","transfer"] as TransactionType[]).map(value=><option key={value} value={value}>{TYPE_LABELS[value]}</option>)}</select>
+          <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value as "all"|TransactionType)} className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"><option value="all">All Transaction Types</option>{(["buy","sell","dividend"] as TransactionType[]).map(value=><option key={value} value={value}>{TYPE_LABELS[value]}</option>)}</select>
           <label className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600"/><input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 pl-9 pr-2 text-xs outline-none"/></label>
           <label className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600"/><input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 pl-9 pr-2 text-xs outline-none"/></label>
         </div>
@@ -477,7 +493,7 @@ export default function TransactionsPage(){
         <div className="text-xs text-zinc-600">Showing {filteredRows.length===0?0:(page-1)*PAGE_SIZE+1}–{Math.min(page*PAGE_SIZE,filteredRows.length)} of {filteredRows.length.toLocaleString()} Transactions.</div>
         {filteredRows.length>PAGE_SIZE&&<div className="flex items-center gap-2">
           <button type="button" onClick={()=>setPage(current=>Math.max(1,current-1))} disabled={page===1} className="h-8 rounded-lg border border-white/10 px-3 text-xs text-zinc-400 transition hover:bg-white/[.04] disabled:cursor-not-allowed disabled:opacity-35">Previous</button>
-          <div className="flex items-center gap-1">{Array.from({length:pageCount},(_,index)=>index+1).map(pageNumber=><button key={pageNumber} type="button" onClick={()=>setPage(pageNumber)} className={cn("grid size-8 place-items-center rounded-lg border text-xs font-medium transition",page===pageNumber?"border-emerald-400/30 bg-emerald-400/10 text-emerald-300":"border-white/10 text-zinc-500 hover:bg-white/[.04] hover:text-zinc-300")}>{pageNumber}</button>)}</div>
+          <div className="flex items-center gap-1">{paginationItems.map((item,index)=>item==="ellipsis"?<span key={`ellipsis-${index}`} className="grid size-8 place-items-center text-xs text-zinc-600">…</span>:<button key={item} type="button" onClick={()=>setPage(item)} className={cn("grid size-8 place-items-center rounded-lg border text-xs font-medium transition",page===item?"border-emerald-400/30 bg-emerald-400/10 text-emerald-300":"border-white/10 text-zinc-500 hover:bg-white/[.04] hover:text-zinc-300")}>{item}</button>)}</div>
           <button type="button" onClick={()=>setPage(current=>Math.min(pageCount,current+1))} disabled={page===pageCount} className="h-8 rounded-lg border border-white/10 px-3 text-xs text-zinc-400 transition hover:bg-white/[.04] disabled:cursor-not-allowed disabled:opacity-35">Next</button>
         </div>}
       </div>

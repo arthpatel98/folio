@@ -96,6 +96,7 @@ export default function DcaPage() {
   const [targetReturn, setTargetReturn] = useState<NumericValue>("");
   const [sharesToSell, setSharesToSell] = useState<NumericValue>("");
   const [partialTaxLotMethod, setPartialTaxLotMethod] = useState<TaxLotMethod>("fifo");
+  const [includeFuturePartialPurchases, setIncludeFuturePartialPurchases] = useState(false);
   const [partialCustomLots, setPartialCustomLots] = useState<Record<string, string>>({});
   const [editingOptionDays, setEditingOptionDays] = useState(false);
   const [optionBuyDateDraft, setOptionBuyDateDraft] = useState("");
@@ -410,11 +411,14 @@ export default function DcaPage() {
   const targetPotentialProfit = isOption
     ? (requiredSellingPrice - baseAverage) * baseQuantity * optionDirection
     : totals.shares * (requiredSellingPrice - totals.avg);
-  const safeSharesToSell = Math.min(Math.max(toNumber(sharesToSell), 0), totals.shares);
+  const partialScopeLots = useMemo(() => lots.filter((lot) => includeFuturePartialPurchases || !lot.future), [lots, includeFuturePartialPurchases]);
+  const partialTotalShares = partialScopeLots.reduce((sum, lot) => sum + toNumber(lot.shares), 0);
+  const partialTotalCost = partialScopeLots.reduce((sum, lot) => sum + lot.amount, 0);
+  const safeSharesToSell = Math.min(Math.max(toNumber(sharesToSell), 0), partialTotalShares);
   const partialLotKey = (lot:DcaLot,index:number) => lot.id || `partial-${lot.date}-${toNumber(lot.price)}-${index}`;
   const partialAvailableLots = useMemo(() => lots
     .map((lot,index)=>({lot,index,key:partialLotKey(lot,index),shares:toNumber(lot.shares),buyPrice:toNumber(lot.price)}))
-    .filter(item=>!item.lot.future&&item.shares>0),[lots]);
+    .filter(item=>(includeFuturePartialPurchases||!item.lot.future)&&item.shares>0),[lots,includeFuturePartialPurchases]);
 
   const partialLotAllocation = useMemo(() => {
     const allocation:Record<string,number>={};
@@ -425,9 +429,9 @@ export default function DcaPage() {
       return allocation;
     }
     const ordered=partialAvailableLots.slice();
-    if(partialTaxLotMethod==="lifo")ordered.sort((a,b)=>new Date(b.lot.date).getTime()-new Date(a.lot.date).getTime());
-    else if(partialTaxLotMethod==="highest-cost")ordered.sort((a,b)=>b.buyPrice-a.buyPrice||new Date(a.lot.date).getTime()-new Date(b.lot.date).getTime());
-    else ordered.sort((a,b)=>new Date(a.lot.date).getTime()-new Date(b.lot.date).getTime());
+    if(partialTaxLotMethod==="lifo")ordered.sort((a,b)=>lotDateValue(b.lot.date)-lotDateValue(a.lot.date));
+    else if(partialTaxLotMethod==="highest-cost")ordered.sort((a,b)=>b.buyPrice-a.buyPrice||lotDateValue(a.lot.date)-lotDateValue(b.lot.date));
+    else ordered.sort((a,b)=>lotDateValue(a.lot.date)-lotDateValue(b.lot.date));
     let remaining=safeSharesToSell;
     ordered.forEach(item=>{
       const used=Math.min(item.shares,remaining);
@@ -440,7 +444,7 @@ export default function DcaPage() {
   const partialSelectedShares=Object.values(partialLotAllocation).reduce<number>((sum,value)=>sum+Number(value||0),0);
   const partialLotRows=useMemo(() => partialAvailableLots
     .slice()
-    .sort((a,b)=>new Date(a.lot.date).getTime()-new Date(b.lot.date).getTime())
+    .sort((a,b)=>lotDateValue(a.lot.date)-lotDateValue(b.lot.date))
     .map(item=>{
       const used=partialLotAllocation[item.key]||0;
       return {
@@ -462,6 +466,7 @@ export default function DcaPage() {
     const weightedDays = partialLotRows.reduce((sum, row) => {
       if (row.used <= 0) return sum;
       const rawDate = row.lot.date;
+      if (row.lot.future || rawDate === "Future") return sum;
       const added = new Date(`${rawDate}T00:00:00`);
       if (Number.isNaN(added.getTime())) return sum;
       const days = Math.max(0, Math.floor((today.getTime() - added.getTime()) / 86400000));
@@ -469,8 +474,8 @@ export default function DcaPage() {
     }, 0);
     return Math.round(weightedDays / partialSelectedShares);
   })();
-  const remainingShares = Math.max(totals.shares-partialSelectedShares,0);
-  const remainingCostBasis = Math.max(totals.amount-consumedCostBasis,0);
+  const remainingShares = Math.max(partialTotalShares-partialSelectedShares,0);
+  const remainingCostBasis = Math.max(partialTotalCost-consumedCostBasis,0);
   const remainingAverageCost = remainingShares?remainingCostBasis/remainingShares:0;
   const isShortOption = isOption && optionDirection < 0;
 
@@ -545,7 +550,7 @@ export default function DcaPage() {
 
   return <div className="space-y-5">
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Return Simulator</h1><p className="mt-1 text-sm text-zinc-500">Simulate Potential Prices And Returns For Your Stock And Option Positions.</p>
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Return Simulator</h1><p className="mt-1 text-sm text-zinc-500">Simulate Potential Prices And Returns For Stock And Option Positions.</p>
     </div>
 
     {showAddPosition && <section className="rounded-2xl border border-white/10 bg-zinc-950/50 p-5">
@@ -561,10 +566,9 @@ export default function DcaPage() {
     </section>}
 
     <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-5 lg:p-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2 lg:items-end">
         <div><label className="mb-2 block text-sm font-medium text-zinc-300">Position</label><select value={positionId} onChange={(event) => load(event.target.value)} className="h-12 w-full rounded-xl border border-white/10 bg-zinc-950/70 px-4 text-sm outline-none">{positions.map((position) => <option key={position.id} value={position.id}>{position.label ?? position.symbol}</option>)}</select></div>
         <div><div className="mb-2 flex items-center justify-between gap-3"><label className="block text-sm font-medium text-zinc-300">Potential Sell Price</label>{returnNeededFromCurrent !== null && <span className={cn("rounded-lg border px-2 py-1 text-xs font-semibold tabular-nums",returnNeededFromCurrent>=0?"border-emerald-400/20 bg-emerald-400/[.08] text-emerald-300":"border-rose-400/20 bg-rose-400/[.08] text-rose-300")}>{returnNeededFromCurrent>=0?"+":""}{returnNeededFromCurrent.toFixed(2)}%</span>}</div><div className="relative"><span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg font-semibold text-zinc-500">$</span><input type="text" inputMode="decimal" value={sellPriceFocused ? String(sellPrice) : (sellPrice === "" ? "" : Number(sellPrice).toFixed(2))} onFocus={() => setSellPriceFocused(true)} onChange={(event) => { const value = event.target.value; if (/^\d*(?:\.\d{0,2})?$/.test(value)) setSellPrice(value); }} onBlur={() => { const normalized = sellPrice === "" ? "" : Number(Number(sellPrice).toFixed(2)); setSellPriceFocused(false); setSellPrice(normalized === "" ? "" : normalized.toFixed(2)); }} className="h-12 w-full rounded-xl border border-white/10 bg-black/15 pl-8 pr-4 text-lg font-semibold outline-none"/></div></div>
-        <div className="flex flex-wrap gap-2"><button onClick={() => setShowAddPosition(true)} aria-label="Add Position" title="Add Position" className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-400 text-zinc-950 hover:bg-emerald-300"><Plus size={19}/></button><button onClick={removeSelectedPosition} disabled={!selectedPosition || activeId === "all"} aria-label="Remove Position" title="Remove Position" className="inline-flex h-12 w-12 items-center justify-center rounded-xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-40"><Trash2 size={18}/></button></div>
       </div>
       {savedMessage && <p className="mt-3 text-sm text-emerald-400">{savedMessage}</p>}
     </section>
@@ -651,12 +655,12 @@ export default function DcaPage() {
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(380px,0.9fr)] xl:items-start">
         <div className="grid gap-4">
           <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
-        <h2 className="font-semibold">Before DCA Vs. After DCA</h2>
+        <h2 className="font-semibold">Average Price Change With Future Purchase</h2>
         <div className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-white/[.035] to-black/20 shadow-[0_18px_50px_rgba(0,0,0,.22)]">
           <div className="grid md:grid-cols-[1fr_auto_1fr] md:items-stretch">
-            <div className="p-6 sm:p-7"><p className="text-sm font-semibold uppercase tracking-[.12em] text-zinc-500">Before DCA</p><p className="mt-2 text-sm text-zinc-600">Existing Average Price</p><p className="mt-5 text-4xl font-semibold tracking-tight text-zinc-100">{totals.oldAvg ? money(totals.oldAvg) : "—"}</p></div>
+            <div className="p-6 sm:p-7"><p className="mt-2 text-sm text-zinc-600">Existing Average Price</p><p className="mt-5 text-4xl font-semibold tracking-tight text-zinc-100">{totals.oldAvg ? money(totals.oldAvg) : "—"}</p></div>
             <div className="hidden items-center justify-center border-x border-white/10 bg-black/15 px-4 md:flex"><span className="grid size-10 place-items-center rounded-full border border-white/10 bg-white/[.04]"><ArrowRight size={20} className="text-zinc-400"/></span></div>
-            <div className="relative overflow-hidden border-t border-emerald-400/15 bg-gradient-to-br from-emerald-500/[.14] via-emerald-500/[.07] to-cyan-500/[.04] p-6 sm:p-7 md:border-l-0 md:border-t-0"><div className="pointer-events-none absolute -right-16 -top-20 size-48 rounded-full bg-emerald-400/[.08] blur-3xl"/><p className="relative text-sm font-semibold uppercase tracking-[.12em] text-emerald-400">After DCA</p><p className="relative mt-2 text-sm text-emerald-200/55">New Average Price</p><div className="relative mt-5 flex flex-wrap items-end justify-between gap-4"><p className="text-4xl font-semibold tracking-tight text-emerald-300">{totals.avg ? money(totals.avg) : "—"}</p>{totals.oldAvg > 0 && totals.avg > 0 && (() => { const difference = totals.avg - totals.oldAvg; const percent = difference / totals.oldAvg * 100; const Icon = difference > 0 ? ArrowUp : difference < 0 ? ArrowDown : ArrowRight; return <div className={cn("flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold", difference <= 0 ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300" : "border-rose-400/20 bg-rose-400/10 text-rose-300")}><Icon size={16}/><span>{signedMoney(difference)} · {Math.abs(percent).toFixed(2)}%</span></div>; })()}</div></div>
+            <div className="relative overflow-hidden border-t border-emerald-400/15 bg-gradient-to-br from-emerald-500/[.14] via-emerald-500/[.07] to-cyan-500/[.04] p-6 sm:p-7 md:border-l-0 md:border-t-0"><div className="pointer-events-none absolute -right-16 -top-20 size-48 rounded-full bg-emerald-400/[.08] blur-3xl"/><p className="relative mt-2 text-sm text-emerald-200/55">New Average Price</p><div className="relative mt-5 flex flex-wrap items-end justify-between gap-4"><p className="text-4xl font-semibold tracking-tight text-emerald-300">{totals.avg ? money(totals.avg) : "—"}</p>{totals.oldAvg > 0 && totals.avg > 0 && (() => { const difference = totals.avg - totals.oldAvg; const percent = difference / totals.oldAvg * 100; const Icon = difference > 0 ? ArrowUp : difference < 0 ? ArrowDown : ArrowRight; return <div className={cn("flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-semibold", difference <= 0 ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300" : "border-rose-400/20 bg-rose-400/10 text-rose-300")}><Icon size={16}/><span>{signedMoney(difference)} · {Math.abs(percent).toFixed(2)}%</span></div>; })()}</div></div>
           </div>
         </div>
       </section>
@@ -672,9 +676,9 @@ export default function DcaPage() {
         </div>
         <div className="min-w-0">
           <section className="rounded-2xl border border-white/10 bg-zinc-950/35 p-4 sm:p-5">
-        <h2 className="flex items-center gap-2 font-semibold">Partial Sale Calculator</h2>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><h2 className="flex items-center gap-2 font-semibold">Partial Sale Calculator</h2><label className="inline-flex h-11 cursor-pointer items-center justify-between gap-4 rounded-xl border border-emerald-400/20 bg-emerald-400/[.05] px-4"><span><span className="block text-xs font-medium text-zinc-300">Include Future Purchases</span><span className="mt-0.5 block text-[11px] text-zinc-500">From Return Simulator Purchase Lots</span></span><span className={cn("relative h-6 w-11 shrink-0 rounded-full transition",includeFuturePartialPurchases?"bg-emerald-400":"bg-white/10")}><input type="checkbox" checked={includeFuturePartialPurchases} onChange={e=>{setIncludeFuturePartialPurchases(e.target.checked);setPartialCustomLots({});}} className="sr-only"/><span className={cn("absolute top-1 size-4 rounded-full bg-white transition-all",includeFuturePartialPurchases?"left-6":"left-1")}/></span></label></div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="block text-sm text-zinc-400">Shares To Sell<div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={sharesToSell} min={0} max={totals.shares} type="number" step="any" onChange={(e)=>setSharesToSell(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span className="whitespace-nowrap text-sm text-zinc-400">Of {formatShares(totals.shares)}</span></div></label>
+          <label className="block text-sm text-zinc-400">Shares To Sell<div className="mt-2 flex h-11 items-center rounded-xl border border-white/10 bg-black/15 px-4"><input value={sharesToSell} min={0} max={partialTotalShares} type="number" step="any" onChange={(e)=>setSharesToSell(e.target.value === "" ? "" : toNumber(e.target.value))} className="w-full bg-transparent outline-none"/><span className="whitespace-nowrap text-sm text-zinc-400">Of {formatShares(partialTotalShares)}</span></div></label>
           <label className="block text-sm text-zinc-400">Tax Lot Method<select value={partialTaxLotMethod} onChange={e=>{setPartialTaxLotMethod(e.target.value as TaxLotMethod);setPartialCustomLots({});}} className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm text-zinc-200 outline-none"><option value="fifo">FIFO · Oldest First</option><option value="lifo">LIFO · Newest First</option><option value="custom">Custom Lots</option></select></label>
         </div>
         {partialLotRows.length>0&&<div className="mt-5 max-h-64 overflow-auto rounded-xl border border-white/10"><table className="min-w-full text-xs"><thead className="sticky top-0 bg-zinc-950 text-zinc-400"><tr><th className="px-3 py-2 text-left">Buy Date Lot</th><th className="px-3 py-2 text-right">Available</th><th className="px-3 py-2 text-right">Buy</th><th className="px-3 py-2 text-right">Sell Shares</th><th className="px-3 py-2 text-right">Return</th></tr></thead><tbody>{partialLotRows.map(row=><tr key={row.key} className={cn("border-t border-white/10",row.used>0&&"bg-emerald-500/[.035]")}><td className="px-3 py-2">{row.date}</td><td className="px-3 py-2 text-right">{formatShares(row.shares)}</td><td className="px-3 py-2 text-right">{money(row.buyPrice)}</td><td className="px-3 py-2 text-right">{partialTaxLotMethod==="custom"?<input type="number" min={0} max={row.shares} step="any" value={partialCustomLots[row.key]??""} onChange={e=>{const raw=e.target.value;const value=raw===""?"":String(Math.max(0,Math.min(row.shares,Number(raw)||0)));setPartialCustomLots(current=>({...current,[row.key]:value}));}} placeholder="0" className="h-8 w-20 rounded-lg border border-white/10 bg-black/20 px-2 text-right outline-none"/>:<span className={row.used>0?"font-medium text-emerald-400":"text-zinc-600"}>{row.used>0?formatShares(row.used):"—"}</span>}</td><td className={cn("px-3 py-2 text-right",row.returnValue>0?"text-emerald-400":row.returnValue<0?"text-rose-400":"text-zinc-600")}>{row.used>0?signedMoney(row.returnValue):"—"}</td></tr>)}</tbody></table></div>}

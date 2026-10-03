@@ -14,6 +14,7 @@ const sectors: Sector[] = [
   "AI / Enterprise Software",
   "AI Data Centers",
   "AI Infrastructure",
+  "Consumer Brand",
   "Cloud / AI / Software",
   "Crypto / Bitcoin",
   "Digital Advertising / AI",
@@ -23,7 +24,6 @@ const sectors: Sector[] = [
   "BioTech",
   "E-Commerce & Cloud",
   "Education Technology",
-  "Electrical Equipment / Power Infrastructure",
   "ETF",
   "Ethereum / Crypto Treasury",
   "Financials",
@@ -34,7 +34,7 @@ const sectors: Sector[] = [
   "Inverse ETF/ Hedge",
   "Other",
   "Semiconductors",
-  "Utilities / Energy",
+  "AI Power",
 ];
 
 type HoldingForm = {
