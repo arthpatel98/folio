@@ -405,17 +405,21 @@ export default function TransactionsPage(){
     let currentCount=0;
     let previousCount=0;
     let currentPl=0;
+    let filteredPreviousPl=0;
     summaryRows.forEach(({transaction:tx})=>{
       if(tx.date.startsWith(currentPrefix)){
         currentCount+=1;
         currentPl+=tx.realizedGain||0;
       }else if(tx.date.startsWith(previousPrefix)){
         previousCount+=1;
+        filteredPreviousPl+=tx.realizedGain||0;
       }
     });
-    const previousPl=getBarChartRealizedProfitForPeriod(activeId,transactionsByPortfolio,previousLabel);
+    const previousPl=category==="all"
+      ? getBarChartRealizedProfitForPeriod(activeId,transactionsByPortfolio,previousLabel)
+      : filteredPreviousPl;
     return {currentCount,previousCount,currentPl,previousPl,previousLabel};
-  },[summaryRows,activeId,transactionsByPortfolio]);
+  },[summaryRows,category,activeId,transactionsByPortfolio]);
 
   const previousMonthMoneyText=`vs ${monthlySummary.previousLabel}: ${signedMoney(monthlySummary.previousPl)}`;
   const previousMonthCountText=`vs ${monthlySummary.previousLabel}: ${monthlySummary.previousCount.toLocaleString()}`;

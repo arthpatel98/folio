@@ -872,23 +872,17 @@ export default function Page() {
       <div className="mt-6"><RobinhoodQuarterlyData onAllTimeSummary={setRobinhoodAllTimeSummary} /></div>
 
       <Card className="mt-6 overflow-hidden p-5">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h2 className="font-medium">Realized P/L & Dividends By Ticker</h2>
-            <Button asChild variant="outline" size="sm" className="h-8 rounded-lg px-2.5 text-xs">
-              <Link href="/ticker-strategy-pl" aria-label="View Ticker & Strategy P/L">
-                <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
-                Ticker & Strategy
-              </Link>
-            </Button>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex w-full flex-wrap justify-end gap-2">
-              <div className="relative w-full sm:w-64">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-              <Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search Ticker Or Comment..." className="pl-9" />
-              </div>
-            </div>
+        <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
+          <h2 className="font-medium">Realized P/L & Dividends By Ticker</h2>
+          <Button asChild variant="outline" size="sm" className="h-8 justify-self-start rounded-lg px-2.5 text-xs sm:justify-self-center">
+            <Link href="/ticker-strategy-pl" aria-label="View P/L By Ticker & Order Type">
+              <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
+              P/L By Ticker & Order Type
+            </Link>
+          </Button>
+          <div className="relative w-full sm:w-64 sm:justify-self-end">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+            <Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search Ticker Or Comment..." className="pl-9" />
           </div>
         </div>
 
