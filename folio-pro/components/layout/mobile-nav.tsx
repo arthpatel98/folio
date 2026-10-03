@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BriefcaseBusiness, Check, ChevronDown, Coins, LayoutDashboard, Landmark, Layers3, ReceiptText, Target } from "lucide-react";
+import { BriefcaseBusiness, Check, ChevronDown, Coins, LayoutDashboard, Landmark, Layers3, ReceiptText, Target, ChartNoAxesColumnIncreasing } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { portfolios, useActivePortfolio } from "@/components/portfolio/portfolio-context";
 
@@ -13,6 +13,7 @@ const items = [
   ["/dca", "Simulator", Coins],
   ["/targets", "Targets", Target],
   ["/realized", "Realized", Landmark],
+  ["/ticker-strategy-pl", "Ticker & Strategy P/L", ChartNoAxesColumnIncreasing],
   ["/transactions", "Txns", ReceiptText],
 ] as const;
 
@@ -40,7 +41,7 @@ export function MobileNav() {
       </div>
       <nav
       aria-label="Mobile navigation"
-      className="fixed inset-x-2 bottom-2 z-50 grid grid-cols-6 rounded-2xl border border-zinc-200 bg-white/95 px-1 py-1.5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/95 lg:hidden"
+      className="fixed inset-x-2 bottom-2 z-50 flex overflow-x-auto rounded-2xl border border-zinc-200 bg-white/95 px-1 py-1.5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/95 lg:hidden"
       style={{ paddingBottom: "max(0.375rem, env(safe-area-inset-bottom))" }}
     >
       {items.map(([href, label, Icon]) => {
@@ -51,7 +52,7 @@ export function MobileNav() {
             key={href}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] leading-tight text-zinc-500 transition",
+              "flex min-w-[68px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1 text-[10px] leading-tight text-zinc-500 transition",
               "hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-white/[.06] dark:hover:text-white",
               active && "bg-emerald-400/10 text-emerald-600 dark:text-emerald-400"
             )}

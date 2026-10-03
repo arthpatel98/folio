@@ -9,14 +9,14 @@ import { cn, money } from "@/lib/utils";
 import { usePortfolioStore } from "@/store/portfolio-store";
 import type { Transaction } from "@/types/portfolio";
 
-type ProfitDrilldownTransaction = {
+export type ProfitDrilldownTransaction = {
   id: string; date: string; ticker: string; label: string; quantity: number | null; price: number | null;
   proceeds: number | null; realizedProfit: number; category: "Sell Call" | "Sell Put" | "Buy Call" | "Buy Put" | "Common Stocks";
   preserveLabelCasing?: boolean;
 };
 type VerifiedProfitEdit = Partial<ProfitDrilldownTransaction> & { deleted?: boolean };
 type VerifiedProfitEdits = Record<string, VerifiedProfitEdit>;
-const VERIFIED_PROFIT_EDITS_KEY = "folio-robinhood-verified-profit-edits-v1";
+export const VERIFIED_PROFIT_EDITS_KEY = "folio-robinhood-verified-profit-edits-v1";
 
 type IncomeTransaction = { date: string; ticker: string; amount: number };
 type IncomeEdit = Partial<IncomeTransaction> & { deleted?: boolean };
@@ -167,7 +167,7 @@ const ROBINHOOD_INCOME_TRANSACTIONS: IncomeTransaction[] = [
 function incomePeriod(date:string){const d=new Date(`${date}T12:00:00`);return new Intl.DateTimeFormat("en-US",{month:"short",year:"numeric"}).format(d);}
 
 
-const ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS: Record<string, ProfitDrilldownTransaction[]> = {
+export const ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS: Record<string, ProfitDrilldownTransaction[]> = {
   "Mar 2024": [{"id":"gk-2024-03-01-alb-4","date":"2024-03-01","ticker":"ALB","label":"ALBEMARLE CORP (ALB)","quantity":0.675675,"price":null,"proceeds":96.57,"realizedProfit":16.57,"category":"Common Stocks"},{"id":"gk-2024-03-01-alb-5","date":"2024-03-01","ticker":"ALB","label":"ALBEMARLE CORP (ALB)","quantity":0.451202,"price":null,"proceeds":64.48,"realizedProfit":14.48,"category":"Common Stocks"},{"id":"gk-2024-03-19-adm-11","date":"2024-03-19","ticker":"ADM","label":"ARCHER-DANIELS-MIDLAND CO (ADM)","quantity":1.448488,"price":null,"proceeds":88.27,"realizedProfit":8.27,"category":"Common Stocks"}],
   "Apr 2024": [{"id":"gk-2024-04-23-rtc-13","date":"2024-04-23","ticker":"RTC","label":"BAIJIAYUN GROUP LIMITED (RTC)","quantity":36.49635,"price":null,"proceeds":46.53,"realizedProfit":-3.47,"category":"Common Stocks"},{"id":"gk-2024-04-23-rtc-14","date":"2024-04-23","ticker":"RTC","label":"BAIJIAYUN GROUP LIMITED (RTC)","quantity":47.971807,"price":null,"proceeds":61.16,"realizedProfit":-8.84,"category":"Common Stocks"}],
   "May 2024": [{"id":"gk-2024-05-22-agl-3","date":"2024-05-22","ticker":"AGL","label":"AGILON HEALTH INC (AGL)","quantity":12.112612,"price":null,"proceeds":72.98,"realizedProfit":2.98,"category":"Common Stocks"},{"id":"gk-2024-05-20-acls-12","date":"2024-05-20","ticker":"ACLS","label":"AXCELIS TECHNOLOGIES INC (ACLS)","quantity":0.434952,"price":null,"proceeds":50.23,"realizedProfit":0.23,"category":"Common Stocks"},{"id":"gk-2024-05-22-calx-19","date":"2024-05-22","ticker":"CALX","label":"CALIX NETWORKS INC (CALX)","quantity":2.158828,"price":null,"proceeds":70.4,"realizedProfit":0.4,"category":"Common Stocks"},{"id":"gk-2024-05-17-jef-33","date":"2024-05-17","ticker":"JEF","label":"JEFFERIES FINANCIAL GROUP I (JEF)","quantity":2.166612,"price":null,"proceeds":102.5,"realizedProfit":2.5,"category":"Common Stocks"},{"id":"gk-2024-05-24-msft-41","date":"2024-05-24","ticker":"MSFT","label":"MICROSOFT CORP (MSFT)","quantity":0.36122,"price":null,"proceeds":155.41,"realizedProfit":4.82,"category":"Common Stocks"},{"id":"gk-2024-05-24-nvda-47","date":"2024-05-24","ticker":"NVDA","label":"NVIDIA CORPORATION (NVDA)","quantity":0.232099,"price":null,"proceeds":245.2,"realizedProfit":75.2,"category":"Common Stocks"},{"id":"gk-2024-05-24-nvda-48","date":"2024-05-24","ticker":"NVDA","label":"NVIDIA CORPORATION (NVDA)","quantity":0.591863,"price":null,"proceeds":625.28,"realizedProfit":125.28,"category":"Common Stocks"},{"id":"gk-2024-05-24-nvda-49","date":"2024-05-24","ticker":"NVDA","label":"NVIDIA CORPORATION (NVDA)","quantity":0.915343,"price":null,"proceeds":967.02,"realizedProfit":267.02,"category":"Common Stocks"},{"id":"gk-2024-05-03-sgml-53","date":"2024-05-03","ticker":"SGML","label":"SIGMA LITHIUM CORPORATION (SGML)","quantity":4.279315,"price":null,"proceeds":67.36,"realizedProfit":-2.64,"category":"Common Stocks"},{"id":"gk-2024-05-03-sgml-54","date":"2024-05-03","ticker":"SGML","label":"SIGMA LITHIUM CORPORATION (SGML)","quantity":3.866976,"price":null,"proceeds":60.86,"realizedProfit":10.86,"category":"Common Stocks"}],
@@ -1274,7 +1274,7 @@ const ROBINHOOD_VERIFIED_CLOSE_DATE_TRANSACTIONS: Record<string, ProfitDrilldown
 };
 
 
-const ROTH_IRA_CLOSED_LOT_TRANSACTIONS: ProfitDrilldownTransaction[] = [
+export const ROTH_IRA_CLOSED_LOT_TRANSACTIONS: ProfitDrilldownTransaction[] = [
   { id: "roth-closed-1", date: "2025-08-01", ticker: "MSTZ", label: "ETF OPPORTUNITIES TRUST T REX 2X INVERSE", quantity: 0.804, price: null, proceeds: 3.52, realizedProfit: 0.26, category: "Common Stocks", preserveLabelCasing: true },
   { id: "roth-closed-2", date: "2025-08-01", ticker: "MSTZ", label: "ETF OPPORTUNITIES TRUST T REX 2X INVERSE", quantity: 1053, price: null, proceeds: 4601.71, realizedProfit: 328.21, category: "Common Stocks", preserveLabelCasing: true },
   { id: "roth-closed-3", date: "2025-08-01", ticker: "MSTZ", label: "ETF OPPORTUNITIES TRUST T REX 2X INVERSE", quantity: 0.06, price: null, proceeds: 0.26, realizedProfit: 0.02, category: "Common Stocks", preserveLabelCasing: true },
