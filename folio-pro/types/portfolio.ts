@@ -2,7 +2,6 @@ export type Sector =
   | "AI / Enterprise Software"
   | "AI Data Centers"
   | "AI Infrastructure"
-  | "Consumer Brand"
   | "Cloud / AI / Software"
   | "Crypto / Bitcoin"
   | "Digital Advertising / AI"
@@ -12,6 +11,7 @@ export type Sector =
   | "BioTech"
   | "E-Commerce & Cloud"
   | "Education Technology"
+  | "Electrical Equipment / Power Infrastructure"
   | "ETF"
   | "Ethereum / Crypto Treasury"
   | "Financials"
@@ -22,7 +22,7 @@ export type Sector =
   | "Inverse ETF/ Hedge"
   | "Other"
   | "Semiconductors"
-  | "AI Power";
+  | "Utilities / Energy";
 
 export type AssetType = "stock" | "option";
 export type OptionType = "buy-call" | "sell-call" | "buy-put" | "sell-put";

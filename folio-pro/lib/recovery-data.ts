@@ -12,7 +12,7 @@ export const KNOWN_ROBINHOOD_HOLDINGS: Holding[] = [
     "currentPrice": 27.06,
     "previousClose": 28.39,
     "dividendYield": 0,
-    "sector": "AI Power",
+    "sector": "Utilities / Energy",
     "updatedAt": "Just now"
   },
   {
@@ -246,7 +246,7 @@ export const KNOWN_ROBINHOOD_HOLDINGS: Holding[] = [
     "currentPrice": 39.795,
     "previousClose": 39.62,
     "dividendYield": 0,
-    "sector": "Other",
+    "sector": "Electrical Equipment / Power Infrastructure",
     "updatedAt": "2026-07-18T03:02:03.544Z"
   },
   {
@@ -392,7 +392,7 @@ const COMPANY_BY_SYMBOL: Record<string, string> = {
 };
 
 const SECTOR_BY_SYMBOL: Record<string, Holding["sector"]> = {
-  VSTL: "AI Power",
+  VSTL: "Utilities / Energy",
   RDTL: "Other",
   SOXS: "Semiconductors",
   ONDS: "Drones",
