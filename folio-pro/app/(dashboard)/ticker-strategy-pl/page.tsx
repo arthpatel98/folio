@@ -44,6 +44,11 @@ const liveStrategy=(tx:Transaction):Strategy|null=>{
   return null;
 };
 const yearOf=(date:string)=>/^\d{4}/.test(date)?date.slice(0,4):"";
+const monthPeriod=(date:string)=>{
+  const parsed=new Date(`${date}T12:00:00`);
+  if(Number.isNaN(parsed.getTime()))return "";
+  return new Intl.DateTimeFormat("en-US",{month:"short",year:"numeric"}).format(parsed);
+};
 const money=(value:number)=>`${value<0?"-":""}${Math.abs(value).toLocaleString("en-US",{style:"currency",currency:"USD",minimumFractionDigits:0,maximumFractionDigits:2})}`;
 export default function TickerStrategyPlPage(){
   const {activeId}=useActivePortfolio();
