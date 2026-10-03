@@ -246,7 +246,7 @@ export const KNOWN_ROBINHOOD_HOLDINGS: Holding[] = [
     "currentPrice": 39.795,
     "previousClose": 39.62,
     "dividendYield": 0,
-    "sector": "Electrical Equipment / Power Infrastructure",
+    "sector": "Other",
     "updatedAt": "2026-07-18T03:02:03.544Z"
   },
   {

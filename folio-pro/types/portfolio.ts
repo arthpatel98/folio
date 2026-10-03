@@ -12,7 +12,6 @@ export type Sector =
   | "BioTech"
   | "E-Commerce & Cloud"
   | "Education Technology"
-  | "Electrical Equipment / Power Infrastructure"
   | "ETF"
   | "Ethereum / Crypto Treasury"
   | "Financials"
