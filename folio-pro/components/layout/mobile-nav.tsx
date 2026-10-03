@@ -13,7 +13,6 @@ const items = [
   ["/dca", "Simulator", Coins],
   ["/targets", "Targets", Target],
   ["/realized", "Realized", Landmark],
-  ["/ticker-strategy-pl", "Ticker & Strategy P/L"],
   ["/transactions", "Txns", ReceiptText],
 ] as const;
 
