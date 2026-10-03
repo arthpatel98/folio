@@ -1,7 +1,8 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, ChevronRight, Download, Pencil, Search, Trash2, Upload, X } from "lucide-react";
+import Link from "next/link";
+import { ArrowDown, ArrowUp, ArrowUpDown, BarChart3, ChevronDown, ChevronRight, Download, Pencil, Search, Trash2, Upload, X } from "lucide-react";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { RobinhoodQuarterlyData, type RobinhoodAllTimeSummary } from "@/components/portfolio/robinhood-quarterly-data";
 import { Button } from "@/components/ui/button";
@@ -872,7 +873,15 @@ export default function Page() {
 
       <Card className="mt-6 overflow-hidden p-5">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="font-medium">Realized P/L & Dividends By Ticker</h2>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <h2 className="font-medium">Realized P/L & Dividends By Ticker</h2>
+            <Button asChild variant="outline" size="sm" className="h-8 rounded-lg px-2.5 text-xs">
+              <Link href="/ticker-strategy-pl" aria-label="View Ticker & Strategy P/L">
+                <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
+                Ticker & Strategy
+              </Link>
+            </Button>
+          </div>
           <div className="flex flex-col items-end gap-2">
             <div className="flex w-full flex-wrap justify-end gap-2">
               <div className="relative w-full sm:w-64">
