@@ -428,7 +428,7 @@ export default function Page() {
 
       <div className={cn("grid grid-cols-2 gap-3 sm:grid-cols-2", isFidelity401k ? "xl:grid-cols-3" : "xl:grid-cols-4")}>
         <PortfolioValueMetric value={summary.value} dayReturn={portfolioDayReturn} dayReturnPct={portfolioDayReturnPct}/>
-        <MetricBlock label="Total Stocks Value" value={money(stockValue)} subvalue={`${stockHoldings.length} Open Positions\n( ${profitableStocks} Profitable Positions )`} icon={Layers3} tone="green"/>
+        <MetricBlock label={isFidelity401k ? "Total Mutual/ Index Funds Value" : "Total Stocks Value"} value={money(stockValue)} subvalue={`${stockHoldings.length} Open Positions\n( ${profitableStocks} Profitable Positions )`} icon={Layers3} tone="green"/>
         {!isFidelity401k && <MetricBlock label="Total Options Value" value={money(optionValue)} subvalue={`${optionHoldings.length} Open Positions\n( ${profitableOptions} Profitable Positions )`} icon={Layers3} tone="purple"/>}
         {!isFidelity401k && <MetricBlock label="Cash" value={money(availableCash)} subvalue={`${summary.value ? ((availableCash / summary.value) * 100).toFixed(2) : "0.00"}% of Portfolio`} icon={Banknote} tone="purple"/>}
       </div>
@@ -455,7 +455,7 @@ export default function Page() {
         </div>
       </div>
 
-      {(!normalizedQuery || stocks.length > 0) && <HoldingsTable data={stocks} title="Stocks" assetType="stock" portfolioValue={summary.value} portfolioId={activePortfolioId} />}
+      {(!normalizedQuery || stocks.length > 0) && <HoldingsTable data={stocks} title={isFidelity401k ? "Mutual/ Index Funds" : "Stocks"} assetType="stock" portfolioValue={summary.value} portfolioId={activePortfolioId} />}
       {!isFidelity401k && (!normalizedQuery || options.length > 0) && <HoldingsTable data={options} title="Options" assetType="option" portfolioValue={summary.value} portfolioId={activePortfolioId} />}
       {normalizedQuery && stocks.length === 0 && (isFidelity401k || options.length === 0) && <div className="rounded-2xl border border-zinc-200 bg-white px-6 py-14 text-center text-sm text-zinc-500 shadow-sm dark:border-white/10 dark:bg-zinc-950/30">No holdings match your search.</div>}
 
@@ -463,8 +463,8 @@ export default function Page() {
         <div className="border-b border-zinc-200 bg-zinc-50 px-5 py-4 dark:border-white/5 dark:bg-white/[.025]"><h2 className="font-semibold">Portfolio Totals</h2></div>
         <div className="divide-y divide-zinc-200 dark:divide-white/[.06]">
           <div className="grid min-h-[88px] grid-cols-[1fr_auto] items-center gap-6 px-6 py-4 sm:grid-cols-[1fr_repeat(3,minmax(140px,auto))]">
-            <div><p className="font-semibold">Holdings Subtotal</p><p className="text-sm text-zinc-500">Stocks and Options</p></div>
-            <div className="hidden text-right sm:block"><p className="text-xs uppercase tracking-wide text-zinc-500">Stocks</p><p className="mt-1 font-medium">{money(stockValue)}</p></div>
+            <div><p className="font-semibold">Holdings Subtotal</p><p className="text-sm text-zinc-500">{isFidelity401k ? "Mutual/ Index Funds" : "Stocks and Options"}</p></div>
+            <div className="hidden text-right sm:block"><p className="text-xs uppercase tracking-wide text-zinc-500">{isFidelity401k ? "Mutual/ Index Funds" : "Stocks"}</p><p className="mt-1 font-medium">{money(stockValue)}</p></div>
             <div className="hidden text-right sm:block"><p className="text-xs uppercase tracking-wide text-zinc-500">Options</p><p className="mt-1 font-medium">{money(optionValue)}</p></div>
             <div className="text-right"><p className="font-semibold">{money(positionValue)}</p><p className="text-sm text-zinc-500">{summary.value ? ((positionValue / summary.value) * 100).toFixed(2) : "0.00"}%</p></div>
           </div>

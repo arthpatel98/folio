@@ -43,7 +43,7 @@ export function MobileNav() {
       className="fixed inset-x-2 bottom-2 z-50 flex overflow-x-auto rounded-2xl border border-zinc-200 bg-white/95 px-1 py-1.5 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-zinc-950/95 lg:hidden"
       style={{ paddingBottom: "max(0.375rem, env(safe-area-inset-bottom))" }}
     >
-      {items.map(([href, label, Icon]) => {
+      {items.filter(([href]) => activeId !== "fidelity-401k" || (href !== "/targets" && href !== "/realized")).map(([href, label, Icon]) => {
         const active = href === "/" ? pathname === href : pathname.startsWith(href);
         return (
           <Link

@@ -444,7 +444,7 @@ export default function TransactionsPage(){
     setShowAdd(false);
   };
 
-  const categories:[Category,string][]=[["all","All"],["stocks","Stocks"],["options","Options"],["income","Income"],["cash","Cash"]];
+  const categories:[Category,string][]=[["all","All"],["stocks",activeId==="fidelity-401k"?"Mutual/ Index Funds":"Stocks"],["options","Options"],["income","Income"],["cash","Cash"]];
 
   return <div className="space-y-6">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

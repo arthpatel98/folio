@@ -1486,11 +1486,11 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
     return [...staticRows,...liveRows];
   },[activeTransactions,incomeEdits,includesRobinhood]);
   const persistIncomeEdit=(id:string,patch:IncomeEdit)=>setIncomeEdits(current=>{const next={...current,[id]:{...(current[id]??{}),...patch}};try{window.localStorage.setItem(INCOME_EDITS_KEY,JSON.stringify(next));}catch{}return next;});
-  const canEditIncome=(date:string)=>(isRobinhood||activePortfolioId==="fidelity-roth")&&date.startsWith("2026-09-");
+  const canEditIncome=(date:string)=>(isRobinhood||activePortfolioId==="fidelity-roth")&&date.startsWith("2026-10-");
   const openIncomeEditor=(id:string,item:IncomeTransaction)=>{if(!canEditIncome(item.date))return;setEditingIncome({id,item});setIncomeDraft({...item});};
   const saveIncomeEditor=()=>{if(!editingIncome)return;persistIncomeEdit(editingIncome.id,incomeDraft);setEditingIncome(null);};
   const deleteIncomeEditor=()=>{if(!editingIncome)return;persistIncomeEdit(editingIncome.id,{deleted:true});setEditingIncome(null);};
-  const canEditProfit=(tx:ProfitDrilldownTransaction)=>(isRobinhood||activePortfolioId==="fidelity-roth")&&tx.date.startsWith("2026-09-");
+  const canEditProfit=(tx:ProfitDrilldownTransaction)=>(isRobinhood||activePortfolioId==="fidelity-roth")&&tx.date.startsWith("2026-10-");
   const openProfitEditor=(tx:ProfitDrilldownTransaction)=>{if(!canEditProfit(tx))return;setEditingProfit(tx);setProfitDraft({...tx});};
   const saveProfitEditor=()=>{if(!editingProfit||!profitDraft)return;saveEdit(editingProfit.id,profitDraft);setEditingProfit(null);setProfitDraft(null);};
   const deleteProfitEditor=()=>{if(!editingProfit)return;saveEdit(editingProfit.id,{deleted:true});setEditingProfit(null);setProfitDraft(null);};

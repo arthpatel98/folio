@@ -303,7 +303,7 @@ export function HoldingsTable({
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-2xl dark:border-white/10 dark:bg-zinc-950">
           <Dialog.Title className="text-xl font-semibold">Remove Position?</Dialog.Title>
           <Dialog.Description className="mt-2 text-sm text-zinc-500">
-            {pendingDelete ? `Remove ${pendingDelete.symbol} From Your ${assetType === "option" ? "Options" : "Stocks"}?` : ""}
+            {pendingDelete ? `Remove ${pendingDelete.symbol} From Your ${assetType === "option" ? "Options" : (portfolioId === "fidelity-401k" ? "Mutual/ Index Funds" : "Stocks")}?` : ""}
           </Dialog.Description>
           <div className="mt-6 flex justify-center gap-3">
             <Dialog.Close asChild><Button type="button" variant="outline">Cancel</Button></Dialog.Close>

@@ -550,7 +550,7 @@ export default function DcaPage() {
 
   return <div className="space-y-5">
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Return Simulator</h1><p className="mt-1 text-sm text-zinc-500">Simulate Potential Prices And Returns For Stock And Option Positions.</p>
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Return Simulator</h1><p className="mt-1 text-sm text-zinc-500">{activeId === "fidelity-401k" ? "Simulate Potential Prices And Returns For Mutual/ Index Funds." : "Simulate Potential Prices And Returns For Stock And Option Positions."}</p>
     </div>
 
     {showAddPosition && <section className="rounded-2xl border border-white/10 bg-zinc-950/50 p-5">

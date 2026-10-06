@@ -285,13 +285,13 @@ export default function TargetPlannerPage(){
       <div className="border-b border-white/10 p-4 sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="font-semibold">Build Your Price-Target Scenarios</h2>
+            <h2 className="font-semibold">Build Your Price Target Scenarios</h2>
             <p className="mt-2 text-xs text-zinc-500">Available Cash: <span className="font-medium text-white">{money2(remainingAvailableCash)}</span></p>
             {cashError&&<p className="mt-2 text-sm font-medium text-red-400">{cashError}</p>}
           </div>
           <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-end lg:w-auto">
             <label className="inline-flex h-11 cursor-pointer items-center justify-between gap-4 rounded-xl border border-emerald-400/20 bg-emerald-400/[.05] px-4 sm:min-w-64">
-              <span><span className="block text-xs font-medium text-zinc-300">Include Future Purchases</span><span className="mt-0.5 block text-[11px] text-zinc-500">From Return Simulator Purchase Lots</span></span>
+              <span className="block text-xs font-medium text-zinc-300">Future Purchases</span>
               <span className={cn("relative h-6 w-11 shrink-0 rounded-full transition",includeFuturePurchases?"bg-emerald-400":"bg-white/10")}><input type="checkbox" checked={includeFuturePurchases} onChange={e=>setIncludeFuturePurchases(e.target.checked)} className="sr-only"/><span className={cn("absolute top-1 size-4 rounded-full bg-white transition-all",includeFuturePurchases?"left-6":"left-1")}/></span>
             </label>
             <label className="w-full sm:w-auto sm:min-w-56">
@@ -313,7 +313,7 @@ export default function TargetPlannerPage(){
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="font-semibold">Your Path To The Target</h2>
-            <p className="mt-1 max-w-4xl text-sm text-zinc-500">Allocate your cash across multiple investment ideas. Create independent investments from starting cash, then use Reinvest Proceeds to build Stage 2 and later investments funded by a prior investment's expected ending value.</p>
+            
           </div>
           <button type="button" onClick={addReinvestmentStep} className="inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-4 text-sm font-medium text-emerald-300 transition hover:bg-emerald-400/15"><Plus size={16}/>Add Investment</button>
         </div>

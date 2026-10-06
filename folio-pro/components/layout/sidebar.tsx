@@ -28,7 +28,7 @@ export function Sidebar({onCollapse}:{onCollapse?:()=>void}){
         </button>)}
       </div>}
     </div>
-    <nav className="space-y-1">{items.map(([href,label,Icon])=><Link key={href} href={href} className={cn("flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-400 transition hover:bg-zinc-100 dark:hover:bg-white/[.05] hover:text-white",path===href&&"bg-white/[.07] text-white")}><Icon size={17}/>{label}</Link>)}</nav>
+    <nav className="space-y-1">{items.filter(([href])=>activeId!=="fidelity-401k" || (href!=="/targets" && href!=="/realized")).map(([href,label,Icon])=><Link key={href} href={href} className={cn("flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-zinc-400 transition hover:bg-zinc-100 dark:hover:bg-white/[.05] hover:text-white",path===href&&"bg-white/[.07] text-white")}><Icon size={17}/>{label}</Link>)}</nav>
 
   </aside>
 }
