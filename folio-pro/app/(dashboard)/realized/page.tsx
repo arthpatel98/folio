@@ -109,9 +109,12 @@ const seedRows: Array<[string, number, number, string]> = [
   ["RTCJF", -1931, 7.97, "May 15, 2025"],
 ];
 
-const initialPositions = seedRows.map(([symbol, amount, fees, date], index) =>
-  makePosition(symbol, amount, fees, date, `default-${index}`),
-);
+const initialPositions = [
+  ...seedRows.map(([symbol, amount, fees, date], index) =>
+    makePosition(symbol, amount, fees, date, `default-${index}`),
+  ),
+  { ...makePosition("MSTU", 0, 0, "", "robinhood-mstu-dividend"), dividendAmount: 1.46 },
+];
 
 function splitSymbolAndType(value: string): { symbol: string; type: TradeType } {
   const cleaned = value.trim();
@@ -170,6 +173,16 @@ const ROTH_IRA_SUMMARY_POSITIONS: RealizedPosition[] = [
   makePosition("NEBX",-1538.53,0,"","roth-summary-nebx-stock"),
   makePosition("SOXS",-1692.36,0,"","roth-summary-soxs-2"),
 ];
+
+function mergeRobinhoodDividendPositions(items: RealizedPosition[]) {
+  const hasMstu = items.some((item) => item.symbol === "MSTU" && item.type === "stock");
+  if (hasMstu) {
+    return items.map((item) => item.symbol === "MSTU" && item.type === "stock"
+      ? { ...item, dividendAmount: 1.46 }
+      : item);
+  }
+  return [...items, { ...makePosition("MSTU", 0, 0, "", "robinhood-mstu-dividend"), dividendAmount: 1.46 }];
+}
 
 function mergeRothSummaryPositions(items: RealizedPosition[]) {
   // Remove the old leaked Robinhood IREN seed that earlier versions placed in the Roth bucket.
@@ -430,13 +443,13 @@ export default function Page() {
         if (Array.isArray(parsed)) {
           const migrated = migratePositions(parsed);
           setPositionsByPortfolio({
-            robinhood: migrated,
+            robinhood: mergeRobinhoodDividendPositions(migrated),
             "fidelity-401k": [],
             "fidelity-roth": ROTH_IRA_SUMMARY_POSITIONS.filter(position=>position.lastSellDate && !savedRemovedIds["fidelity-roth"].includes(position.id)),
           });
         } else if (parsed && typeof parsed === "object") {
           setPositionsByPortfolio({
-            robinhood: migratePositions(parsed.robinhood ?? []),
+            robinhood: mergeRobinhoodDividendPositions(migratePositions(parsed.robinhood ?? [])),
             "fidelity-401k": migratePositions(parsed["fidelity-401k"] ?? []),
             "fidelity-roth": migratePositions(parsed["fidelity-roth"] ?? []).filter(position=>position.lastSellDate && !savedRemovedIds["fidelity-roth"].includes(position.id)),
           });
@@ -860,13 +873,13 @@ export default function Page() {
       {message && <p className="mt-4 text-sm text-emerald-500">{message}</p>}
 
       <div className={activePortfolioId === "fidelity-401k" ? "mt-5 grid grid-cols-1 gap-2.5 sm:max-w-sm [&>div>div]:p-4 [&>div>div>div:first-child]:text-xs [&>div>div>div:nth-child(2)]:mt-1.5 [&>div>div>div:nth-child(2)]:text-xl" : "mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4 [&>div>div]:p-4 [&>div>div>div:first-child]:text-xs [&>div>div>div:nth-child(2)]:mt-1.5 [&>div>div>div:nth-child(2)]:text-xl"}>
-        <MetricCard label="Total Realized P/L" value={money(activePortfolioId==="robinhood"?robinhoodAllTimeSummary.realizedProfit:totals.realized)} />
+        <MetricCard label="Total Realized P/L" value={money((activePortfolioId==="robinhood"||activePortfolioId==="fidelity-roth")?robinhoodAllTimeSummary.realizedProfit:totals.realized)} />
         {activePortfolioId !== "fidelity-401k" && <>
           <MetricCard label="Total Stocks P/L" value={money(totals.stocksPl)} />
           <MetricCard label="Total Options P/L" value={money(totals.optionsPl)} />
           <MetricCard label="Profitable Tickers" value={`${winners.length} of ${groups.length}`} />
           <MetricCard label="Loss Recovery Tickers" value={lossRecoveryTickers.toLocaleString()} />
-          <MetricCard label="Total Dividend Amount" value={money(activePortfolioId==="robinhood"?robinhoodAllTimeSummary.dividendAmount:totals.dividendAmount)} />
+          <MetricCard label="Total Dividend Amount" value={money((activePortfolioId==="robinhood"||activePortfolioId==="fidelity-roth")?robinhoodAllTimeSummary.dividendAmount:totals.dividendAmount)} />
           <MetricCard label={activePortfolioId==="robinhood"?"Robinhood Extras":"Extras"} value={money(activePortfolioId==="robinhood"?robinhoodAllTimeSummary.extras:0)} />
         </>}
       </div>
