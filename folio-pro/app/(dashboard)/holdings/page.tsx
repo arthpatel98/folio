@@ -430,7 +430,7 @@ export default function Page() {
         <PortfolioValueMetric value={summary.value} dayReturn={portfolioDayReturn} dayReturnPct={portfolioDayReturnPct}/>
         <MetricBlock label="Total Stocks Value" value={money(stockValue)} subvalue={`${stockHoldings.length} Open Positions\n( ${profitableStocks} Profitable Positions )`} icon={Layers3} tone="green"/>
         {!isFidelity401k && <MetricBlock label="Total Options Value" value={money(optionValue)} subvalue={`${optionHoldings.length} Open Positions\n( ${profitableOptions} Profitable Positions )`} icon={Layers3} tone="purple"/>}
-        <MetricBlock label="Cash" value={money(availableCash)} subvalue={`${summary.value ? ((availableCash / summary.value) * 100).toFixed(2) : "0.00"}% of Portfolio`} icon={Banknote} tone="purple"/>
+        {!isFidelity401k && <MetricBlock label="Cash" value={money(availableCash)} subvalue={`${summary.value ? ((availableCash / summary.value) * 100).toFixed(2) : "0.00"}% of Portfolio`} icon={Banknote} tone="purple"/>}
       </div>
 
       <section className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">

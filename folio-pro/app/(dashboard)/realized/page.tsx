@@ -859,27 +859,29 @@ export default function Page() {
 
       {message && <p className="mt-4 text-sm text-emerald-500">{message}</p>}
 
-      <div className="mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4 [&>div>div]:p-4 [&>div>div>div:first-child]:text-xs [&>div>div>div:nth-child(2)]:mt-1.5 [&>div>div>div:nth-child(2)]:text-xl">
+      <div className={activePortfolioId === "fidelity-401k" ? "mt-5 grid grid-cols-1 gap-2.5 sm:max-w-sm [&>div>div]:p-4 [&>div>div>div:first-child]:text-xs [&>div>div>div:nth-child(2)]:mt-1.5 [&>div>div>div:nth-child(2)]:text-xl" : "mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4 [&>div>div]:p-4 [&>div>div>div:first-child]:text-xs [&>div>div>div:nth-child(2)]:mt-1.5 [&>div>div>div:nth-child(2)]:text-xl"}>
         <MetricCard label="Total Realized P/L" value={money(activePortfolioId==="robinhood"?robinhoodAllTimeSummary.realizedProfit:totals.realized)} />
-        <MetricCard label="Total Stocks P/L" value={money(totals.stocksPl)} />
-        <MetricCard label="Total Options P/L" value={money(totals.optionsPl)} />
-        <MetricCard label="Profitable Tickers" value={`${winners.length} of ${groups.length}`} />
-        <MetricCard label="Loss Recovery Tickers" value={lossRecoveryTickers.toLocaleString()} />
-        <MetricCard label="Total Dividend Amount" value={money(activePortfolioId==="robinhood"?robinhoodAllTimeSummary.dividendAmount:totals.dividendAmount)} />
-        <MetricCard label={activePortfolioId==="robinhood"?"Robinhood Extras":"Extras"} value={money(activePortfolioId==="robinhood"?robinhoodAllTimeSummary.extras:0)} />
+        {activePortfolioId !== "fidelity-401k" && <>
+          <MetricCard label="Total Stocks P/L" value={money(totals.stocksPl)} />
+          <MetricCard label="Total Options P/L" value={money(totals.optionsPl)} />
+          <MetricCard label="Profitable Tickers" value={`${winners.length} of ${groups.length}`} />
+          <MetricCard label="Loss Recovery Tickers" value={lossRecoveryTickers.toLocaleString()} />
+          <MetricCard label="Total Dividend Amount" value={money(activePortfolioId==="robinhood"?robinhoodAllTimeSummary.dividendAmount:totals.dividendAmount)} />
+          <MetricCard label={activePortfolioId==="robinhood"?"Robinhood Extras":"Extras"} value={money(activePortfolioId==="robinhood"?robinhoodAllTimeSummary.extras:0)} />
+        </>}
       </div>
 
-      <div className="mt-6"><RobinhoodQuarterlyData onAllTimeSummary={setRobinhoodAllTimeSummary} /></div>
+      {activePortfolioId !== "fidelity-401k" && <div className="mt-6"><RobinhoodQuarterlyData onAllTimeSummary={setRobinhoodAllTimeSummary} /></div>}
 
       <Card className="mt-6 overflow-hidden p-5">
         <div className="mb-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
           <h2 className="font-medium">Realized P/L & Dividends By Ticker</h2>
-          <Button asChild variant="outline" size="sm" className="h-8 justify-self-start rounded-lg px-2.5 text-xs sm:justify-self-center">
+          {activePortfolioId !== "fidelity-401k" && <Button asChild variant="outline" size="sm" className="h-8 justify-self-start rounded-lg px-2.5 text-xs sm:justify-self-center">
             <Link href="/ticker-strategy-pl" aria-label="View P/L By Ticker & Order Type">
               <BarChart3 className="mr-1.5 h-3.5 w-3.5" />
               P/L By Ticker & Order Type
             </Link>
-          </Button>
+          </Button>}
           <div className="relative w-full sm:w-64 sm:justify-self-end">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
             <Input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search Ticker Or Comment..." className="pl-9" />
