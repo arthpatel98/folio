@@ -68,6 +68,10 @@ type SortKey = "symbol" | "mix" | "amount" | "fees" | "latestDate" | "patNeeded"
 type SortDirection = "asc" | "desc";
 
 const STORAGE_KEY = "folio-realized-positions-v4";
+const PAT_LEDGER_KEY = "folio-pat-future-ledger-v1";
+type PatLedger = Record<RealizedPortfolioId, Record<string, { baseline: number; processed: Record<string, number> }>>;
+const emptyPatLedger = (): PatLedger => ({ robinhood: {}, "fidelity-401k": {}, "fidelity-roth": {} });
+const roundPat = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const PREVIOUS_STORAGE_KEYS = ["folio-realized-positions-v3", "folio-realized-positions-v2"];
 const REALIZED_SORT_STORAGE_KEY = "folio-realized-sort-preference";
 const REALIZED_IGNORED_TRANSACTION_IDS_KEY = "folio-realized-ignored-transaction-ids-v1";
@@ -114,6 +118,7 @@ const initialPositions = [
     makePosition(symbol, amount, fees, date, `default-${index}`),
   ),
   { ...makePosition("MSTU", 0, 0, "", "robinhood-mstu-dividend"), dividendAmount: 1.46 },
+  makePosition("QBTZ", 0, 0, "", "robinhood-qbtz-pat-baseline"),
 ];
 
 function splitSymbolAndType(value: string): { symbol: string; type: TradeType } {
@@ -142,6 +147,10 @@ function makePosition(rawSymbol: string, amount: number, fees: number, lastSellD
   };
 }
 
+
+function ensureQbtz(positions: RealizedPosition[]): RealizedPosition[] {
+  return positions.some(position => position.symbol === "QBTZ") ? positions : [...positions, makePosition("QBTZ", 0, 0, "", "robinhood-qbtz-pat-baseline")];
+}
 
 const ROTH_IRA_SUMMARY_POSITIONS: RealizedPosition[] = [
   makePosition("MSTZ",2211.60,0,"","roth-summary-mstz"),
@@ -334,6 +343,8 @@ function csvCell(value: string | number) {
 }
 
 export default function Page() {
+  const [patLedger, setPatLedger] = useState<PatLedger>(emptyPatLedger);
+  const [patLedgerReady, setPatLedgerReady] = useState(false);
   const [robinhoodAllTimeSummary, setRobinhoodAllTimeSummary] = useState<RobinhoodAllTimeSummary>({ realizedProfit: 0, dividendAmount: 0, extras: 0 });
   const activePortfolioId = usePortfolioStore((state) => state.activePortfolioId);
   const transactionsByPortfolio = usePortfolioStore((state) => state.transactionsByPortfolio);
@@ -443,13 +454,13 @@ export default function Page() {
         if (Array.isArray(parsed)) {
           const migrated = migratePositions(parsed);
           setPositionsByPortfolio({
-            robinhood: mergeRobinhoodDividendPositions(migrated),
+            robinhood: ensureQbtz(mergeRobinhoodDividendPositions(migrated)),
             "fidelity-401k": [],
             "fidelity-roth": ROTH_IRA_SUMMARY_POSITIONS.filter(position=>position.lastSellDate && !savedRemovedIds["fidelity-roth"].includes(position.id)),
           });
         } else if (parsed && typeof parsed === "object") {
           setPositionsByPortfolio({
-            robinhood: mergeRobinhoodDividendPositions(migratePositions(parsed.robinhood ?? [])),
+            robinhood: ensureQbtz(mergeRobinhoodDividendPositions(migratePositions(parsed.robinhood ?? []))),
             "fidelity-401k": migratePositions(parsed["fidelity-401k"] ?? []),
             "fidelity-roth": migratePositions(parsed["fidelity-roth"] ?? []).filter(position=>position.lastSellDate && !savedRemovedIds["fidelity-roth"].includes(position.id)),
           });
@@ -508,6 +519,69 @@ export default function Page() {
   useEffect(() => {
     try { window.localStorage.setItem(REALIZED_SORT_STORAGE_KEY, JSON.stringify({ key: sortKey, direction: sortDirection })); } catch {}
   }, [sortDirection, sortKey]);
+
+  // Snapshot all existing sales once. Historical records are never retroactively taxed or counted.
+  useEffect(() => {
+    if (!hasHydrated) return;
+    let ledger: PatLedger;
+    try {
+      const saved = window.localStorage.getItem(PAT_LEDGER_KEY);
+      ledger = saved ? JSON.parse(saved) as PatLedger : emptyPatLedger();
+    } catch { ledger = emptyPatLedger(); }
+    for (const portfolioId of ["robinhood", "fidelity-401k", "fidelity-roth"] as RealizedPortfolioId[]) {
+      ledger[portfolioId] ??= {};
+      const transactions = transactionsByPortfolio[portfolioId].filter(t => t.symbol && typeof t.realizedGain === "number");
+      const symbols = new Set([...positionsByPortfolio[portfolioId].map(p => p.symbol), ...transactions.map(t => t.symbol!.trim().toUpperCase())]);
+      if (portfolioId === "robinhood") symbols.add("QBTZ");
+      for (const symbol of symbols) {
+        if (ledger[portfolioId][symbol]) continue;
+        const positions = positionsByPortfolio[portfolioId].filter(p => p.symbol === symbol);
+        const pat = positions.reduce((sum, p) => sum + (p.pat ?? 0), 0);
+        const loss = positions.reduce((sum, p) => sum + (p.loss ?? 0), 0);
+        ledger[portfolioId][symbol] = {
+          baseline: portfolioId === "robinhood" && symbol === "QBTZ" ? -350.54 : roundPat(Math.max(0, loss - pat)),
+          processed: Object.fromEntries(transactions.filter(t => t.symbol!.trim().toUpperCase() === symbol).map(t => [t.id, 0])),
+        };
+      }
+    }
+    // Persist the initial historical cutoff before listening for subsequent transactions.
+    window.localStorage.setItem(PAT_LEDGER_KEY, JSON.stringify(ledger));
+    setPatLedger(ledger);
+    setPatLedgerReady(true);
+  // This initialization must run only once after stored positions hydrate.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasHydrated]);
+
+  useEffect(() => {
+    if (!patLedgerReady) return;
+    setPatLedger(current => {
+      const next = structuredClone(current);
+      let changed = false;
+      for (const portfolioId of ["robinhood", "fidelity-401k", "fidelity-roth"] as RealizedPortfolioId[]) {
+        for (const transaction of transactionsByPortfolio[portfolioId]) {
+          if (!transaction.symbol || typeof transaction.realizedGain !== "number") continue;
+          const symbol = transaction.symbol.trim().toUpperCase();
+          const entry = next[portfolioId][symbol] ??= { baseline: 0, processed: {} };
+          if (Object.prototype.hasOwnProperty.call(entry.processed, transaction.id)) continue;
+          const gain = transaction.realizedGain;
+          entry.processed[transaction.id] = roundPat(gain < 0 ? -gain : -gain * 0.65);
+          changed = true;
+        }
+      }
+      if (!changed) return current;
+      window.localStorage.setItem(PAT_LEDGER_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [patLedgerReady, transactionsByPortfolio]);
+
+  const tickerPatNeeded = (symbol: string, items: RealizedPosition[]) => {
+    const portfolioIds: RealizedPortfolioId[] = activePortfolioId === "all" ? ["robinhood", "fidelity-401k", "fidelity-roth"] : [activePortfolioId];
+    const ledgerEntries = portfolioIds.map(id => patLedger[id]?.[symbol]).filter((v): v is { baseline: number; processed: Record<string, number> } => Boolean(v));
+    if (ledgerEntries.length && patLedgerReady) return roundPat(ledgerEntries.reduce((sum, entry) => sum + entry.baseline + Object.values(entry.processed).reduce((a, b) => a + b, 0), 0));
+    const pat = items.reduce((sum, p) => sum + (p.pat ?? 0), 0);
+    const loss = items.reduce((sum, p) => sum + (p.loss ?? 0), 0);
+    return roundPat(Math.max(0, loss - pat));
+  };
 
   const visiblePositions = useMemo(() => {
     const portfolioIds: RealizedPortfolioId[] = activePortfolioId === "all"
@@ -605,14 +679,13 @@ export default function Page() {
     visiblePositions.forEach((position) => map.set(position.symbol, [...(map.get(position.symbol) ?? []), position]));
     return Array.from(map.entries()).map(([symbol, items]) => {
       const comment = tickerCommentFor(symbol) || Array.from(new Set(items.map((item) => item.comment.trim()).filter(Boolean))).join(" · ");
-      const totalPat = items.reduce((sum, item) => sum + (calculatedPat(item, comment) ?? 0), 0);
-      const totalLoss = items.reduce((sum, item) => sum + (item.loss ?? 0), 0);
+      
       return {
         symbol,
         positions: [...items].sort((a, b) => b.amount - a.amount),
         amount: items.reduce((sum, item) => sum + item.amount, 0),
         fees: items.reduce((sum, item) => sum + item.fees, 0),
-        patNeeded: derivedPatNeeded(totalPat, totalLoss) ?? 0,
+        patNeeded: tickerPatNeeded(symbol, items),
         latestDate: [...items].sort((a, b) => new Date(b.lastSellDate).getTime() - new Date(a.lastSellDate).getTime())[0]?.lastSellDate ?? "",
         stockCount: items.filter((item) => item.type === "stock").length,
         optionCount: items.filter((item) => item.type === "option").length,
@@ -622,7 +695,7 @@ export default function Page() {
         comment,
       };
     });
-  }, [activePortfolioId, tickerCommentsByPortfolio, visiblePositions]);
+  }, [activePortfolioId, tickerCommentsByPortfolio, visiblePositions, patLedger, patLedgerReady]);
 
   const totalPatNeeded = groups.reduce((sum, group) => sum + group.patNeeded, 0);
   const lossRecoveryTickers = groups.filter((group) => group.patNeeded > 0).length;
@@ -936,7 +1009,7 @@ export default function Page() {
                       <td className={`px-3 py-4 font-semibold tabular-nums ${group.amount < 0 ? "text-red-500" : "text-emerald-500"}`}>{money(group.amount)}</td>
                       <td className="px-3 py-4 tabular-nums text-zinc-500">{money(group.fees)}</td>
                       <td className="whitespace-nowrap px-3 py-4 text-zinc-500">{group.latestDate || "—"}</td>
-                      <td className="px-3 py-4 tabular-nums">{group.patNeeded > 0 ? money(group.patNeeded) : "-"}</td>
+                      <td className="px-3 py-4 tabular-nums">{group.patNeeded !== 0 ? money(group.patNeeded) : "-"}</td>
                       <td className="px-3 py-4 tabular-nums text-emerald-500">{group.dividendAmount ? money(group.dividendAmount) : "-"}</td>
                       <td className="px-3 py-4 tabular-nums text-zinc-500">{group.dividendNraWithholding ? money(group.dividendNraWithholding) : "-"}</td>
                       <td className="whitespace-nowrap px-3 py-4 text-zinc-500">{group.lastDividendDate || "—"}</td>
