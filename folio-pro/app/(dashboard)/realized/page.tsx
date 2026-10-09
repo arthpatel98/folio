@@ -345,6 +345,7 @@ function csvCell(value: string | number) {
 export default function Page() {
   const [patLedger, setPatLedger] = useState<PatLedger>(emptyPatLedger);
   const [patLedgerReady, setPatLedgerReady] = useState(false);
+  const [editingPatTicker, setEditingPatTicker] = useState<{symbol: string; value: string} | null>(null);
   const [robinhoodAllTimeSummary, setRobinhoodAllTimeSummary] = useState<RobinhoodAllTimeSummary>({ realizedProfit: 0, dividendAmount: 0, extras: 0 });
   const activePortfolioId = usePortfolioStore((state) => state.activePortfolioId);
   const transactionsByPortfolio = usePortfolioStore((state) => state.transactionsByPortfolio);
@@ -697,6 +698,22 @@ export default function Page() {
     });
   }, [activePortfolioId, tickerCommentsByPortfolio, visiblePositions, patLedger, patLedgerReady]);
 
+  const savePatNeeded = () => {
+    if (!editingPatTicker || activePortfolioId === "all") return;
+    const value = Number(editingPatTicker.value);
+    if (!editingPatTicker.value.trim() || !Number.isFinite(value)) { toast.error("Enter a valid PAT Needed amount."); return; }
+    const symbol = editingPatTicker.symbol;
+    setPatLedger(current => {
+      const next = structuredClone(current);
+      const entry = next[activePortfolioId][symbol] ?? { baseline: 0, processed: {} };
+      next[activePortfolioId][symbol] = { baseline: roundPat(value), processed: Object.fromEntries(Object.keys(entry.processed).map(id => [id, 0])) };
+      window.localStorage.setItem(PAT_LEDGER_KEY, JSON.stringify(next));
+      return next;
+    });
+    setEditingPatTicker(null);
+    toast.success(`${symbol} PAT Needed updated.`);
+  };
+
   const totalPatNeeded = groups.reduce((sum, group) => sum + group.patNeeded, 0);
   const lossRecoveryTickers = groups.filter((group) => group.patNeeded > 0).length;
 
@@ -1009,7 +1026,7 @@ export default function Page() {
                       <td className={`px-3 py-4 font-semibold tabular-nums ${group.amount < 0 ? "text-red-500" : "text-emerald-500"}`}>{money(group.amount)}</td>
                       <td className="px-3 py-4 tabular-nums text-zinc-500">{money(group.fees)}</td>
                       <td className="whitespace-nowrap px-3 py-4 text-zinc-500">{group.latestDate || "—"}</td>
-                      <td className="px-3 py-4 tabular-nums">{group.patNeeded !== 0 ? money(group.patNeeded) : "-"}</td>
+                      <td className="px-3 py-4 tabular-nums"><button type="button" disabled={activePortfolioId === "all"} title="Edit PAT Needed" onClick={(event) => { event.stopPropagation(); setEditingPatTicker({symbol: group.symbol, value: String(group.patNeeded)}); }} className="inline-flex items-center gap-1 rounded px-2 py-1 hover:bg-zinc-500/10 disabled:cursor-default">{(() => { const pat = group.positions.reduce((sum,p) => sum + (calculatedPat(p, group.comment) ?? 0), 0); const loss = group.positions.reduce((sum,p) => sum + Math.abs(p.loss ?? 0), 0); return pat > loss && group.patNeeded >= 0 ? "—" : money(group.patNeeded); })()}{activePortfolioId !== "all" && <Pencil size={12} className="text-zinc-500" />}</button></td>
                       <td className="px-3 py-4 tabular-nums text-emerald-500">{group.dividendAmount ? money(group.dividendAmount) : "-"}</td>
                       <td className="px-3 py-4 tabular-nums text-zinc-500">{group.dividendNraWithholding ? money(group.dividendNraWithholding) : "-"}</td>
                       <td className="whitespace-nowrap px-3 py-4 text-zinc-500">{group.lastDividendDate || "—"}</td>
@@ -1092,6 +1109,19 @@ export default function Page() {
               <label className="space-y-2 text-sm font-medium">Comment<textarea rows={5} placeholder="-" value={editingGroup.comment} onChange={(e) => setEditingGroup({ ...editingGroup, comment: e.target.value })} className="flex min-h-28 w-full resize-y rounded-md border border-zinc-500/20 bg-transparent px-3 py-2 text-sm outline-none focus:border-emerald-500" /></label>
             </div>
             <div className="mt-6 flex justify-end gap-2"><Button variant="outline" onClick={() => setEditingGroup(null)}>Cancel</Button><Button onClick={saveEditedGroup}>Save Changes</Button></div>
+          </Card>
+        </div>
+      )}
+
+      {editingPatTicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">
+          <Card className="w-full max-w-md p-6">
+            <h2 className="text-lg font-semibold">Edit PAT Needed — {editingPatTicker.symbol}</h2>
+            <p className="mt-2 text-sm text-zinc-500">Your saved value becomes the starting balance. Only future sales adjust it.</p>
+            <label className="mt-5 block space-y-2 text-sm font-medium">PAT Needed
+              <Input type="number" step="0.01" value={editingPatTicker.value} onChange={e => setEditingPatTicker(current => current ? {...current, value:e.target.value} : null)} />
+            </label>
+            <div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => setEditingPatTicker(null)}>Cancel</Button><Button onClick={savePatNeeded}>Save Changes</Button></div>
           </Card>
         </div>
       )}
