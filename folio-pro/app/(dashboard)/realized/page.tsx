@@ -25,6 +25,7 @@ type RealizedPosition = {
   pat: number | null;
   loss: number | null;
   patNeeded: number | null;
+  manualPatNeeded?: boolean;
   comment: string;
   dividendAmount: number;
   dividendNraWithholding: number;
@@ -68,10 +69,6 @@ type SortKey = "symbol" | "mix" | "amount" | "fees" | "latestDate" | "patNeeded"
 type SortDirection = "asc" | "desc";
 
 const STORAGE_KEY = "folio-realized-positions-v4";
-const PAT_LEDGER_KEY = "folio-pat-future-ledger-v1";
-type PatLedger = Record<RealizedPortfolioId, Record<string, { baseline: number; processed: Record<string, number> }>>;
-const emptyPatLedger = (): PatLedger => ({ robinhood: {}, "fidelity-401k": {}, "fidelity-roth": {} });
-const roundPat = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const PREVIOUS_STORAGE_KEYS = ["folio-realized-positions-v3", "folio-realized-positions-v2"];
 const REALIZED_SORT_STORAGE_KEY = "folio-realized-sort-preference";
 const REALIZED_IGNORED_TRANSACTION_IDS_KEY = "folio-realized-ignored-transaction-ids-v1";
@@ -118,7 +115,6 @@ const initialPositions = [
     makePosition(symbol, amount, fees, date, `default-${index}`),
   ),
   { ...makePosition("MSTU", 0, 0, "", "robinhood-mstu-dividend"), dividendAmount: 1.46 },
-  makePosition("QBTZ", 0, 0, "", "robinhood-qbtz-pat-baseline"),
 ];
 
 function splitSymbolAndType(value: string): { symbol: string; type: TradeType } {
@@ -147,10 +143,6 @@ function makePosition(rawSymbol: string, amount: number, fees: number, lastSellD
   };
 }
 
-
-function ensureQbtz(positions: RealizedPosition[]): RealizedPosition[] {
-  return positions.some(position => position.symbol === "QBTZ") ? positions : [...positions, makePosition("QBTZ", 0, 0, "", "robinhood-qbtz-pat-baseline")];
-}
 
 const ROTH_IRA_SUMMARY_POSITIONS: RealizedPosition[] = [
   makePosition("MSTZ",2211.60,0,"","roth-summary-mstz"),
@@ -343,9 +335,6 @@ function csvCell(value: string | number) {
 }
 
 export default function Page() {
-  const [patLedger, setPatLedger] = useState<PatLedger>(emptyPatLedger);
-  const [patLedgerReady, setPatLedgerReady] = useState(false);
-  const [editingPatTicker, setEditingPatTicker] = useState<{symbol: string; value: string} | null>(null);
   const [robinhoodAllTimeSummary, setRobinhoodAllTimeSummary] = useState<RobinhoodAllTimeSummary>({ realizedProfit: 0, dividendAmount: 0, extras: 0 });
   const activePortfolioId = usePortfolioStore((state) => state.activePortfolioId);
   const transactionsByPortfolio = usePortfolioStore((state) => state.transactionsByPortfolio);
@@ -455,13 +444,13 @@ export default function Page() {
         if (Array.isArray(parsed)) {
           const migrated = migratePositions(parsed);
           setPositionsByPortfolio({
-            robinhood: ensureQbtz(mergeRobinhoodDividendPositions(migrated)),
+            robinhood: mergeRobinhoodDividendPositions(migrated),
             "fidelity-401k": [],
             "fidelity-roth": ROTH_IRA_SUMMARY_POSITIONS.filter(position=>position.lastSellDate && !savedRemovedIds["fidelity-roth"].includes(position.id)),
           });
         } else if (parsed && typeof parsed === "object") {
           setPositionsByPortfolio({
-            robinhood: ensureQbtz(mergeRobinhoodDividendPositions(migratePositions(parsed.robinhood ?? []))),
+            robinhood: mergeRobinhoodDividendPositions(migratePositions(parsed.robinhood ?? [])),
             "fidelity-401k": migratePositions(parsed["fidelity-401k"] ?? []),
             "fidelity-roth": migratePositions(parsed["fidelity-roth"] ?? []).filter(position=>position.lastSellDate && !savedRemovedIds["fidelity-roth"].includes(position.id)),
           });
@@ -520,69 +509,6 @@ export default function Page() {
   useEffect(() => {
     try { window.localStorage.setItem(REALIZED_SORT_STORAGE_KEY, JSON.stringify({ key: sortKey, direction: sortDirection })); } catch {}
   }, [sortDirection, sortKey]);
-
-  // Snapshot all existing sales once. Historical records are never retroactively taxed or counted.
-  useEffect(() => {
-    if (!hasHydrated) return;
-    let ledger: PatLedger;
-    try {
-      const saved = window.localStorage.getItem(PAT_LEDGER_KEY);
-      ledger = saved ? JSON.parse(saved) as PatLedger : emptyPatLedger();
-    } catch { ledger = emptyPatLedger(); }
-    for (const portfolioId of ["robinhood", "fidelity-401k", "fidelity-roth"] as RealizedPortfolioId[]) {
-      ledger[portfolioId] ??= {};
-      const transactions = transactionsByPortfolio[portfolioId].filter(t => t.symbol && typeof t.realizedGain === "number");
-      const symbols = new Set([...positionsByPortfolio[portfolioId].map(p => p.symbol), ...transactions.map(t => t.symbol!.trim().toUpperCase())]);
-      if (portfolioId === "robinhood") symbols.add("QBTZ");
-      for (const symbol of symbols) {
-        if (ledger[portfolioId][symbol]) continue;
-        const positions = positionsByPortfolio[portfolioId].filter(p => p.symbol === symbol);
-        const pat = positions.reduce((sum, p) => sum + (p.pat ?? 0), 0);
-        const loss = positions.reduce((sum, p) => sum + (p.loss ?? 0), 0);
-        ledger[portfolioId][symbol] = {
-          baseline: portfolioId === "robinhood" && symbol === "QBTZ" ? -350.54 : roundPat(Math.max(0, loss - pat)),
-          processed: Object.fromEntries(transactions.filter(t => t.symbol!.trim().toUpperCase() === symbol).map(t => [t.id, 0])),
-        };
-      }
-    }
-    // Persist the initial historical cutoff before listening for subsequent transactions.
-    window.localStorage.setItem(PAT_LEDGER_KEY, JSON.stringify(ledger));
-    setPatLedger(ledger);
-    setPatLedgerReady(true);
-  // This initialization must run only once after stored positions hydrate.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasHydrated]);
-
-  useEffect(() => {
-    if (!patLedgerReady) return;
-    setPatLedger(current => {
-      const next = structuredClone(current);
-      let changed = false;
-      for (const portfolioId of ["robinhood", "fidelity-401k", "fidelity-roth"] as RealizedPortfolioId[]) {
-        for (const transaction of transactionsByPortfolio[portfolioId]) {
-          if (!transaction.symbol || typeof transaction.realizedGain !== "number") continue;
-          const symbol = transaction.symbol.trim().toUpperCase();
-          const entry = next[portfolioId][symbol] ??= { baseline: 0, processed: {} };
-          if (Object.prototype.hasOwnProperty.call(entry.processed, transaction.id)) continue;
-          const gain = transaction.realizedGain;
-          entry.processed[transaction.id] = roundPat(gain < 0 ? -gain : -gain * 0.65);
-          changed = true;
-        }
-      }
-      if (!changed) return current;
-      window.localStorage.setItem(PAT_LEDGER_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, [patLedgerReady, transactionsByPortfolio]);
-
-  const tickerPatNeeded = (symbol: string, items: RealizedPosition[]) => {
-    const portfolioIds: RealizedPortfolioId[] = activePortfolioId === "all" ? ["robinhood", "fidelity-401k", "fidelity-roth"] : [activePortfolioId];
-    const ledgerEntries = portfolioIds.map(id => patLedger[id]?.[symbol]).filter((v): v is { baseline: number; processed: Record<string, number> } => Boolean(v));
-    if (ledgerEntries.length && patLedgerReady) return roundPat(ledgerEntries.reduce((sum, entry) => sum + entry.baseline + Object.values(entry.processed).reduce((a, b) => a + b, 0), 0));
-    const pat = items.reduce((sum, p) => sum + (p.pat ?? 0), 0);
-    const loss = items.reduce((sum, p) => sum + (p.loss ?? 0), 0);
-    return roundPat(Math.max(0, loss - pat));
-  };
 
   const visiblePositions = useMemo(() => {
     const portfolioIds: RealizedPortfolioId[] = activePortfolioId === "all"
@@ -680,13 +606,16 @@ export default function Page() {
     visiblePositions.forEach((position) => map.set(position.symbol, [...(map.get(position.symbol) ?? []), position]));
     return Array.from(map.entries()).map(([symbol, items]) => {
       const comment = tickerCommentFor(symbol) || Array.from(new Set(items.map((item) => item.comment.trim()).filter(Boolean))).join(" · ");
-      
+      const totalPat = items.reduce((sum, item) => sum + (calculatedPat(item, comment) ?? 0), 0);
+      const totalLoss = items.reduce((sum, item) => sum + (item.loss ?? 0), 0);
       return {
         symbol,
         positions: [...items].sort((a, b) => b.amount - a.amount),
         amount: items.reduce((sum, item) => sum + item.amount, 0),
         fees: items.reduce((sum, item) => sum + item.fees, 0),
-        patNeeded: tickerPatNeeded(symbol, items),
+        patNeeded: items.some((item) => item.manualPatNeeded)
+          ? items.reduce((sum, item) => sum + (item.manualPatNeeded ? (item.patNeeded ?? 0) : (derivedPatNeeded(calculatedPat(item, comment), item.loss) ?? 0)), 0)
+          : (derivedPatNeeded(totalPat, totalLoss) ?? 0),
         latestDate: [...items].sort((a, b) => new Date(b.lastSellDate).getTime() - new Date(a.lastSellDate).getTime())[0]?.lastSellDate ?? "",
         stockCount: items.filter((item) => item.type === "stock").length,
         optionCount: items.filter((item) => item.type === "option").length,
@@ -696,23 +625,7 @@ export default function Page() {
         comment,
       };
     });
-  }, [activePortfolioId, tickerCommentsByPortfolio, visiblePositions, patLedger, patLedgerReady]);
-
-  const savePatNeeded = () => {
-    if (!editingPatTicker || activePortfolioId === "all") return;
-    const value = Number(editingPatTicker.value);
-    if (!editingPatTicker.value.trim() || !Number.isFinite(value)) { toast.error("Enter a valid PAT Needed amount."); return; }
-    const symbol = editingPatTicker.symbol;
-    setPatLedger(current => {
-      const next = structuredClone(current);
-      const entry = next[activePortfolioId][symbol] ?? { baseline: 0, processed: {} };
-      next[activePortfolioId][symbol] = { baseline: roundPat(value), processed: Object.fromEntries(Object.keys(entry.processed).map(id => [id, 0])) };
-      window.localStorage.setItem(PAT_LEDGER_KEY, JSON.stringify(next));
-      return next;
-    });
-    setEditingPatTicker(null);
-    toast.success(`${symbol} PAT Needed updated.`);
-  };
+  }, [activePortfolioId, tickerCommentsByPortfolio, visiblePositions]);
 
   const totalPatNeeded = groups.reduce((sum, group) => sum + group.patNeeded, 0);
   const lossRecoveryTickers = groups.filter((group) => group.patNeeded > 0).length;
@@ -846,7 +759,8 @@ export default function Page() {
       loss,
       lastSellDate: normalizeDate(editingPosition.lastSellDate),
       lastDividendDate: normalizeDate(editingPosition.lastDividendDate),
-      patNeeded: derivedPatNeeded(pat, loss),
+      patNeeded: editingPosition.manualPatNeeded ? editingPosition.patNeeded : derivedPatNeeded(pat, loss),
+      manualPatNeeded: editingPosition.manualPatNeeded ?? false,
       manualFees: true,
       feeTransactionSignature: currentFeeTransactionSignature,
     };
@@ -928,7 +842,7 @@ export default function Page() {
     setEditingPosition((current) => {
       if (!current) return current;
       const updated = { ...current, [field]: value.trim() ? parseMoney(value) : null };
-      return { ...updated, patNeeded: derivedPatNeeded(updated.pat, updated.loss) };
+      return updated.manualPatNeeded ? updated : { ...updated, patNeeded: derivedPatNeeded(updated.pat, updated.loss) };
     });
   }
 
@@ -1026,7 +940,7 @@ export default function Page() {
                       <td className={`px-3 py-4 font-semibold tabular-nums ${group.amount < 0 ? "text-red-500" : "text-emerald-500"}`}>{money(group.amount)}</td>
                       <td className="px-3 py-4 tabular-nums text-zinc-500">{money(group.fees)}</td>
                       <td className="whitespace-nowrap px-3 py-4 text-zinc-500">{group.latestDate || "—"}</td>
-                      <td className="px-3 py-4 tabular-nums"><button type="button" disabled={activePortfolioId === "all"} title="Edit PAT Needed" onClick={(event) => { event.stopPropagation(); setEditingPatTicker({symbol: group.symbol, value: String(group.patNeeded)}); }} className="inline-flex items-center gap-1 rounded px-2 py-1 hover:bg-zinc-500/10 disabled:cursor-default">{(() => { const pat = group.positions.reduce((sum,p) => sum + (calculatedPat(p, group.comment) ?? 0), 0); const loss = group.positions.reduce((sum,p) => sum + Math.abs(p.loss ?? 0), 0); return pat > loss && group.patNeeded >= 0 ? "—" : money(group.patNeeded); })()}{activePortfolioId !== "all" && <Pencil size={12} className="text-zinc-500" />}</button></td>
+                      <td className="px-3 py-4 tabular-nums">{group.patNeeded > 0 ? money(group.patNeeded) : "-"}</td>
                       <td className="px-3 py-4 tabular-nums text-emerald-500">{group.dividendAmount ? money(group.dividendAmount) : "-"}</td>
                       <td className="px-3 py-4 tabular-nums text-zinc-500">{group.dividendNraWithholding ? money(group.dividendNraWithholding) : "-"}</td>
                       <td className="whitespace-nowrap px-3 py-4 text-zinc-500">{group.lastDividendDate || "—"}</td>
@@ -1113,19 +1027,6 @@ export default function Page() {
         </div>
       )}
 
-      {editingPatTicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true">
-          <Card className="w-full max-w-md p-6">
-            <h2 className="text-lg font-semibold">Edit PAT Needed — {editingPatTicker.symbol}</h2>
-            <p className="mt-2 text-sm text-zinc-500">Your saved value becomes the starting balance. Only future sales adjust it.</p>
-            <label className="mt-5 block space-y-2 text-sm font-medium">PAT Needed
-              <Input type="number" step="0.01" value={editingPatTicker.value} onChange={e => setEditingPatTicker(current => current ? {...current, value:e.target.value} : null)} />
-            </label>
-            <div className="mt-5 flex justify-end gap-2"><Button variant="outline" onClick={() => setEditingPatTicker(null)}>Cancel</Button><Button onClick={savePatNeeded}>Save Changes</Button></div>
-          </Card>
-        </div>
-      )}
-
       {editingPosition && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true">
           <Card className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-b-none p-4 shadow-2xl sm:rounded-xl sm:p-6">
@@ -1145,7 +1046,7 @@ export default function Page() {
               <label className="space-y-2 text-sm font-medium">Fees<Input type="number" inputMode="decimal" step="0.01" value={editingPosition.fees === 0 ? "" : editingPosition.fees} onChange={(e) => editNumber("fees", e.target.value)} /></label>
               <label className="space-y-2 text-sm font-medium">PAT<Input type="text" readOnly={shouldAutoCalculatePat(editingPosition.loss, tickerCommentFor(editingPosition.symbol))} placeholder="-" value={shouldAutoCalculatePat(editingPosition.loss, tickerCommentFor(editingPosition.symbol)) ? money(calculatedPat(editingPosition, tickerCommentFor(editingPosition.symbol)) ?? 0) : (editingPosition.pat ?? "")} onChange={(e) => { if(!shouldAutoCalculatePat(editingPosition.loss, tickerCommentFor(editingPosition.symbol))) editOptionalMoney("pat", e.target.value); }} className={shouldAutoCalculatePat(editingPosition.loss, tickerCommentFor(editingPosition.symbol)) ? "cursor-not-allowed bg-zinc-500/5 text-emerald-500" : ""} /></label>
               <label className="space-y-2 text-sm font-medium">Loss<Input type="number" step="0.01" placeholder="-" value={editingPosition.loss ?? ""} onChange={(e) => editOptionalMoney("loss", e.target.value)} /></label>
-              <label className="space-y-2 text-sm font-medium">PAT Needed<Input readOnly placeholder="-" value={derivedPatNeeded(calculatedPat(editingPosition, tickerCommentFor(editingPosition.symbol)), editingPosition.loss) === null ? "" : money(derivedPatNeeded(calculatedPat(editingPosition, tickerCommentFor(editingPosition.symbol)), editingPosition.loss) ?? 0)} className="cursor-not-allowed bg-zinc-500/5 text-zinc-500" /></label>
+              <label className="space-y-2 text-sm font-medium">PAT Needed<Input type="number" inputMode="decimal" step="0.01" placeholder="-" value={editingPosition.manualPatNeeded ? (editingPosition.patNeeded ?? "") : (derivedPatNeeded(calculatedPat(editingPosition, tickerCommentFor(editingPosition.symbol)), editingPosition.loss) ?? "")} onChange={(e) => setEditingPosition((current) => current ? { ...current, patNeeded: e.target.value.trim() === "" ? null : parseMoney(e.target.value), manualPatNeeded: true } : current)} /></label>
               <label className="space-y-2 text-sm font-medium">Dividend Amount<div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">$</span><Input type="number" step="0.01" min="0" className="pl-7" value={editingPosition.dividendAmount === 0 ? "" : editingPosition.dividendAmount} onChange={(e) => editNumber("dividendAmount", e.target.value)} /></div></label>
               <label className="space-y-2 text-sm font-medium">Dividend NRA Withholding<div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">$</span><Input type="number" step="0.01" min="0" className="pl-7" value={editingPosition.dividendNraWithholding === 0 ? "" : editingPosition.dividendNraWithholding} onChange={(e) => editNumber("dividendNraWithholding", e.target.value)} /></div></label>
               <label className="space-y-2 text-sm font-medium">Last Dividend Date<Input type="date" value={dateInputValue(editingPosition.lastDividendDate)} onChange={(e) => setEditingPosition({ ...editingPosition, lastDividendDate: e.target.value })} /></label>
