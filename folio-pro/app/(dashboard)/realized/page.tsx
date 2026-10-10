@@ -146,6 +146,17 @@ function makePosition(rawSymbol: string, amount: number, fees: number, lastSellD
 }
 
 
+const ROTH_SPAXX_DIVIDEND: RealizedPosition = {
+  ...makePosition("SPAXX", 0, 0, "", "roth-spaxx-dividend-summary"),
+  dividendAmount: 162.27,
+  lastDividendDate: "2026-09-30",
+};
+
+function mergeRothSpaxxDividend(items: RealizedPosition[]): RealizedPosition[] {
+  if (items.some(item => item.id === ROTH_SPAXX_DIVIDEND.id)) return items;
+  return [...items, ROTH_SPAXX_DIVIDEND];
+}
+
 const ROTH_IRA_SUMMARY_POSITIONS: RealizedPosition[] = [
   makePosition("MSTZ",2211.60,0,"","roth-summary-mstz"),
   makePosition("IREN",1976.12,0,"","roth-summary-iren"),
@@ -343,7 +354,7 @@ export default function Page() {
   const defaultPositionsByPortfolio = useMemo<PositionsByPortfolio>(() => ({
     robinhood: initialPositions,
     "fidelity-401k": [],
-    "fidelity-roth": ROTH_IRA_SUMMARY_POSITIONS,
+    "fidelity-roth": mergeRothSpaxxDividend(ROTH_IRA_SUMMARY_POSITIONS),
   }), []);
   const [positionsByPortfolio, setPositionsByPortfolio] = useState<PositionsByPortfolio>(defaultPositionsByPortfolio);
   const [editingPosition, setEditingPosition] = useState<RealizedPosition | null>(null);
@@ -456,13 +467,13 @@ export default function Page() {
           setPositionsByPortfolio({
             robinhood: mergeRobinhoodDividendPositions(migrated),
             "fidelity-401k": [],
-            "fidelity-roth": ROTH_IRA_SUMMARY_POSITIONS.filter(position=>position.lastSellDate && !savedRemovedIds["fidelity-roth"].includes(position.id)),
+            "fidelity-roth": mergeRothSpaxxDividend(ROTH_IRA_SUMMARY_POSITIONS.filter(position=>position.lastSellDate && !savedRemovedIds["fidelity-roth"].includes(position.id))),
           });
         } else if (parsed && typeof parsed === "object") {
           setPositionsByPortfolio({
             robinhood: mergeRobinhoodDividendPositions(migratePositions(parsed.robinhood ?? [])),
             "fidelity-401k": migratePositions(parsed["fidelity-401k"] ?? []),
-            "fidelity-roth": migratePositions(parsed["fidelity-roth"] ?? []).filter(position=>position.lastSellDate && !savedRemovedIds["fidelity-roth"].includes(position.id)),
+            "fidelity-roth": mergeRothSpaxxDividend(migratePositions(parsed["fidelity-roth"] ?? []).filter(position=>(Boolean(position.lastSellDate) || position.id === ROTH_SPAXX_DIVIDEND.id) && !savedRemovedIds["fidelity-roth"].includes(position.id))),
           });
         }
       } catch { window.localStorage.removeItem(STORAGE_KEY); }
@@ -529,7 +540,7 @@ export default function Page() {
       .sort().join("|");
     const base: RealizedPosition[] = portfolioIds.flatMap((portfolioId) => positionsByPortfolio[portfolioId]
       .filter(position=>!removedPositionIds[portfolioId].includes(position.id))
-      .filter(position=>portfolioId!=="fidelity-roth"||Boolean(position.lastSellDate))
+      .filter(position=>portfolioId!=="fidelity-roth"||Boolean(position.lastSellDate)||position.id===ROTH_SPAXX_DIVIDEND.id)
       .map((position) => {
       const keepManualFees = position.manualFees && position.feeTransactionSignature === feeTransactionSignature;
       return {
