@@ -916,7 +916,7 @@ export default function Page() {
           <MetricCard label="Profitable Tickers" value={`${winners.length} of ${groups.length}`} />
           <MetricCard label="Loss Recovery Tickers" value={lossRecoveryTickers.toLocaleString()} />
           <MetricCard label="Total Dividend Amount" value={money((activePortfolioId==="robinhood"||activePortfolioId==="fidelity-roth")?robinhoodAllTimeSummary.dividendAmount:totals.dividendAmount)} />
-          <MetricCard label={activePortfolioId==="robinhood"?"Robinhood Extras":"Extras"} value={money(activePortfolioId==="robinhood"?robinhoodAllTimeSummary.extras:0)} />
+          {activePortfolioId==="robinhood" && <MetricCard label="Robinhood Extras" value={money(robinhoodAllTimeSummary.extras)} />}
         </>}
       </div>
 
