@@ -30,6 +30,39 @@ const incomeSourceFromTransaction=(tx:Transaction)=>{
   if(tx.type==="interest")return "Interest Payment";
   return null;
 };
+const ROTH_IRA_SCREENSHOT_DIVIDENDS: IncomeTransaction[] = [
+  { date: "2024-12-31", ticker: "MAGS Dividend", amount: 27.38 },
+  { date: "2024-12-31", ticker: "SPAXX Dividend", amount: 7.63 },
+  { date: "2025-01-31", ticker: "SPAXX Dividend", amount: 2.68 },
+  { date: "2025-02-28", ticker: "SPAXX Dividend", amount: 6.40 },
+  { date: "2025-03-31", ticker: "SPAXX Dividend", amount: 0.02 },
+  { date: "2025-03-31", ticker: "VST Dividend", amount: 13.62 },
+  { date: "2025-04-30", ticker: "SPAXX Dividend", amount: 0.07 },
+  { date: "2025-05-30", ticker: "SPAXX Dividend", amount: 18.63 },
+  { date: "2025-06-30", ticker: "SPAXX Dividend", amount: 16.40 },
+  { date: "2025-07-01", ticker: "SOXL Dividend", amount: 30.92 },
+  { date: "2025-07-31", ticker: "SPAXX Dividend", amount: 0.94 },
+  { date: "2025-08-29", ticker: "SPAXX Dividend", amount: 8.77 },
+  { date: "2025-09-30", ticker: "SOXL Dividend", amount: 31.01 },
+  { date: "2025-09-30", ticker: "PLTU Dividend", amount: 26.70 },
+  { date: "2025-09-30", ticker: "SPAXX Dividend", amount: 7.79 },
+  { date: "2025-10-31", ticker: "SPAXX Dividend", amount: 8.38 },
+  { date: "2025-11-28", ticker: "SPAXX Dividend", amount: 2.02 },
+  { date: "2025-12-31", ticker: "SOXL Dividend", amount: 22.52 },
+  { date: "2025-12-31", ticker: "SPAXX Dividend", amount: 0.01 },
+  { date: "2026-01-30", ticker: "SPAXX Dividend", amount: 3.33 },
+  { date: "2026-02-27", ticker: "SPAXX Dividend", amount: 0.66 },
+  { date: "2026-03-31", ticker: "SOXS Dividend", amount: 7.74 },
+  { date: "2026-03-31", ticker: "SPAXX Dividend", amount: 1.54 },
+  { date: "2026-04-30", ticker: "SPAXX Dividend", amount: 17.97 },
+  { date: "2026-05-29", ticker: "SPAXX Dividend", amount: 25.44 },
+  { date: "2026-06-30", ticker: "SOXS Dividend", amount: 0.56 },
+  { date: "2026-06-30", ticker: "SPAXX Dividend", amount: 17.84 },
+  { date: "2026-07-31", ticker: "SPAXX Dividend", amount: 13.37 },
+  { date: "2026-08-31", ticker: "SPAXX Dividend", amount: 15.13 },
+  { date: "2026-09-29", ticker: "SOXS Dividend", amount: 0.44 },
+  { date: "2026-09-30", ticker: "SPAXX Dividend", amount: 12.25 },
+];
 const ROBINHOOD_INCOME_TRANSACTIONS: IncomeTransaction[] = [
   // Dividends
   { date: "2024-02-29", ticker: "ADM Dividend", amount: 0.54 },
@@ -1465,11 +1498,17 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
       const edited={...item,...patch} as IncomeTransaction;
       return {id,original:item,edited,deleted:Boolean(patch.deleted)};
     }):[];
-    const staticRows=staticDefinitions.filter(row=>!row.deleted).map(({id,edited})=>({id,item:edited}));
+    const rothDefinitions=includesFidelityRoth?ROTH_IRA_SCREENSHOT_DIVIDENDS.map((item,index)=>{
+      const id=`roth-${incomeId(item,index)}`;
+      const patch=incomeEdits[id]??{};
+      return {id,original:item,edited:{...item,...patch} as IncomeTransaction,deleted:Boolean(patch.deleted)};
+    }):[];
+    const allDefinitions=[...staticDefinitions,...rothDefinitions];
+    const staticRows=allDefinitions.filter(row=>!row.deleted).map(({id,edited})=>({id,item:edited}));
     // Always reserve the original static fingerprint as well as the edited one. This prevents a
     // matching live transaction from reappearing after a static dividend/income row is deleted.
     const staticKeys=new Set<string>();
-    staticDefinitions.forEach(({original,edited})=>{
+    allDefinitions.forEach(({original,edited})=>{
       staticKeys.add(`${original.date}|${original.ticker.toUpperCase()}|${original.amount.toFixed(2)}`);
       staticKeys.add(`${edited.date}|${edited.ticker.toUpperCase()}|${edited.amount.toFixed(2)}`);
     });
@@ -1484,7 +1523,7 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
       return {id,item:{...original,...patch} as IncomeTransaction};
     }).filter((row):row is {id:string;item:IncomeTransaction}=>row!==null);
     return [...staticRows,...liveRows];
-  },[activeTransactions,incomeEdits,includesRobinhood]);
+  },[activeTransactions,incomeEdits,includesRobinhood,includesFidelityRoth]);
   const persistIncomeEdit=(id:string,patch:IncomeEdit)=>setIncomeEdits(current=>{const next={...current,[id]:{...(current[id]??{}),...patch}};try{window.localStorage.setItem(INCOME_EDITS_KEY,JSON.stringify(next));}catch{}return next;});
   const canEditIncome=(date:string)=>isRobinhood?date.startsWith("2026-10-"):activePortfolioId==="fidelity-roth"&&/^(2024|2025|2026)-/.test(date);
   const openIncomeEditor=(id:string,item:IncomeTransaction)=>{if(!canEditIncome(item.date))return;setEditingIncome({id,item});setIncomeDraft({...item});};
