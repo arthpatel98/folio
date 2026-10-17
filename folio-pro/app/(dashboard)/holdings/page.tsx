@@ -182,7 +182,7 @@ export default function Page() {
     const cagrBaseYears=name==="Fidelity Roth IRA"?1.0833:2;
     const cagrYears=cagrBaseYears+monthFraction;
     const cagr=invested>0&&current>0?Math.pow(current/invested,1/cagrYears)-1:0;
-    const ytd=name==="Robinhood"?current/83745-1:name==="Fidelity Roth IRA"?current/16452-1:(fidelity401kYtd??0.1465);
+    const ytd=name==="Robinhood"?current/88746-1:name==="Fidelity Roth IRA"?current/16452-1:(fidelity401kYtd??0.1465);
     return {...base,current,invested,gain,totalReturn,cagr,ytd};
   },[activePortfolioId,summary.value,fidelity401kYtd]);
   const activeAth=performanceAth[activePortfolioId]??DEFAULT_PERFORMANCE_ATH[activePortfolioId]??DEFAULT_PERFORMANCE_ATH.robinhood;

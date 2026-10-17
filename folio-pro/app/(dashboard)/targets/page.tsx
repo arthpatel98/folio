@@ -234,11 +234,11 @@ export default function TargetPlannerPage(){
   // Match the Portfolio Performance formulas, but substitute the projected portfolio value.
   const projectedMonthFraction=(new Date().getMonth())/12;
   const projectedYtd=isRobinhood
-    ? projectedValue/83745-1
+    ? projectedValue/88746-1
     : isRoth
       ? projectedValue/16452-1
       : 0;
-  const projectedInvested=isRobinhood?74500:isRoth?19000:0;
+  const projectedInvested=isRobinhood?79500:isRoth?19000:0;
   const projectedCagrYears=(isRoth?1.0833:2)+projectedMonthFraction;
   const projectedCagr=projectedInvested>0&&projectedValue>0
     ? Math.pow(projectedValue/projectedInvested,1/projectedCagrYears)-1

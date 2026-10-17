@@ -1,11 +1,11 @@
 export const investmentAccounts = [
-  { name: "Robinhood", invested: 74500, current: 91570, gain: 17070, totalReturn: 0.2291275168, cagr: 0.08602238397, ytd: 0.09343841423, allTimeHigh: "$108,128 On Nov 5, 2025", start: "Jan 9, 2024" },
+  { name: "Robinhood", invested: 79500, current: 91570, gain: 12070, totalReturn: 0.15182389937, cagr: 0.0528, ytd: 0.03127, allTimeHigh: "$108,128 On Nov 5, 2025", start: "Jan 9, 2024" },
   { name: "Fidelity Roth IRA", invested: 19000, current: 14183, gain: -4817, totalReturn: -0.2535263158, cagr: -0.1686250316, ytd: -0.1379163628, allTimeHigh: "$20,134 On Aug 6, 2025", start: "Dec 2, 2024" },
   { name: "Fidelity 401(k)", invested: 13703.6, current: 19801, gain: 6097.4, totalReturn: 0.4449487726, cagr: 0.1586198911, ytd: 0.1465, allTimeHigh: "$21,194 On June 2, 2026", start: "Jan 19, 2024" },
 ] as const;
 
-export const investmentTotals = { invested: 107203.6, current: 125554, gain: 18350.4, totalReturn: 0.1711733561 };
-export const stockTotals = { invested: 93500, current: 105753, gain: 12253, totalReturn: 0.1310481283 };
+export const investmentTotals = { invested: 112203.6, current: 125554, gain: 13350.4, totalReturn: 0.11898370284 };
+export const stockTotals = { invested: 98500, current: 105753, gain: 7253, totalReturn: 0.07363451777 };
 
 export const quarterlyIncome = [
   { period: "Q1 2024", robinhoodProfit: 39.32, robinhoodIncome: 6.18, rothProfit: 0, rothIncome: 0, total: 45.5 },
