@@ -11,7 +11,6 @@ const items = [
   ["/", "Home", LayoutDashboard],
   ["/holdings", "Holdings", BriefcaseBusiness],
   ["/dca", "Simulator", Coins],
-  ["/lot-opportunities", "Top Lots"],
   ["/targets", "Targets", Target],
   ["/realized", "Realized", Landmark],
   ["/transactions", "Txns", ReceiptText],
