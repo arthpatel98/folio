@@ -1525,11 +1525,12 @@ export function RobinhoodQuarterlyData({ onAllTimeSummary }: { onAllTimeSummary?
     return [...staticRows,...liveRows];
   },[activeTransactions,incomeEdits,includesRobinhood,includesFidelityRoth]);
   const persistIncomeEdit=(id:string,patch:IncomeEdit)=>setIncomeEdits(current=>{const next={...current,[id]:{...(current[id]??{}),...patch}};try{window.localStorage.setItem(INCOME_EDITS_KEY,JSON.stringify(next));}catch{}return next;});
-  const canEditIncome=(date:string)=>isRobinhood?date.startsWith("2026-10-"):activePortfolioId==="fidelity-roth"&&/^(2024|2025|2026)-/.test(date);
+  const isCurrentCalendarMonth=(date:string)=>{const now=new Date();return date.startsWith(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-`);};
+  const canEditIncome=(date:string)=>isRobinhood?date.startsWith("2026-10-"):activePortfolioId==="fidelity-roth"&&isCurrentCalendarMonth(date);
   const openIncomeEditor=(id:string,item:IncomeTransaction)=>{if(!canEditIncome(item.date))return;setEditingIncome({id,item});setIncomeDraft({...item});};
   const saveIncomeEditor=()=>{if(!editingIncome)return;persistIncomeEdit(editingIncome.id,incomeDraft);setEditingIncome(null);};
   const deleteIncomeEditor=()=>{if(!editingIncome)return;persistIncomeEdit(editingIncome.id,{deleted:true});setEditingIncome(null);};
-  const canEditProfit=(tx:ProfitDrilldownTransaction)=>isRobinhood?tx.date.startsWith("2026-10-"):activePortfolioId==="fidelity-roth"&&/^(2024|2025|2026)-/.test(tx.date);
+  const canEditProfit=(tx:ProfitDrilldownTransaction)=>isRobinhood?tx.date.startsWith("2026-10-"):activePortfolioId==="fidelity-roth"&&isCurrentCalendarMonth(tx.date);
   const openProfitEditor=(tx:ProfitDrilldownTransaction)=>{if(!canEditProfit(tx))return;setEditingProfit(tx);setProfitDraft({...tx});};
   const saveProfitEditor=()=>{if(!editingProfit||!profitDraft)return;saveEdit(editingProfit.id,profitDraft);setEditingProfit(null);setProfitDraft(null);};
   const deleteProfitEditor=()=>{if(!editingProfit)return;saveEdit(editingProfit.id,{deleted:true});setEditingProfit(null);setProfitDraft(null);};
