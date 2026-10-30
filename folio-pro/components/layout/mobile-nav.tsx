@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BriefcaseBusiness, Check, ChevronDown, Coins, LayoutDashboard, Landmark, Layers3, ReceiptText, Target } from "lucide-react";
+import { BriefcaseBusiness, Check, ChevronDown, Coins, LayoutDashboard, Landmark, Layers3, ReceiptText, Target, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { portfolios, useActivePortfolio } from "@/components/portfolio/portfolio-context";
 
@@ -11,6 +11,7 @@ const items = [
   ["/", "Home", LayoutDashboard],
   ["/holdings", "Holdings", BriefcaseBusiness],
   ["/dca", "Simulator", Coins],
+  ["/lot-sell-planner", "Sell Lots", TrendingUp],
   ["/targets", "Targets", Target],
   ["/realized", "Realized", Landmark],
   ["/transactions", "Txns", ReceiptText],
