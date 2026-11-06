@@ -268,9 +268,11 @@ function shouldAutoCalculatePat(loss: number | null, tickerComment: string) {
   return typeof loss === "number" && loss > 0 && !/^Dividend Included\b/i.test(tickerComment.trim());
 }
 
-function calculatedPat(position: RealizedPosition, tickerComment: string) {
-  if (!shouldAutoCalculatePat(position.loss, tickerComment)) return position.pat;
-  return (position.amount + (position.loss ?? 0)) * 0.65;
+function calculatedPat(position: RealizedPosition, _tickerComment: string) {
+  return position.pat ?? Math.max(0, position.amount) * 0.65;
+}
+function calculatedLoss(position: RealizedPosition) {
+  return position.loss ?? Math.max(0, -position.amount);
 }
 
 function normalizeOptionalMoney(value: unknown) {
@@ -565,6 +567,8 @@ export default function Page() {
         const sellDate = normalizeDate(transaction.date);
         const match = base.find((position) => position.symbol === symbol && position.type === type);
         if (match) {
+          match.pat = (match.pat ?? Math.max(0, match.amount) * 0.65) + Math.max(0, transaction.realizedGain) * 0.65;
+          match.loss = (match.loss ?? Math.max(0, -match.amount)) + Math.max(0, -transaction.realizedGain);
           match.amount += transaction.realizedGain;
           if (!match.manualFees) match.fees += Number(transaction.fees) || 0;
           if (!match.lastSellDate || new Date(sellDate).getTime() >= new Date(match.lastSellDate).getTime()) match.lastSellDate = sellDate;
@@ -575,6 +579,8 @@ export default function Page() {
           base.push({
             ...makePosition(symbol + (type === "option" ? " Option" : ""), transaction.realizedGain, Number(transaction.fees) || 0, sellDate, `sale-${portfolioId}-${transaction.id}`),
             optionDetails,
+            pat: Math.max(0, transaction.realizedGain) * 0.65,
+            loss: Math.max(0, -transaction.realizedGain),
             sourceTransaction: true,
             sourceTransactionIds: [transaction.id],
             comment: "",
@@ -628,7 +634,7 @@ export default function Page() {
     return Array.from(map.entries()).map(([symbol, items]) => {
       const comment = tickerCommentFor(symbol) || Array.from(new Set(items.map((item) => item.comment.trim()).filter(Boolean))).join(" · ");
       const totalPat = items.reduce((sum, item) => sum + (calculatedPat(item, comment) ?? 0), 0);
-      const totalLoss = items.reduce((sum, item) => sum + (item.loss ?? 0), 0);
+      const totalLoss = items.reduce((sum, item) => sum + calculatedLoss(item), 0);
       return {
         symbol,
         positions: [...items].sort((a, b) => b.amount - a.amount),
@@ -945,7 +951,7 @@ export default function Page() {
                 <th className="sticky left-0 z-20 bg-white px-3 py-3 dark:bg-zinc-950"><SortHeader label="Ticker" column="symbol" /></th>
                 <th className="px-3 py-3"><SortHeader label="Mix" column="mix" /></th>
                 <th className="px-3 py-3"><SortHeader label="Realized P/L" column="amount" /></th>
-                <th className="px-3 py-3"><SortHeader label="Fees" column="fees" /></th>
+                
                 <th className="px-3 py-3"><SortHeader label="Latest Sell Date" column="latestDate" /></th>
                 <th className="px-3 py-3"><SortHeader label="PAT Needed" column="patNeeded" /></th>
                 <th className="px-3 py-3"><SortHeader label="Dividend Amount" column="dividendAmount" /></th>
@@ -970,7 +976,7 @@ export default function Page() {
                         </div>
                       </td>
                       <td className={`px-3 py-4 font-semibold tabular-nums ${group.amount < 0 ? "text-red-500" : "text-emerald-500"}`}>{money(group.amount)}</td>
-                      <td className="px-3 py-4 tabular-nums text-zinc-500">{money(group.fees)}</td>
+                      
                       <td className="whitespace-nowrap px-3 py-4 text-zinc-500">{group.latestDate || "—"}</td>
                       <td className="px-3 py-4 tabular-nums">{group.patNeeded > 0 ? money(group.patNeeded) : "-"}</td>
                       <td className="px-3 py-4 tabular-nums text-emerald-500">{group.dividendAmount ? money(group.dividendAmount) : "-"}</td>
@@ -983,12 +989,12 @@ export default function Page() {
                     </tr>
                     {expanded && (
                       <tr className="border-b bg-zinc-500/[0.035]">
-                        <td colSpan={12} className="p-0">
+                        <td colSpan={11} className="p-0">
                           <div className="m-3 overflow-hidden rounded-lg border border-zinc-500/15">
                             <table className="w-full text-center text-xs">
                               <thead className="bg-zinc-500/5 tracking-wide text-zinc-500">
                                 <tr>
-                                  <th className="px-3 py-3">Type</th><th className="px-3 py-3">Realized P/L</th><th className="px-3 py-3">Fees</th>
+                                  <th className="px-3 py-3">Type</th><th className="px-3 py-3">Realized P/L</th>
                                   <th className="px-3 py-3">Sell Date</th><th className="px-3 py-3">PAT</th><th className="px-3 py-3">Loss</th>
                                   <th className="px-3 py-3">PAT Needed</th><th className="px-3 py-3">Dividend Amount</th><th className="px-3 py-3">Dividend NRA Withholding</th><th className="px-3 py-3">Last Dividend Date</th><th className="px-3 py-3">Actions</th>
                                 </tr>
@@ -998,10 +1004,10 @@ export default function Page() {
                                   <tr key={position.id} className="border-t border-zinc-500/10">
                                     <td className="px-3 py-3"><span className={`rounded-md border px-2 py-1 font-medium ${position.type === "option" ? "border-violet-500/30 bg-violet-500/10 text-violet-400" : "border-blue-500/30 bg-blue-500/10 text-blue-400"}`}>{position.type === "option" ? "Option" : "Stock"}</span></td>
                                     <td className={`px-3 py-3 font-medium tabular-nums ${position.amount < 0 ? "text-red-500" : "text-emerald-500"}`}>{money(position.amount)}</td>
-                                    <td className="px-3 py-3 tabular-nums text-zinc-500">{money(position.fees)}</td>
+                                    
                                     <td className="whitespace-nowrap px-3 py-3 text-zinc-500">{position.lastSellDate || "—"}</td>
                                     <td className="px-3 py-3 tabular-nums text-emerald-500">{optionalMoney(calculatedPat(position, group.comment))}</td>
-                                    <td className="px-3 py-3 tabular-nums text-red-500">{optionalMoney(position.loss)}</td>
+                                    <td className="px-3 py-3 tabular-nums text-red-500">{optionalMoney(calculatedLoss(position))}</td>
                                     <td className="px-3 py-3 tabular-nums">-</td>
                                     <td className="px-3 py-3 tabular-nums text-emerald-500">{position.dividendAmount ? money(position.dividendAmount) : "-"}</td>
                                     <td className="px-3 py-3 tabular-nums text-zinc-500">{position.dividendNraWithholding ? money(position.dividendNraWithholding) : "-"}</td>

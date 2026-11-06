@@ -304,7 +304,7 @@ export function AddHoldingDialog() {
               <Field label="Sell Shares"><Input required type="number" min="0.000001" step="any" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /><span className="mt-1.5 block text-xs font-normal text-zinc-500">Available Shares: {(matching?.shares ?? 0).toLocaleString(undefined,{maximumFractionDigits:6})}</span></Field>
               <Field label="Sell Price"><Input required type="number" min="0.000001" step="any" value={form.tradePrice} onChange={(e) => update("tradePrice", e.target.value)} /></Field>
               <DateField label="Sell Date" value={form.tradeDate} onChange={(value) => update("tradeDate", value)} />
-              <MoneyField label="Platform Fees" value={form.platformFees} onChange={(value) => update("platformFees", value)} />
+
               <div className="sm:col-span-2">
                 {stockTaxLots.length>0?<div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[.04] p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -338,7 +338,7 @@ export function AddHoldingDialog() {
               <Field label="Contract Details"><select required value={form.selectedContractKey} onChange={(e) => selectOptionContract(e.target.value)} className="field-select" autoFocus><option value="">Select Contract</option>{ownedOptions.map((holding) => <option key={optionContractKey(holding)} value={optionContractKey(holding)}>{holding.company}</option>)}</select></Field>
               <Field label="Contracts"><Input required type="number" min="1" step="1" value={form.quantity} onChange={(e) => update("quantity", e.target.value)} /></Field>
               <Field label="Sell Price"><Input required type="number" min="0" step="any" value={form.tradePrice} onChange={(e) => update("tradePrice", e.target.value)} /></Field>
-              <MoneyField label="Platform Fees" value={form.platformFees} onChange={(value) => update("platformFees", value)} />
+
             </> : form.assetType === "stock" ? <>
               <Field label="Select Position"><select required value={stockSelection} onChange={(e) => selectBuyStock(e.target.value)} className="field-select" autoFocus><option value={NEW_POSITION}>New Position</option>{ownedStocks.map((holding) => <option key={holding.symbol} value={holding.symbol}>{holding.symbol}</option>)}</select></Field>
               {isNewStock ? <Field label="New Position Ticker"><Input required value={form.symbol} onChange={(e) => update("symbol", e.target.value)} className="uppercase" /></Field> : <Field label="Position Status"><div className="flex h-10 items-center rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm dark:border-white/10 dark:bg-white/[.03]"><span className="text-emerald-400">Existing Shares - {matching?.shares ?? 0}</span></div></Field>}
@@ -357,7 +357,7 @@ export function AddHoldingDialog() {
               {form.optionType === "sell-put" && Number(form.optionStrike || 0) > 0 && Number(form.quantity || 0) !== 0 && <div className="sm:col-span-2 -mt-2 text-xs font-normal text-violet-500">Collateral: {money(Math.abs(Number(form.quantity)) * Number(form.optionStrike) * 100)}</div>}
               <DateField label="Option Expiry" value={form.optionExpiry} onChange={(value) => update("optionExpiry", value)} />
               <DateField label="Buy Date" value={form.tradeDate} onChange={(value) => update("tradeDate", value)} />
-              <MoneyField label="Platform Fees" value={form.platformFees} onChange={(value) => update("platformFees", value)} />
+
               <SectorField value={form.sector} onChange={(value) => update("sector", value)} />
             </>}
 
