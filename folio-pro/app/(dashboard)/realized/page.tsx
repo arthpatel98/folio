@@ -268,11 +268,25 @@ function shouldAutoCalculatePat(loss: number | null, tickerComment: string) {
   return typeof loss === "number" && loss > 0 && !/^Dividend Included\b/i.test(tickerComment.trim());
 }
 
-function calculatedPat(position: RealizedPosition, _tickerComment: string) {
-  return position.pat ?? Math.max(0, position.amount) * 0.65;
+function calculatedPat(position: RealizedPosition, tickerComment: string) {
+  // Preserve historical PAT calculations unless a future transaction
+  // explicitly establishes a new cumulative PAT value.
+  if (position.pat !== null) return position.pat;
+  if (!shouldAutoCalculatePat(position.loss, tickerComment)) return position.pat;
+  return (position.amount + (position.loss ?? 0)) * 0.65;
 }
 function calculatedLoss(position: RealizedPosition) {
-  return position.loss ?? Math.max(0, -position.amount);
+  // Historical losses are not reconstructed from net realized P/L.
+  return position.loss ?? 0;
+}
+
+// Apply the revised PAT/Loss accounting only to transactions AFTER the
+// existing v84 historical baseline; never recalculate prior ticker values.
+const FORWARD_PAT_START_DATE = "2026-11-07";
+function isForwardPatTransaction(date: string) {
+  const normalized = new Date(date);
+  return !Number.isNaN(normalized.getTime()) &&
+    normalized.toISOString().slice(0, 10) >= FORWARD_PAT_START_DATE;
 }
 
 function normalizeOptionalMoney(value: unknown) {
@@ -567,8 +581,13 @@ export default function Page() {
         const sellDate = normalizeDate(transaction.date);
         const match = base.find((position) => position.symbol === symbol && position.type === type);
         if (match) {
-          match.pat = (match.pat ?? Math.max(0, match.amount) * 0.65) + Math.max(0, transaction.realizedGain) * 0.65;
-          match.loss = (match.loss ?? Math.max(0, -match.amount)) + Math.max(0, -transaction.realizedGain);
+          if (isForwardPatTransaction(transaction.date)) {
+            // Snapshot the pre-existing displayed PAT before adding new profits.
+            // Preserve historical Loss; new losses accumulate independently.
+            const historicalPat = calculatedPat(match, match.comment);
+            match.pat = (historicalPat ?? 0) + Math.max(0, transaction.realizedGain) * 0.65;
+            match.loss = (match.loss ?? 0) + Math.max(0, -transaction.realizedGain);
+          }
           match.amount += transaction.realizedGain;
           if (!match.manualFees) match.fees += Number(transaction.fees) || 0;
           if (!match.lastSellDate || new Date(sellDate).getTime() >= new Date(match.lastSellDate).getTime()) match.lastSellDate = sellDate;
@@ -579,8 +598,8 @@ export default function Page() {
           base.push({
             ...makePosition(symbol + (type === "option" ? " Option" : ""), transaction.realizedGain, Number(transaction.fees) || 0, sellDate, `sale-${portfolioId}-${transaction.id}`),
             optionDetails,
-            pat: Math.max(0, transaction.realizedGain) * 0.65,
-            loss: Math.max(0, -transaction.realizedGain),
+            pat: isForwardPatTransaction(transaction.date) ? Math.max(0, transaction.realizedGain) * 0.65 : null,
+            loss: isForwardPatTransaction(transaction.date) ? Math.max(0, -transaction.realizedGain) : null,
             sourceTransaction: true,
             sourceTransactionIds: [transaction.id],
             comment: "",
