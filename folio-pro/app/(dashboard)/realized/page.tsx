@@ -1053,7 +1053,6 @@ export default function Page() {
               <tr>
                 <td /><td className="px-3 py-4">Total</td><td />
                 <td className={`px-3 py-4 tabular-nums ${totals.realized < 0 ? "text-red-500" : "text-emerald-500"}`}>{money(totals.realized)}</td>
-                <td className="px-3 py-4 tabular-nums text-zinc-500">{money(totals.fees)}</td>
                 <td />
                 <td className="px-3 py-4 tabular-nums">{totalPatNeeded > 0 ? money(totalPatNeeded) : "-"}</td>
                 <td className="px-3 py-4 tabular-nums text-emerald-500">{money(totals.dividendAmount)}</td>

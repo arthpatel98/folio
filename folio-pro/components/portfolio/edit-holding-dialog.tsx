@@ -9,6 +9,7 @@ import { usePortfolioStore, type DataPortfolioId } from "@/store/portfolio-store
 import { toast } from "sonner";
 import { AssetType, Holding, Sector } from "@/types/portfolio";
 import { getBundledHistoricalCompanyNames } from "@/lib/historical-company-names";
+import { optionContractDetails } from "@/lib/option-contract-details";
 
 const sectors: Sector[] = [
   "AI / Enterprise Software",
@@ -50,6 +51,7 @@ type HoldingForm = {
   sector: Sector;
   optionType: string;
   optionExpiry: string;
+  optionStrike: string;
   dte: string;
 };
 
@@ -65,6 +67,7 @@ function toForm(holding: Holding): HoldingForm {
     sector: holding.sector,
     optionType: holding.optionType ?? "buy-call",
     optionExpiry: holding.optionExpiry ?? "",
+    optionStrike: holding.optionStrike != null ? String(holding.optionStrike) : "",
     dte: holding.optionExpiry ? String(Math.ceil((new Date(`${holding.optionExpiry}T23:59:59`).getTime() - Date.now()) / 86_400_000)) : "",
   };
 }
@@ -108,6 +111,7 @@ export function EditHoldingDialog({ holding, children, onDelete }: { holding: Ho
       if (field === "symbol" && current.assetType === "stock") {
         next.company = historicalStockNames.get(value.trim().toUpperCase()) ?? "";
       }
+      if(next.assetType==="option"&&field!=="company"&&field!=="dte"){const generated=optionContractDetails(next.symbol,next.optionType,next.optionStrike,next.optionExpiry);if(generated)next.company=generated;}
       return next;
     });
 
@@ -161,6 +165,7 @@ export function EditHoldingDialog({ holding, children, onDelete }: { holding: Ho
       sector: form.sector,
       optionType: isOption ? form.optionType as any : undefined,
       optionExpiry: isOption ? form.optionExpiry || undefined : undefined,
+      optionStrike: isOption && form.optionStrike ? Number(form.optionStrike) : undefined,
       updatedAt: "Just now",
     });
 
@@ -222,6 +227,7 @@ export function EditHoldingDialog({ holding, children, onDelete }: { holding: Ho
             </Field>
             {form.assetType === "option" && <>
               <Field label="Option Type"><select value={form.optionType} onChange={(e) => update("optionType", e.target.value)} className="flex h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 dark:border-white/10 dark:bg-white/[.03] dark:text-zinc-100 outline-none"><option value="buy-call" className="bg-white dark:bg-zinc-950">Buy Call</option><option value="sell-call" className="bg-white dark:bg-zinc-950">Sell Call</option><option value="buy-put" className="bg-white dark:bg-zinc-950">Buy Put</option><option value="sell-put" className="bg-white dark:bg-zinc-950">Sell Put</option></select></Field>
+              <Field label="Strike Price"><Input type="number" min="0.000001" step="any" value={form.optionStrike} onChange={(e) => update("optionStrike", e.target.value)} /></Field>
               <Field label="Expiry Date"><Input type="date" value={form.optionExpiry} onChange={(e) => { const value=e.target.value; update("optionExpiry", value); if(value) update("dte", String(Math.ceil((new Date(`${value}T23:59:59`).getTime()-Date.now())/86_400_000))); }} /><span className="block text-xs font-normal text-zinc-500">{form.optionExpiry ? new Date(`${form.optionExpiry}T12:00:00`).toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric"}) : "Select a date"}</span></Field>
               <Field label="Days to Expiry"><Input className="number-input-no-spinner" type="number" step="1" value={form.dte} onChange={(e) => { const value=e.target.value; update("dte", value); const days=Number(value); if(Number.isInteger(days)){ const date=new Date(); date.setDate(date.getDate()+days); update("optionExpiry", date.toISOString().slice(0,10)); } }} /></Field>
             </>}

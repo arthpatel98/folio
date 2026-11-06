@@ -11,6 +11,7 @@ import { AssetType, Holding, OptionType, Sector } from "@/types/portfolio";
 import { getStockTaxLots, type StockTaxLot, type TaxLotMethod } from "@/lib/dca-storage";
 import { cn, money } from "@/lib/utils";
 import { getBundledHistoricalCompanyNames } from "@/lib/historical-company-names";
+import { optionContractDetails } from "@/lib/option-contract-details";
 
 const NEW_POSITION = "__new_position__";
 
@@ -178,6 +179,7 @@ export function AddHoldingDialog() {
           next.optionStrike = "";
         }
       }
+      if(next.assetType==="option"&&next.action==="buy"&&field!=="company")next.company=optionContractDetails(next.symbol,next.optionType,next.optionStrike,next.optionExpiry);
       return next;
     });
   };
