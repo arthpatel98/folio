@@ -1450,7 +1450,7 @@ export default function SavingsInvestmentsPage() {
       const ytd = account.name === "Robinhood"
         ? current / 88746 - 1
         : account.name === "Fidelity Roth IRA"
-          ? current / 16452 - 1
+          ? current / 19374 - 1
           : 0.1465;
 
       return { ...account, current, gain, totalReturn, cagr, ytd };

@@ -967,7 +967,7 @@ export default function Page() {
         </div>
 
         <div className="-mx-5 overflow-x-auto overscroll-x-contain px-5 pb-1">
-          <table className="w-full min-w-[1600px] text-center text-sm">
+          <table className={cn("w-full text-center text-sm", activePortfolioId === "fidelity-roth" ? "min-w-[1450px]" : "min-w-[1600px]")}>
             <thead className="border-y text-xs tracking-wide text-zinc-500">
               <tr>
                 <th className="w-12 px-3 py-3" />
@@ -978,7 +978,7 @@ export default function Page() {
                 <th className="px-3 py-3"><SortHeader label="Latest Sell Date" column="latestDate" /></th>
                 <th className="px-3 py-3"><SortHeader label="PAT Needed" column="patNeeded" /></th>
                 <th className="px-3 py-3"><SortHeader label="Dividend Amount" column="dividendAmount" /></th>
-                <th className="px-3 py-3"><SortHeader label="Dividend NRA Withholding" column="dividendNraWithholding" /></th>
+                {activePortfolioId !== "fidelity-roth" && <th className="px-3 py-3"><SortHeader label="Dividend NRA Withholding" column="dividendNraWithholding" /></th>}
                 <th className="px-3 py-3"><SortHeader label="Last Dividend Date" column="lastDividendDate" /></th>
                 <th className="px-3 py-3">Comment</th>
                 <th className="px-3 py-3">Actions</th>
@@ -1003,7 +1003,7 @@ export default function Page() {
                       <td className="whitespace-nowrap px-3 py-4 text-zinc-500">{group.latestDate || "—"}</td>
                       <td className="px-3 py-4 tabular-nums">{group.patNeeded > 0 ? money(group.patNeeded) : "-"}</td>
                       <td className="px-3 py-4 tabular-nums text-emerald-500">{group.dividendAmount ? money(group.dividendAmount) : "-"}</td>
-                      <td className="px-3 py-4 tabular-nums text-zinc-500">{group.dividendNraWithholding ? money(group.dividendNraWithholding) : "-"}</td>
+                      {activePortfolioId !== "fidelity-roth" && <td className="px-3 py-4 tabular-nums text-zinc-500">{group.dividendNraWithholding ? money(group.dividendNraWithholding) : "-"}</td>}
                       <td className="whitespace-nowrap px-3 py-4 text-zinc-500">{group.lastDividendDate || "—"}</td>
                       <td className="max-w-80 whitespace-pre-wrap break-words px-3 py-4 text-zinc-500">{group.comment || "-"}</td>
                       <td className="px-3 py-4">
@@ -1012,14 +1012,14 @@ export default function Page() {
                     </tr>
                     {expanded && (
                       <tr className="border-b bg-zinc-500/[0.035]">
-                        <td colSpan={11} className="p-0">
+                        <td colSpan={activePortfolioId === "fidelity-roth" ? 10 : 11} className="p-0">
                           <div className="m-3 overflow-hidden rounded-lg border border-zinc-500/15">
                             <table className="w-full text-center text-xs">
                               <thead className="bg-zinc-500/5 tracking-wide text-zinc-500">
                                 <tr>
                                   <th className="px-3 py-3">Type</th><th className="px-3 py-3">Realized P/L</th>
                                   <th className="px-3 py-3">Sell Date</th><th className="px-3 py-3">PAT</th><th className="px-3 py-3">Loss</th>
-                                  <th className="px-3 py-3">PAT Needed</th><th className="px-3 py-3">Dividend Amount</th><th className="px-3 py-3">Dividend NRA Withholding</th><th className="px-3 py-3">Last Dividend Date</th><th className="px-3 py-3">Actions</th>
+                                  <th className="px-3 py-3">PAT Needed</th><th className="px-3 py-3">Dividend Amount</th>{activePortfolioId !== "fidelity-roth" && <th className="px-3 py-3">Dividend NRA Withholding</th>}<th className="px-3 py-3">Last Dividend Date</th><th className="px-3 py-3">Actions</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -1033,7 +1033,7 @@ export default function Page() {
                                     <td className="px-3 py-3 tabular-nums text-red-500">{optionalMoney(calculatedLoss(position))}</td>
                                     <td className="px-3 py-3 tabular-nums">-</td>
                                     <td className="px-3 py-3 tabular-nums text-emerald-500">{position.dividendAmount ? money(position.dividendAmount) : "-"}</td>
-                                    <td className="px-3 py-3 tabular-nums text-zinc-500">{position.dividendNraWithholding ? money(position.dividendNraWithholding) : "-"}</td>
+                                    {activePortfolioId !== "fidelity-roth" && <td className="px-3 py-3 tabular-nums text-zinc-500">{position.dividendNraWithholding ? money(position.dividendNraWithholding) : "-"}</td>}
                                     <td className="whitespace-nowrap px-3 py-3 text-zinc-500">{position.lastDividendDate || "—"}</td>
                                     <td className="px-3 py-3">
                                       <div className="flex justify-center gap-2">
@@ -1060,7 +1060,7 @@ export default function Page() {
                 <td />
                 <td className="px-3 py-4 tabular-nums">{totalPatNeeded > 0 ? money(totalPatNeeded) : "-"}</td>
                 <td className="px-3 py-4 tabular-nums text-emerald-500">{money(totals.dividendAmount)}</td>
-                <td className="px-3 py-4 tabular-nums text-zinc-500">{money(totals.dividendNraWithholding)}</td>
+                {activePortfolioId !== "fidelity-roth" && <td className="px-3 py-4 tabular-nums text-zinc-500">{money(totals.dividendNraWithholding)}</td>}
                 <td />
                 <td />
                 <td />
@@ -1117,7 +1117,7 @@ export default function Page() {
               <label className="space-y-2 text-sm font-medium">Loss<Input type="number" step="0.01" placeholder="-" value={editingPosition.loss ?? ""} onChange={(e) => editOptionalMoney("loss", e.target.value)} /></label>
               <label className="space-y-2 text-sm font-medium">PAT Needed<Input type="number" step="0.01" placeholder="-" value={editingPosition.patNeeded ?? ""} onChange={e => setEditingPosition(current => current ? {...current, patNeeded: e.target.value.trim() ? Number(e.target.value) : null} : null)} /></label>
               <label className="space-y-2 text-sm font-medium">Dividend Amount<div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">$</span><Input type="number" step="0.01" min="0" className="pl-7" value={editingPosition.dividendAmount === 0 ? "" : editingPosition.dividendAmount} onChange={(e) => editNumber("dividendAmount", e.target.value)} /></div></label>
-              <label className="space-y-2 text-sm font-medium">Dividend NRA Withholding<div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">$</span><Input type="number" step="0.01" min="0" className="pl-7" value={editingPosition.dividendNraWithholding === 0 ? "" : editingPosition.dividendNraWithholding} onChange={(e) => editNumber("dividendNraWithholding", e.target.value)} /></div></label>
+              {activePortfolioId !== "fidelity-roth" && <label className="space-y-2 text-sm font-medium">Dividend NRA Withholding<div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">$</span><Input type="number" step="0.01" min="0" className="pl-7" value={editingPosition.dividendNraWithholding === 0 ? "" : editingPosition.dividendNraWithholding} onChange={(e) => editNumber("dividendNraWithholding", e.target.value)} /></div></label>}
               <label className="space-y-2 text-sm font-medium">Last Dividend Date<Input type="date" value={dateInputValue(editingPosition.lastDividendDate)} onChange={(e) => setEditingPosition({ ...editingPosition, lastDividendDate: e.target.value })} /></label>
               <label className="space-y-2 text-sm font-medium sm:col-span-2">Comment<textarea rows={5} placeholder="-" value={editingPosition.comment} onChange={(e) => setEditingPosition({ ...editingPosition, comment: e.target.value })} className="flex min-h-28 w-full resize-y rounded-md border border-zinc-500/20 bg-transparent px-3 py-2 text-sm outline-none focus:border-emerald-500" /></label>
             </div>

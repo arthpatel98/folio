@@ -236,9 +236,9 @@ export default function TargetPlannerPage(){
   const projectedYtd=isRobinhood
     ? projectedValue/88746-1
     : isRoth
-      ? projectedValue/16452-1
+      ? projectedValue/19374-1
       : 0;
-  const projectedInvested=isRobinhood?79500:isRoth?19000:0;
+  const projectedInvested=isRobinhood?79500:isRoth?21500:0;
   const projectedCagrYears=(isRoth?1.0833:2)+projectedMonthFraction;
   const projectedCagr=projectedInvested>0&&projectedValue>0
     ? Math.pow(projectedValue/projectedInvested,1/projectedCagrYears)-1
