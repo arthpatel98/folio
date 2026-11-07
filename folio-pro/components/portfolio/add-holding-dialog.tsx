@@ -363,6 +363,8 @@ export function AddHoldingDialog() {
               <SectorField value={form.sector} onChange={(value) => update("sector", value)} />
             </>}
 
+            <MoneyField label="Platform Fees" value={form.platformFees} onChange={(value) => update("platformFees", value)} />
+
             {error && <p className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-300 sm:col-span-2">{error}</p>}
             <div className="mt-2 flex justify-end gap-3 sm:col-span-2"><Dialog.Close asChild><Button type="button" variant="outline">Cancel</Button></Dialog.Close><Button type="submit">{form.action === "buy" ? (form.assetType === "option" ? "Add Position" : "Complete Purchase") : "Remove Position"}</Button></div>
           </form>
