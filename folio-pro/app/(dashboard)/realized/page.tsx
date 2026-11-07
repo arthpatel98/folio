@@ -8,7 +8,7 @@ import { RobinhoodQuarterlyData, type RobinhoodAllTimeSummary } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { money } from "@/lib/utils";
+import { cn, money } from "@/lib/utils";
 import { usePortfolioStore } from "@/store/portfolio-store";
 import { PORTFOLIO_ID_SCHEMA_VERSION, swapLegacyFidelityBuckets } from "@/lib/portfolio-id-migration";
 
