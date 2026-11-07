@@ -587,8 +587,12 @@ export default function Page() {
             const historicalPat = calculatedPat(match, match.comment);
             match.pat = (historicalPat ?? 0) + Math.max(0, transaction.realizedGain) * 0.65;
             match.loss = (match.loss ?? 0) + Math.max(0, -transaction.realizedGain);
+            // Apply the new equation only when a qualifying future transaction arrives.
+            // Historical rows remain untouched until then.
+            match.amount = Math.round(((match.pat / 0.65) - match.loss) * 100) / 100;
+          } else {
+            match.amount += transaction.realizedGain;
           }
-          match.amount += transaction.realizedGain;
           if (!match.manualFees) match.fees += Number(transaction.fees) || 0;
           if (!match.lastSellDate || new Date(sellDate).getTime() >= new Date(match.lastSellDate).getTime()) match.lastSellDate = sellDate;
           // Transaction-backed option closes should not create or overwrite Realized P/L comments.
@@ -1100,7 +1104,16 @@ export default function Page() {
               <label className="space-y-2 text-sm font-medium">Last Sell Date<Input type="date" value={dateInputValue(editingPosition.lastSellDate)} onChange={(e) => setEditingPosition({ ...editingPosition, lastSellDate: e.target.value })} /></label>
               <label className="space-y-2 text-sm font-medium">Realized P/L<Input type="number" inputMode="decimal" step="0.01" value={editingPosition.amount === 0 ? "" : editingPosition.amount} onChange={(e) => editNumber("amount", e.target.value)} /></label>
 
-              <label className="space-y-2 text-sm font-medium">PAT<Input type="text" readOnly={shouldAutoCalculatePat(editingPosition.loss, tickerCommentFor(editingPosition.symbol))} placeholder="-" value={shouldAutoCalculatePat(editingPosition.loss, tickerCommentFor(editingPosition.symbol)) ? money(calculatedPat(editingPosition, tickerCommentFor(editingPosition.symbol)) ?? 0) : (editingPosition.pat ?? "")} onChange={(e) => { if(!shouldAutoCalculatePat(editingPosition.loss, tickerCommentFor(editingPosition.symbol))) editOptionalMoney("pat", e.target.value); }} className={shouldAutoCalculatePat(editingPosition.loss, tickerCommentFor(editingPosition.symbol)) ? "cursor-not-allowed bg-zinc-500/5 text-emerald-500" : ""} /></label>
+              <label className="space-y-2 text-sm font-medium">PAT<Input type="number" inputMode="decimal" step="0.01" min="0" placeholder="-" value={editingPosition.pat ?? calculatedPat(editingPosition, tickerCommentFor(editingPosition.symbol)) ?? ""} onChange={(e) => {
+                const nextPat = e.target.value.trim() === "" ? null : Number(e.target.value);
+                if (nextPat !== null && (!Number.isFinite(nextPat) || nextPat < 0)) return;
+                setEditingPosition(current => current ? {
+                  ...current,
+                  pat: nextPat,
+                  // Recalculate only on an explicit PAT edit, never on initial page load.
+                  amount: nextPat === null ? current.amount : Math.round((nextPat / 0.65 - (current.loss ?? 0)) * 100) / 100,
+                } : null);
+              }} /></label>
               <label className="space-y-2 text-sm font-medium">Loss<Input type="number" step="0.01" placeholder="-" value={editingPosition.loss ?? ""} onChange={(e) => editOptionalMoney("loss", e.target.value)} /></label>
               <label className="space-y-2 text-sm font-medium">PAT Needed<Input type="number" step="0.01" placeholder="-" value={editingPosition.patNeeded ?? ""} onChange={e => setEditingPosition(current => current ? {...current, patNeeded: e.target.value.trim() ? Number(e.target.value) : null} : null)} /></label>
               <label className="space-y-2 text-sm font-medium">Dividend Amount<div className="relative"><span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-zinc-500">$</span><Input type="number" step="0.01" min="0" className="pl-7" value={editingPosition.dividendAmount === 0 ? "" : editingPosition.dividendAmount} onChange={(e) => editNumber("dividendAmount", e.target.value)} /></div></label>
