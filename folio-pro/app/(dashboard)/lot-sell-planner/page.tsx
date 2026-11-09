@@ -1,5 +1,6 @@
 "use client";
 import {useEffect,useMemo,useState} from "react";
+import {useRouter} from "next/navigation";
 import {useActivePortfolio} from "@/components/portfolio/portfolio-context";
 import {usePortfolioStore} from "@/store/portfolio-store";
 import {DCA_STORAGE_KEY,DCA_UPDATED_EVENT,loadDcaPositions} from "@/lib/dca-storage";
@@ -9,6 +10,8 @@ const pct=(v:number)=>`${v>=0?"+":""}${v.toFixed(2)}%`;
 const targetKey="folio-lot-sell-planner-v1";
 export default function LotSellPlanner(){
  const {activeId}=useActivePortfolio();
+ const router=useRouter();
+ useEffect(()=>{if(activeId==="fidelity-401k")router.replace("/holdings");},[activeId,router]);
  const holdings=usePortfolioStore(s=>s.holdingsByPortfolio);
  const [positions,setPositions]=useState<DcaPosition[]>([]);
  const [targets,setTargets]=useState<Record<string,string>>({});
@@ -21,7 +24,7 @@ export default function LotSellPlanner(){
  useEffect(()=>{if(ready)localStorage.setItem(targetKey,JSON.stringify(targets));},[targets,ready]);
  const rows=useMemo(()=>positions.flatMap(pos=>{
   const portfolio=pos.portfolioId??"robinhood";
-  if(activeId!=="all"&&activeId!==portfolio)return [];
+  if(portfolio==="fidelity-401k" || (activeId!=="all"&&activeId!==portfolio))return [];
   const holding=holdings[portfolio]?.find(h=>h.symbol.toUpperCase()===pos.symbol.toUpperCase()&&h.assetType!=="option"&&h.shares>0);
   if(!holding||!(holding.currentPrice>0))return [];
   return pos.lots.flatMap((lot,index)=>{
@@ -43,6 +46,7 @@ export default function LotSellPlanner(){
  const chosen=shown.filter(r=>selected[r.id]!==false);
  const cash=chosen.reduce((s,r)=>s+r.cash,0),cost=chosen.reduce((s,r)=>s+r.cost,0);
  const cell="px-3 py-3 whitespace-nowrap";
+ if(activeId==="fidelity-401k")return null;
  return <div className="space-y-5 pb-10"><div><p className="text-xs font-semibold uppercase tracking-widest text-emerald-500">Purchase lots</p><h1 className="mt-2 text-3xl font-semibold">Purchase Lot Sell Planner</h1><p className="mt-2 text-sm text-zinc-500">All lots currently profitable or within 7% below break-even. Edit the sell price to estimate cash and returns. No trades are placed.</p></div>
  <div className="grid gap-3 sm:grid-cols-3">{[["Selected lots",`${chosen.length} / ${shown.length}`],["Cash from selected sales",usd(cash)],["Potential realized P/L",usd(cash-cost)]].map(([label,value])=><div key={label} className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-white/10 dark:bg-white/[.04]"><div className="text-sm text-zinc-500">{label}</div><div className="mt-2 text-2xl font-semibold">{value}</div></div>)}</div>
  <div className="rounded-2xl border border-zinc-200 bg-white dark:border-white/10 dark:bg-white/[.035]"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 p-4 dark:border-white/10"><div className="flex flex-wrap gap-2">{[["all","All eligible"],["profit","Profitable"],["near","Near break-even"]].map(([value,label])=><button key={value} onClick={()=>setFilter(value)} className={`rounded-lg px-3 py-2 text-sm ${filter===value?"bg-emerald-500/15 text-emerald-500":"bg-zinc-500/10 text-zinc-500"}`}>{label}</button>)}</div><input aria-label="Search ticker" placeholder="Search ticker..." value={search} onChange={e=>setSearch(e.target.value)} className="rounded-lg border border-zinc-200 bg-transparent px-3 py-2 text-sm dark:border-white/10"/></div>

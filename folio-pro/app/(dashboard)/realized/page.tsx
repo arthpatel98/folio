@@ -589,7 +589,9 @@ export default function Page() {
             match.loss = (match.loss ?? 0) + Math.max(0, -transaction.realizedGain);
             // Apply the new equation only when a qualifying future transaction arrives.
             // Historical rows remain untouched until then.
-            match.amount = Math.round(((match.pat / 0.65) - match.loss) * 100) / 100;
+            match.amount = /Dividend Included/i.test(match.comment ?? "")
+              ? Math.round((match.amount + transaction.realizedGain) * 100) / 100
+              : Math.round(((match.pat / 0.65) - match.loss) * 100) / 100;
           } else {
             match.amount += transaction.realizedGain;
           }

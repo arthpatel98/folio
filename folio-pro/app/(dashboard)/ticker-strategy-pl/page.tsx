@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, Search } from "lucide-react";
+import Link from "next/link";
+import { ArrowDown, ArrowLeft, ArrowUp, ArrowUpDown, CalendarDays, ChevronDown, Search } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
@@ -134,9 +135,10 @@ export default function TickerStrategyPlPage(){
     <section className="rounded-3xl border border-zinc-200/80 bg-gradient-to-br from-white via-white to-zinc-50/80 p-4 shadow-sm dark:border-white/10 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900/60 sm:p-5 lg:p-6">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div className="min-w-0">
+          <Link href="/realized" className="mb-4 inline-flex items-center gap-2 rounded-xl border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-600 transition hover:border-emerald-500/30 hover:text-emerald-500 dark:border-white/10 dark:text-zinc-300"><ArrowLeft size={16}/>Back to Realized Returns</Link>
           <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-3xl">Realized P/L by Ticker &amp; Strategy</h1>
           
-          <label className="mt-5 block w-full max-w-[180px] text-xs font-medium text-zinc-500">Year<select value={year} onChange={e=>setYear(e.target.value)} className="mt-1.5 h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 outline-none transition focus:border-emerald-500/50 dark:border-white/10 dark:bg-white/[.04] dark:text-zinc-100"><option value="all">All Time</option>{years.map(y=><option key={y} value={y}>{y}</option>)}</select></label>
+          <div className="relative mt-5 inline-flex items-center"><CalendarDays className="pointer-events-none absolute left-3 h-4 w-4 text-emerald-400"/><select aria-label="Year" value={year} onChange={e=>setYear(e.target.value)} className="h-10 appearance-none rounded-xl border border-white/[.08] bg-white/[.025] pl-9 pr-9 text-sm font-semibold outline-none transition hover:border-emerald-500/25 focus:border-emerald-500/40 dark:bg-zinc-950/70"><option value="all">All Time</option>{years.map(y=><option key={y} value={y}>{y}</option>)}</select><ChevronDown className="pointer-events-none absolute right-3 h-4 w-4 text-emerald-400"/></div>
         </div>
         <div className="grid w-full gap-3 sm:grid-cols-3 xl:max-w-[690px]">
           <Card className="rounded-2xl p-4"><div className="text-xs font-medium text-zinc-500">Total Realized P/L</div><div className={cn("mt-2 text-xl font-semibold tracking-tight",total<0?"text-rose-400":"text-emerald-400")}>{money(total)}</div><div className="mt-1 text-xs text-zinc-500">{yearLabel}</div></Card>
