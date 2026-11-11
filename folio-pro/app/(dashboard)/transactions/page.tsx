@@ -221,7 +221,10 @@ export default function TransactionsPage(){
 
   const openTransactionEditor=(row:TransactionRow)=>{
     setEditingRow(row);
-    setEditDraft({...row.transaction});
+    const key=editKey(row.portfolioId,row.transaction.id);
+    const savedDays=transactionEdits[key]?.avgDaysOverride;
+    const displayedDays=savedDays ?? explicitAverageDaysHeld(row.transaction) ?? historicalDaysByTransactionId.get(key);
+    setEditDraft({...row.transaction,...(displayedDays!=null?{avgDaysOverride:Math.round(displayedDays)}:{})});
   };
   const saveTransactionModal=()=>{
     if(!editingRow)return;
@@ -514,6 +517,7 @@ export default function TransactionsPage(){
           <label><span className="mb-1.5 block text-xs text-zinc-500">Quantity</span><input type="number" step="any" value={editDraft.quantity??editingRow.transaction.quantity??""} onChange={e=>setEditDraft(d=>({...d,quantity:e.target.value===""?undefined:Number(e.target.value)}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"/></label>
           <label><span className="mb-1.5 block text-xs text-zinc-500">Price</span><input type="number" step="any" value={editDraft.price??editingRow.transaction.price??""} onChange={e=>setEditDraft(d=>({...d,price:e.target.value===""?undefined:Number(e.target.value)}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"/></label>
           <label><span className="mb-1.5 block text-xs text-zinc-500">Realized P/L</span><input type="number" step="any" value={editDraft.realizedGain??editingRow.transaction.realizedGain??""} onChange={e=>setEditDraft(d=>({...d,realizedGain:e.target.value===""?undefined:Number(e.target.value)}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"/></label>
+          <label><span className="mb-1.5 block text-xs text-zinc-500">Avg. Days Held</span><input type="number" min="0" step="1" placeholder="—" value={editDraft.avgDaysOverride ?? ""} onChange={e=>setEditDraft(d=>({...d,avgDaysOverride:e.target.value===""?undefined:Math.max(0,Math.round(Number(e.target.value)||0))}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"/></label>
           <label><span className="mb-1.5 block text-xs text-zinc-500">Cash Impact</span><input type="number" step="any" value={editDraft.cashImpact??editingRow.transaction.cashImpact??transactionCashImpact(editingRow.transaction)} onChange={e=>setEditDraft(d=>({...d,cashImpact:Number(e.target.value)||0}))} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"/></label>
           <label className="sm:col-span-2"><span className="mb-1.5 block text-xs text-zinc-500">Comment</span><textarea rows={3} value={String(editDraft.notes??editingRow.transaction.notes??"")} onChange={e=>setEditDraft(d=>({...d,notes:e.target.value}))} className="w-full resize-none rounded-xl border border-white/10 bg-zinc-950 p-3 text-sm outline-none"/></label>
         </div>

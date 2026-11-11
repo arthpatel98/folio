@@ -289,6 +289,26 @@ function isForwardPatTransaction(date: string) {
     normalized.toISOString().slice(0, 10) >= FORWARD_PAT_START_DATE;
 }
 
+// Split a new stock sale into its actual consumed purchase lots. A mixed sale
+// must not net winning and losing lots before PAT/Loss are updated.
+function realizedLotParts(transaction: { realizedGain?: number; taxLots?: Array<{ quantity: number; costBasis: number; realizedGain?: number }>; realizedProceeds?: number; fees?: number; assetType?: string }) {
+  const net = transaction.realizedGain ?? 0;
+  const lots = transaction.assetType !== "option" ? transaction.taxLots : undefined;
+  if (!lots?.length || lots.some(lot => !Number.isFinite(lot.realizedGain))) {
+    return { profit: Math.max(0, net), loss: Math.max(0, -net) };
+  }
+  const gains = lots.map(lot => lot.realizedGain!);
+  // The sale's realizedGain is authoritative (including any Roth IRA fees).
+  // Allocate the difference proportionally by shares, preserving the exact net.
+  const difference = net - gains.reduce((sum, gain) => sum + gain, 0);
+  const totalQuantity = lots.reduce((sum, lot) => sum + Math.max(0, lot.quantity), 0);
+  const adjusted = gains.map((gain, i) => gain + difference * (totalQuantity > 0 ? Math.max(0, lots[i].quantity) / totalQuantity : 1 / lots.length));
+  return {
+    profit: adjusted.reduce((sum, gain) => sum + Math.max(0, gain), 0),
+    loss: adjusted.reduce((sum, gain) => sum + Math.max(0, -gain), 0),
+  };
+}
+
 function normalizeOptionalMoney(value: unknown) {
   if (value === null || value === undefined || String(value).trim() === "") return null;
   const parsed = parseMoney(value);
@@ -584,9 +604,16 @@ export default function Page() {
           if (isForwardPatTransaction(transaction.date)) {
             // Snapshot the pre-existing displayed PAT before adding new profits.
             // Preserve historical Loss; new losses accumulate independently.
-            const historicalPat = calculatedPat(match, match.comment);
-            match.pat = (historicalPat ?? 0) + Math.max(0, transaction.realizedGain) * 0.65;
-            match.loss = (match.loss ?? 0) + Math.max(0, -transaction.realizedGain);
+            const dividendIncluded = /Dividend Included/i.test(match.comment ?? "");
+            const { profit, loss } = realizedLotParts(transaction);
+            const historicalLoss = match.loss ?? 0;
+            // For ordinary tickers, reconcile starting PAT from the stored P/L
+            // and Loss ONLY when a new transaction is processed.
+            const historicalPat = dividendIncluded
+              ? (calculatedPat(match, match.comment) ?? 0)
+              : (match.amount + historicalLoss) * 0.65;
+            match.pat = Math.round((historicalPat + profit * 0.65) * 1000000) / 1000000;
+            match.loss = Math.round((historicalLoss + loss) * 1000000) / 1000000;
             // Apply the new equation only when a qualifying future transaction arrives.
             // Historical rows remain untouched until then.
             match.amount = /Dividend Included/i.test(match.comment ?? "")
@@ -604,8 +631,8 @@ export default function Page() {
           base.push({
             ...makePosition(symbol + (type === "option" ? " Option" : ""), transaction.realizedGain, Number(transaction.fees) || 0, sellDate, `sale-${portfolioId}-${transaction.id}`),
             optionDetails,
-            pat: isForwardPatTransaction(transaction.date) ? Math.max(0, transaction.realizedGain) * 0.65 : null,
-            loss: isForwardPatTransaction(transaction.date) ? Math.max(0, -transaction.realizedGain) : null,
+            pat: isForwardPatTransaction(transaction.date) ? realizedLotParts(transaction).profit * 0.65 : null,
+            loss: isForwardPatTransaction(transaction.date) ? realizedLotParts(transaction).loss : null,
             sourceTransaction: true,
             sourceTransactionIds: [transaction.id],
             comment: "",
