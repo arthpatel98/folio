@@ -279,7 +279,7 @@ export default function TargetPlannerPage(){
       <Metric icon={TrendingUp} label="Projected Profit" value={`${totalProjectedProfit>=0?"+":""}${money(totalProjectedProfit)}`} good={totalProjectedProfit>=0}/>
       <Metric icon={Flag} label="Projected Portfolio" value={money(projectedValue)} performance={projectedPerformance} accent={projectedValue>=selectedTarget.target}/>
       <Metric icon={CalendarDays} label="Remaining Gap" value={money(remainingGap)} subtle={`${baseGap?Math.min(100,Math.max(0,totalProjectedProfit/baseGap*100)).toFixed(1):100}% Covered`}/>
-      <Metric icon={Calculator} label="Portfolio Total at Target Price" value={`${totalProjectedProfit-pathwayProfit>=0?"+":""}${money(totalProjectedProfit-pathwayProfit)}`} good={totalProjectedProfit-pathwayProfit>0}/>
+      <Metric icon={Calculator} label="Portfolio Total at Target Price" value={money(projectedValue-pathwayProfit)}/>
     </div>
 
     <Card className="overflow-hidden">
