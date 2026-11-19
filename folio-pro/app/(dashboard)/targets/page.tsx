@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, CircleDollarSign, Flag, MinusCircle, Plus, Target, Trash2, TrendingUp } from "lucide-react";
+import { CalendarDays, Calculator, CircleDollarSign, Flag, MinusCircle, Plus, Target, Trash2, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
 import { usePortfolioStore } from "@/store/portfolio-store";
@@ -273,12 +273,13 @@ export default function TargetPlannerPage(){
     <div><h1 className="text-3xl font-semibold">Target Scenario Builder</h1></div>
 
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <Metric icon={CircleDollarSign} label="Current Portfolio" value={money2(currentValue)}/>
+      <Metric icon={CircleDollarSign} label="Current Portfolio" value={money(currentValue)}/>
       <Metric icon={Target} label="Selected Target" value={money(selectedTarget.target)} accent/>
       <Metric icon={TrendingUp} label="Profit Needed" value={money(baseGap)} />
-      <Metric icon={TrendingUp} label="Projected Profit" value={`${totalProjectedProfit>=0?"+":""}${money2(totalProjectedProfit)}`} good={totalProjectedProfit>=0}/>
-      <Metric icon={Flag} label="Projected Portfolio" value={money2(projectedValue)} performance={projectedPerformance} accent={projectedValue>=selectedTarget.target}/>
+      <Metric icon={TrendingUp} label="Projected Profit" value={`${totalProjectedProfit>=0?"+":""}${money(totalProjectedProfit)}`} good={totalProjectedProfit>=0}/>
+      <Metric icon={Flag} label="Projected Portfolio" value={money(projectedValue)} performance={projectedPerformance} accent={projectedValue>=selectedTarget.target}/>
       <Metric icon={CalendarDays} label="Remaining Gap" value={money(remainingGap)} subtle={`${baseGap?Math.min(100,Math.max(0,totalProjectedProfit/baseGap*100)).toFixed(1):100}% Covered`}/>
+      <Metric icon={Calculator} label="Portfolio Total at Target Price" value={`${totalProjectedProfit-pathwayProfit>=0?"+":""}${money(totalProjectedProfit-pathwayProfit)}`} good={totalProjectedProfit-pathwayProfit>0}/>
     </div>
 
     <Card className="overflow-hidden">

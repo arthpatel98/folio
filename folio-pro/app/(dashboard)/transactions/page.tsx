@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
-import { CalendarDays, CircleDollarSign, Plus, ReceiptText, Search, TrendingUp, Trash2, X } from "lucide-react";
+import { CalendarDays, ChevronDown, CircleDollarSign, Plus, ReceiptText, Search, TrendingUp, Trash2, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { getBarChartRealizedProfitForPeriod } from "@/components/portfolio/robinhood-quarterly-data";
 import { useActivePortfolio } from "@/components/portfolio/portfolio-context";
@@ -466,7 +466,7 @@ export default function TransactionsPage(){
         <div className="flex flex-wrap gap-2">{categories.map(([id,label])=><button key={id} onClick={()=>setCategory(id)} className={cn("rounded-xl border px-3 py-2 text-xs font-medium transition",category===id?"border-emerald-400/25 bg-emerald-400/10 text-emerald-300":"border-white/10 text-zinc-500 hover:bg-white/[.04] hover:text-zinc-300")}>{label}</button>)}</div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_190px_165px_165px]">
           <label className="relative"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search Ticker, Comment" className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 pl-10 pr-3 text-sm outline-none focus:border-emerald-400/30"/></label>
-          <select value={typeFilter} onChange={e=>setTypeFilter(e.target.value as "all"|TransactionType)} className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none"><option value="all">All Transaction Types</option>{(["buy","sell","dividend"] as TransactionType[]).map(value=><option key={value} value={value}>{TYPE_LABELS[value]}</option>)}</select>
+          <div className="relative min-w-0"><select aria-label="Transaction type" value={typeFilter} onChange={e=>setTypeFilter(e.target.value as "all"|TransactionType)} className="h-10 w-full appearance-none rounded-xl border border-white/10 bg-zinc-950 pl-4 pr-10 text-sm text-zinc-200 outline-none transition-colors hover:border-white/20 focus:border-emerald-400/40 focus:ring-2 focus:ring-emerald-400/10"><option value="all">All Transaction Types</option>{(["buy","sell","dividend"] as TransactionType[]).map(value=><option key={value} value={value}>{TYPE_LABELS[value]}</option>)}</select><ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3.5 top-1/2 size-4 -translate-y-1/2 text-zinc-400"/></div>
           <label className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600"/><input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 pl-9 pr-2 text-xs outline-none"/></label>
           <label className="relative"><CalendarDays className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600"/><input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} className="h-10 w-full rounded-xl border border-white/10 bg-zinc-950 pl-9 pr-2 text-xs outline-none"/></label>
         </div>
